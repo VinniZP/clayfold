@@ -41,6 +41,7 @@ Hence: lessons are structured sequences; every item carries a verified solution;
 | L16 | Problem contexts come from the learner's interests; the logic stays the same and realistic. | Context personalisation raised interest and learning (Walkington 2013; Bernacki & Walkington 2018) [S]; LLM personalisation produced unrealistic contexts (arXiv 2602.15876) [S] | skill, critic |
 | L17 | Tutor context: the item with its solution and misconceptions, recent attempts, unmastered prerequisites, the conversation. | Khan Academy tests [P] | tutor route |
 | L18 | The tutor steers "do it for me" toward explanation and asks for confidence at the end of a step. | Explanation use kept gains, text generation lost them (Contractor & Reyes 2026, https://arxiv.org/abs/2607.08849) [S]; metacognitive laziness (Fan et al. 2024, https://arxiv.org/abs/2412.09315) [S] | tutor style, evals |
+| L19 | Concepts carry the terms practitioners of the field use in the learner's language (the English term where they use it), with the original beside a translated term; every term is defined once in the topic glossary and marked where it is used, so the learner can read its definition anywhere. | [D] | `glossary_set`, deterministic gate (marks), critic, skill |
 
 ## Figures (V)
 

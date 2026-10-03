@@ -10,12 +10,14 @@ import { GraphLegend, KnowledgeGraph } from "../components/KnowledgeGraph";
 import { LessonList } from "../components/LessonList";
 import { StaleSources, readyLine } from "../components/LessonStatus";
 import { OnboardingStepper } from "../components/OnboardingStepper";
+import { GoalBanner, GoalView } from "./Goal";
 import { NewTopicForm, TopicCard, toneAt, topicObject } from "../components/Topics";
 import { CardHead, Empty, ErrorBox, PageLoading, Spinner } from "../components/ui";
 import { api, errorText } from "../lib/api";
 import { formatDate, masteryLabel } from "../lib/format";
 import { t, useLang } from "../lib/i18n";
 import { useStreamStatus, useTopicStream } from "../lib/stream";
+import { useGlossaryScope } from "../lib/glossary";
 import { useResource } from "../lib/useResource";
 import { bp, color, radius } from "../theme/tokens.stylex";
 import { banner, btn, card, chip, field, layout, text } from "../theme/ui";
@@ -140,6 +142,7 @@ function lessonOf(detail: TopicDetail, convId: string) {
 export function TopicPage() {
   useLang();
   const { topicId = "" } = useParams();
+  useGlossaryScope(topicId);
   const [params, setParams] = useSearchParams();
   const navigate = useNavigate();
   const detail = useResource(() => api.topic(topicId), topicId);
@@ -153,6 +156,7 @@ export function TopicPage() {
     (e) => {
       if (
         e.type === "graph.updated" ||
+        e.type === "plan.updated" ||
         e.type === "sources.updated" ||
         e.type === "onboarding.updated" ||
         e.type === "memory.updated" ||
@@ -171,7 +175,13 @@ export function TopicPage() {
   const d = detail.data;
   useHeader({
     title: d?.topic.title ?? t("topic.title"),
-    sub: d ? t("topic.sub", { mastered: d.topic.nodesMastered, total: d.topic.nodesTotal }) : undefined,
+    sub: d
+      ? d.topic.plan
+        ? d.topic.plan.total
+          ? t("topics.planOpened", { opened: d.topic.plan.opened, count: d.topic.plan.total })
+          : t("topics.planBuilding")
+        : t("topic.sub", { mastered: d.topic.nodesMastered, total: d.topic.nodesTotal })
+      : undefined,
     back: { to: "/topics", label: t("home.allCourses") },
     art: d ? topicObject(d.topic.title) : undefined,
   });
@@ -188,6 +198,7 @@ export function TopicPage() {
   if (!d) return null;
 
   const convId = pickConversation(d, params.get("c"));
+  if (d.topic.kind === "goal") return <GoalView detail={d} convId={convId} reload={detail.reload} />;
   const node = d.nodes.find((n) => n.id === selected) ?? null;
   const prereqTitles = node ? node.prereqs.map((p) => d.nodes.find((n) => n.id === p)?.title ?? p) : [];
 
@@ -213,6 +224,7 @@ export function TopicPage() {
   return (
     <div {...stylex.props(s.page)}>
       <div {...stylex.props(s.left)}>
+        {d.goal && <GoalBanner goal={d.goal} />}
         {d.onboarding.some((p) => p.status !== "done") && <OnboardingStepper phases={d.onboarding} />}
         <section aria-labelledby="graph-title" {...stylex.props(card.base)}>
           <CardHead title={t("topic.graph")} id="graph-title">

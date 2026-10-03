@@ -5,8 +5,10 @@ import { cancelAll, failOrphanedLessons, resumeInterruptedTurns } from "./claude
 import { config } from "./config";
 import { db } from "./db";
 import { loadLanguage } from "./i18n";
+import { RESTART_EXIT_CODE } from "./launcher";
 import { handleMcp } from "./mcp/index";
 import { api } from "./routes";
+import { initUpdates } from "./update";
 import { closeAllWatchers, syncAllTopicTitles } from "./workspace";
 
 const webDist = join(config.root, "web", "dist");
@@ -41,13 +43,14 @@ if (resumed) console.log(`Resumed ${resumed} turn(s) cut off by the last shutdow
 failOrphanedLessons();
 
 let stopping = false;
-async function shutdown() {
+async function shutdown(code = 0) {
   if (stopping) return;
   stopping = true;
   closeAllWatchers();
   await cancelAll();
   await server.stop(true);
-  process.exit(0);
+  process.exit(code);
 }
-process.on("SIGINT", shutdown);
-process.on("SIGTERM", shutdown);
+process.on("SIGINT", () => shutdown());
+process.on("SIGTERM", () => shutdown());
+initUpdates(() => shutdown(RESTART_EXIT_CODE));

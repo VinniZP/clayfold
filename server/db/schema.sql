@@ -9,7 +9,21 @@ CREATE TABLE IF NOT EXISTS topics (            -- A
   slug TEXT NOT NULL UNIQUE,
   title TEXT NOT NULL,
   request TEXT NOT NULL,
-  created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+  created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+  kind TEXT NOT NULL DEFAULT 'topic' CHECK (kind IN ('topic','goal')),
+  goal_id TEXT REFERENCES topics(id) ON DELETE SET NULL  -- the goal whose plan opened this topic
+);
+
+CREATE TABLE IF NOT EXISTS goal_plan (         -- B writes entries; A sets topic_id when the learner opens one
+  goal_id TEXT NOT NULL REFERENCES topics(id) ON DELETE CASCADE,
+  id TEXT NOT NULL,
+  idx INTEGER NOT NULL,
+  stage TEXT NOT NULL,
+  title TEXT NOT NULL,
+  why TEXT NOT NULL,
+  brief TEXT NOT NULL,                          -- request passed to /clayfold:onboard when the topic is opened
+  topic_id TEXT REFERENCES topics(id) ON DELETE SET NULL,
+  PRIMARY KEY (goal_id, id)
 );
 
 CREATE TABLE IF NOT EXISTS conversations (     -- A
@@ -162,6 +176,26 @@ CREATE TABLE IF NOT EXISTS gate_results (      -- B
   created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
 );
 
+CREATE TABLE IF NOT EXISTS glossary_terms (    -- B via glossary_set
+  topic_id TEXT NOT NULL REFERENCES topics(id) ON DELETE CASCADE,
+  key TEXT NOT NULL,                            -- lowercased term; term marks resolve against it
+  term TEXT NOT NULL,
+  definition TEXT NOT NULL,
+  original TEXT,                                -- the field's original term, usually English
+  avoid TEXT NOT NULL DEFAULT '[]',             -- JSON array of words not to use for this concept
+  updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+  PRIMARY KEY (topic_id, key)
+);
+
+CREATE TABLE IF NOT EXISTS goal_notes (        -- B inserts via goal_note; A sets seen_at when the goal conversation receives them
+  id TEXT PRIMARY KEY,
+  goal_id TEXT NOT NULL REFERENCES topics(id) ON DELETE CASCADE,
+  topic_id TEXT NOT NULL REFERENCES topics(id) ON DELETE CASCADE,
+  text TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+  seen_at TEXT
+);
+
 CREATE TABLE IF NOT EXISTS regen_queue (       -- A enqueues from learner signals; B resolves via item_replace
   id TEXT PRIMARY KEY,
   topic_id TEXT NOT NULL REFERENCES topics(id) ON DELETE CASCADE,
@@ -192,6 +226,15 @@ CREATE TABLE IF NOT EXISTS audits (            -- A
 CREATE TABLE IF NOT EXISTS settings (          -- A
   key TEXT PRIMARY KEY,
   value TEXT NOT NULL                           -- JSON
+);
+
+CREATE TABLE IF NOT EXISTS narrations (        -- A
+  step_id TEXT PRIMARY KEY REFERENCES steps(id) ON DELETE CASCADE,
+  voice_id TEXT NOT NULL,
+  model TEXT NOT NULL,
+  segments TEXT NOT NULL,                       -- JSON NarrationSegment[]
+  audio BLOB NOT NULL,                          -- audio/mpeg
+  created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
 );
 
 CREATE TABLE IF NOT EXISTS hint_views (        -- A

@@ -96,9 +96,9 @@ async function say(topicId: string, convId: string, text: string) {
   conv(convId, topicId).messages.push({ id: messageId, role: "assistant", text, createdAt: now() });
 }
 
-function ask(topicId: string, convId: string, question: string, options: { label: string; description?: string }[]) {
-  emit(topicId, { type: "conv.ask", conversationId: convId, question, options, multi: false, allowFree: true });
-  conv(convId, topicId).messages.push({ id: `ask-${++seq}`, role: "ask", text: question, options, multi: false, allowFree: true, createdAt: now() });
+function ask(topicId: string, convId: string, question: string, options: { label: string; description?: string }[], multi = false) {
+  emit(topicId, { type: "conv.ask", conversationId: convId, question, options, multi, allowFree: true });
+  conv(convId, topicId).messages.push({ id: `ask-${++seq}`, role: "ask", text: question, options, multi, allowFree: true, createdAt: now() });
 }
 
 function script(topicId: string, convId: string, body: () => Promise<void>) {
@@ -132,6 +132,46 @@ export function phases(): OnboardingPhase[] {
     { key: "graph", label: "Knowledge map", status: "pending", detail: null },
     { key: "placement", label: "Level", status: "pending", detail: null },
   ];
+}
+
+export function goalPhases(): OnboardingPhase[] {
+  return [
+    { key: "interview", label: "Interview", status: "active", detail: null },
+    { key: "plan", label: "Course plan", status: "pending", detail: null },
+  ];
+}
+
+/** First goal-planning turn: one multi-choice interview question. */
+export function planGoal(topicId: string, convId: string) {
+  startRun(topicId, convId);
+  script(topicId, convId, async () => {
+    activity(topicId, convId, "Reading the request");
+    await pause(convId, 1500);
+    ask(
+      topicId,
+      convId,
+      "What have you already done that is close to this goal?",
+      [{ label: "Wrote code at work" }, { label: "Built a website without code" }, { label: "Used an AI assistant to write code" }, { label: "Nothing yet" }],
+      true,
+    );
+  });
+}
+
+/** The rest of the goal-planning run after the interview answer. */
+export function finishGoalPlan(topicId: string, convId: string, answer: string) {
+  startRun(topicId, convId);
+  const d = fx.topicDetails[topicId]!;
+  script(topicId, convId, async () => {
+    setPhase(topicId, "interview", "done", answer.split("\n")[0]!.toLowerCase());
+    setPhase(topicId, "plan", "active");
+    activity(topicId, convId, "Planning the courses");
+    await pause(convId, 2500);
+    d.plan = fx.goalPlan(fx.GOAL_PLAN.map(([stage, id, title, why]) => [stage, id, title, why]));
+    d.topic.plan = { total: d.plan.length, opened: 0 };
+    emit(topicId, { type: "plan.updated" });
+    setPhase(topicId, "plan", "done", `${d.plan.length} courses`);
+    await say(topicId, convId, `I planned **${d.plan.length} courses** in three stages. Open the first course from the plan; if you want to change it, tell me here.`);
+  });
 }
 
 function setPhase(topicId: string, key: OnboardingPhase["key"], status: OnboardingPhase["status"], detail: string | null = null) {

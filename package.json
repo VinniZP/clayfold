@@ -4,7 +4,7 @@
   "license": "AGPL-3.0-or-later",
   "type": "module",
   "scripts": {
-    "start": "bun run server/index.ts",
+    "start": "bun run server/launcher.ts",
     "build": "vite build --config web/vite.config.ts",
     "dev:server": "bun run --watch server/index.ts",
     "dev:web": "vite --config web/vite.config.ts",

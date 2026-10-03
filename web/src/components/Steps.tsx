@@ -1,5 +1,5 @@
 import * as stylex from "@stylexjs/stylex";
-import { Check, CircleCheck, CircleX, ExternalLink, Flag, NotebookPen, Quote, ShieldCheck, X } from "lucide-react";
+import { Check, CircleCheck, CircleX, ExternalLink, Flag, MessageCircle, NotebookPen, Quote, ShieldCheck, X } from "lucide-react";
 import { useId, useRef, useState, type RefObject } from "react";
 import type { ItemState } from "@shared/api";
 import type { PublicCite, PublicItem, PublicStep } from "@shared/schemas";
@@ -8,6 +8,7 @@ import type { MessageKey } from "@shared/i18n";
 import { t, useLang } from "../lib/i18n";
 import { FigureView } from "./Figure";
 import { ItemView, restoredResponse, type ItemResult } from "./ItemView";
+import { NarratedBody } from "./Narration";
 import { bp, color, font, motion, radius } from "../theme/tokens.stylex";
 import { banner, btn, chip, field, layout, text } from "../theme/ui";
 import { Markdown, Spinner } from "./ui";
@@ -73,7 +74,12 @@ const s = stylex.create({
 export type TutorHooks = {
   onOfferTutor: (itemId: string, stepId: string, reason: "wrong_twice" | "idle") => void;
   onAskTutor: (itemId: string, stepId: string) => void;
+  /** Opens the tutor on a worked-example line whose open question the learner answers there. */
+  onAnswerLine: (stepId: string, line: number) => void;
 };
+
+/** A faded line's result recorded through the tutor, keyed by line index. */
+export type LineResults = Record<number, { text: string; correct: boolean }>;
 
 type StepProps = {
   step: PublicStep;
@@ -84,22 +90,23 @@ type StepProps = {
   onCheckResults?: (stepId: string, results: { item: PublicItem; result: ItemResult | undefined }[]) => void;
   itemStates: Record<string, ItemState>;
   revealedLines: { idx: number; text: string }[];
+  lineResults?: LineResults;
 };
 
-export function StepView({ step, topicId, lessonId, active, tutor, onCheckResults, itemStates, revealedLines }: StepProps) {
+export function StepView({ step, topicId, lessonId, active, tutor, onCheckResults, itemStates, revealedLines, lineResults }: StepProps) {
   const ref = useRef<HTMLElement>(null);
   return (
     <article ref={ref} aria-labelledby={`step-title-${step.id}`} {...stylex.props(s.step)}>
       <h2 id={`step-title-${step.id}`} tabIndex={-1} {...stylex.props(s.title)}>
         {step.title}
       </h2>
-      <StepBody step={step} active={active} tutor={tutor} onCheckResults={onCheckResults} itemStates={itemStates} revealedLines={revealedLines} />
+      <StepBody step={step} active={active} tutor={tutor} onCheckResults={onCheckResults} itemStates={itemStates} revealedLines={revealedLines} lineResults={lineResults} />
       <StepTools step={step} topicId={topicId} lessonId={lessonId} container={ref} />
     </article>
   );
 }
 
-function StepBody({ step, active, tutor, onCheckResults, itemStates, revealedLines }: Omit<StepProps, "topicId" | "lessonId">) {
+function StepBody({ step, active, tutor, onCheckResults, itemStates, revealedLines, lineResults }: Omit<StepProps, "topicId" | "lessonId">) {
   useLang();
   const offer = (itemId: string, reason: "wrong_twice" | "idle") => tutor.onOfferTutor(itemId, step.id, reason);
   const ask = (itemId: string) => tutor.onAskTutor(itemId, step.id);
@@ -118,7 +125,7 @@ function StepBody({ step, active, tutor, onCheckResults, itemStates, revealedLin
     case "explain":
       return (
         <>
-          <Markdown src={step.body} xstyle={s.body} />
+          <NarratedBody stepId={step.id} body={step.body} xstyle={s.body} />
           {step.figure && <FigureView figure={step.figure} />}
           <Citations cites={step.cites} />
           {step.checks.length > 0 && (
@@ -144,7 +151,7 @@ function StepBody({ step, active, tutor, onCheckResults, itemStates, revealedLin
         </>
       );
     case "worked_example":
-      return <WorkedExample step={step} revealedLines={revealedLines} />;
+      return <WorkedExample step={step} revealedLines={revealedLines} lineResults={lineResults} onAnswerLine={(line) => tutor.onAnswerLine(step.id, line)} />;
     case "practice":
       return (
         <ItemView item={step.item} mode="practice" context="practice" active={active} initial={itemStates[step.item.id]} onOfferTutor={offer} onAskTutor={ask} />
@@ -199,11 +206,22 @@ type WorkedStep = Extract<PublicStep, { kind: "worked_example" }>;
 
 type Revealed = { text: string; correct?: boolean; answer?: string };
 
-function WorkedExample({ step, revealedLines }: { step: WorkedStep; revealedLines: { idx: number; text: string }[] }) {
+function WorkedExample({
+  step,
+  revealedLines,
+  lineResults,
+  onAnswerLine,
+}: {
+  step: WorkedStep;
+  revealedLines: { idx: number; text: string }[];
+  lineResults?: LineResults;
+  onAnswerLine: (line: number) => void;
+}) {
   useLang();
-  const [revealed, setRevealed] = useState<Record<number, Revealed>>(() =>
+  const [own, setRevealed] = useState<Record<number, Revealed>>(() =>
     Object.fromEntries(revealedLines.map((l) => [l.idx, { text: l.text }])),
   );
+  const revealed: Record<number, Revealed> = { ...own, ...lineResults };
   // Lines after the first unanswered faded line stay hidden until it is filled in (L5).
   const firstOpen = step.lines.findIndex((l) => l.text === undefined && !revealed[l.idx]);
   const visible = firstOpen === -1 ? step.lines : step.lines.slice(0, firstOpen + 1);
@@ -237,11 +255,20 @@ function WorkedExample({ step, revealedLines }: { step: WorkedStep; revealedLine
                   {r.correct !== undefined && (
                     <p aria-live="polite" {...stylex.props(s.verdict, r.correct ? s.verdictOk : s.verdictOff)}>
                       {r.correct ? <CircleCheck size={16} aria-hidden="true" /> : <CircleX size={16} aria-hidden="true" />}
-                      {r.correct ? t("item.right") : t("steps.yourVersion", { answer: r.answer ?? "" })}
+                      {r.correct ? t("item.right") : r.answer ? t("steps.yourVersion", { answer: r.answer }) : t("steps.lineShown")}
                     </p>
                   )}
                   <Markdown src={r.text} />
                 </div>
+              ) : line.blankOpen ? (
+                <OpenLine
+                  prompt={line.blankPrompt ?? t("steps.finishLine")}
+                  onAnswer={() => onAnswerLine(line.idx)}
+                  onReveal={async () => {
+                    const res = await api.revealWorkedLine(step.id, line.idx);
+                    setRevealed((m) => ({ ...m, [line.idx]: { ...res, answer: "" } }));
+                  }}
+                />
               ) : (
                 <FadedLine
                   prompt={line.blankPrompt ?? t("steps.finishLine")}
@@ -262,6 +289,46 @@ function WorkedExample({ step, revealedLines }: { step: WorkedStep; revealedLine
       )}
       <Citations cites={step.cites} />
     </>
+  );
+}
+
+/** A line whose answer is an action or reason in words: the tutor asks it and judges the answer by meaning. */
+function OpenLine({ prompt, onAnswer, onReveal }: { prompt: string; onAnswer: () => void; onReveal: () => Promise<void> }) {
+  useLang();
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  return (
+    <div {...stylex.props(s.faded)}>
+      <p {...stylex.props(s.fadedPrompt)}>{prompt}</p>
+      <p {...stylex.props(text.small, text.muted)}>{t("steps.openLineHint")}</p>
+      <div {...stylex.props(layout.actions)}>
+        <button type="button" onClick={onAnswer} {...stylex.props(btn.base, btn.primary, btn.sm)}>
+          <MessageCircle size={15} aria-hidden="true" /> {t("steps.answerTutor")}
+        </button>
+        <button
+          type="button"
+          disabled={busy}
+          onClick={async () => {
+            setBusy(true);
+            setError(null);
+            try {
+              await onReveal();
+            } catch (err) {
+              setError(errorText(err));
+              setBusy(false);
+            }
+          }}
+          {...stylex.props(btn.base, btn.ghost, btn.sm)}
+        >
+          {busy && <Spinner />} {t("steps.showLine")}
+        </button>
+      </div>
+      {error && (
+        <p role="alert" {...stylex.props(text.error)}>
+          {error}
+        </p>
+      )}
+    </div>
   );
 }
 

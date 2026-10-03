@@ -9,7 +9,7 @@ Author one lesson for node `$ARGUMENTS`. The learner does not watch you write; t
 
 ## 1. Load the learner
 
-Read `MISSION.md`, `NOTES.md`, `GLOSSARY.md`, `RESOURCES.md` and every file in `learning-records/` (missing files are fine). Call `get_learner_state`.
+Read `MISSION.md`, `NOTES.md`, `RESOURCES.md` and every file in `learning-records/` (missing files are fine). Call `get_learner_state`; its `glossary` is the topic's vocabulary. When the glossary is empty and a `GLOSSARY.md` exists, register its terms with `glossary_set` first.
 
 ## 2. Choose the node and level
 
@@ -38,6 +38,8 @@ Every outline opens with `activate` (L2) and ends with `check` (L11), has at lea
 
 **Body practice** (stretching, posture, exercise, instruments): the worked example is the movement as numbered lines (start position, movement, hold, breath, form cues), with a faded line for a cue they recall. A `reflect` step is where they do the movement and report what they noticed (purpose `confidence` or `connect`). Items test what has a sourced right answer: form errors, safety signals, order of the steps, dosage, what to change in a scenario. A sensation the learner should feel is a self-report, never an item key. One explain segment covers when to stop and see a professional.
 
+**Terms** (L19): name every concept with the term practitioners of the field use in the learner's language: the English word where they say it in English, with the original beside a translated term at its first use. Reuse glossary terms as they stand. Before `lesson_plan`, register each term the lesson introduces with `glossary_set`, written per [glossary-format.md](${CLAUDE_SKILL_DIR}/glossary-format.md).
+
 ## 5. Submit the steps
 
 Call `step_submit` for each index in outline order (0-based), one step per call. An explain or worked_example step whose content is a process, a structure or a set of quantities gets a figure; read [figures.md](${CLAUDE_SKILL_DIR}/figures.md) before writing the first one. Other steps go without.
@@ -48,6 +50,8 @@ The result decides the next move:
 - `rejected` → each violation names a rule ID, a message and a `path` into your step. Fix exactly those, keep the rest of the step, and resubmit the same index.
 - `dropped` (third rejection) → move on to the next index.
 - `MCP error -32602` → the step broke the schema; fix the field it names and resubmit.
+
+Mark each glossary term at its first use in a step as `[[surface|Term]]`: the word as it stands in the sentence, then the glossary term (`[[commits|Commit]]`; `[[Commit]]` when they match). The learner points at a mark to read its definition. Marks go in `body`, `problem`, item `prompt`, `solution`, `hints`, `feedback`, option and worked-line `text`, and card `front` and `back`; titles, answer keys, cloze text and blanks, order entries and quotes stay unmarked. The gate rejects a mark whose term the glossary lacks (L19).
 
 A result can also announce sources added after planning; cite the relevant ones in the remaining steps.
 
@@ -60,7 +64,6 @@ Read [cards.md](${CLAUDE_SKILL_DIR}/cards.md), then call `cards_propose` with th
 ## 7. Finish
 
 1. `lesson_finish` with a summary in the learner's language: what the lesson built and what comes next.
-2. Add the lesson's new terms to `GLOSSARY.md` in the format of [glossary-format.md](${CLAUDE_SKILL_DIR}/glossary-format.md), so later lessons use the same words.
-3. End with a short message: the lesson title, steps published and dropped, cards proposed.
+2. End with a short message: the lesson title, steps published and dropped, cards proposed.
 
 Authoring a lesson is not evidence of learning: learning records come from the learner's attempts, which review sessions and the tutor handle.

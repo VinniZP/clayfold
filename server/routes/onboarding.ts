@@ -16,6 +16,8 @@ export type OnboardingFacts = {
   publishers: number;
   nodes: number;
   placed: number;
+  /** Goals only: entries of the plan. */
+  planned: number;
   /** The onboarding conversation has a run in progress. */
   running: boolean;
   /** The onboarding conversation's last turn ended in an error or a cancel. */
@@ -68,16 +70,28 @@ export function derivePhases(f: OnboardingFacts): OnboardingPhase[] {
   return phases.map((p, i) => ({ ...p, status: done[i] ? "done" : i === active ? "active" : "pending" }));
 }
 
+/** A goal's two phases: the interview ends with MISSION.md, the plan with goal_plan_set and the end of the run. */
+export function deriveGoalPhases(f: OnboardingFacts): OnboardingPhase[] {
+  const phases: Omit<OnboardingPhase, "status">[] = [
+    { key: "interview", label: t("onboarding.interview"), detail: f.mission !== null ? firstSuccessCriterion(f.mission) : null },
+    { key: "plan", label: t("onboarding.plan"), detail: f.planned ? t("onboarding.courseCount", { count: f.planned }) : null },
+  ];
+  const done = [f.mission !== null, f.planned >= 1 && !f.running];
+  const active = f.running || !f.stopped ? done.indexOf(false) : -1;
+  return phases.map((p, i) => ({ ...p, status: done[i] ? "done" : i === active ? "active" : "pending" }));
+}
+
 export function onboardingFacts(topic: { id: string; slug: string }, database: Database = db()): OnboardingFacts {
   const missionFile = join(paths.workspace(topic.slug), "MISSION.md");
   const counts = database
-    .query<{ sources: number; nodes: number; placed: number }, [string, string, string]>(
+    .query<{ sources: number; nodes: number; placed: number; planned: number }, [string, string, string, string]>(
       `SELECT
          (SELECT count(*) FROM sources WHERE topic_id = ? AND status = 'ok') AS sources,
          (SELECT count(*) FROM nodes WHERE topic_id = ?) AS nodes,
-         (SELECT count(*) FROM nodes WHERE topic_id = ? AND placement IS NOT NULL) AS placed`,
+         (SELECT count(*) FROM nodes WHERE topic_id = ? AND placement IS NOT NULL) AS placed,
+         (SELECT count(*) FROM goal_plan WHERE goal_id = ?) AS planned`,
     )
-    .get(topic.id, topic.id, topic.id)!;
+    .get(topic.id, topic.id, topic.id, topic.id)!;
   const conv = database
     .query<{ id: string; last_role: string | null }, [string]>(
       `SELECT c.id, (SELECT role FROM messages WHERE conversation_id = c.id ORDER BY rowid DESC LIMIT 1) AS last_role
@@ -91,6 +105,7 @@ export function onboardingFacts(topic: { id: string; slug: string }, database: D
     publishers: Object.keys(publisherCounts(topic.id, database)).length,
     nodes: counts.nodes,
     placed: counts.placed,
+    planned: counts.planned,
     running,
     stopped: !conv || (!running && conv.last_role === "error"),
   };

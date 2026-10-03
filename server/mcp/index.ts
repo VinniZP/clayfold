@@ -8,6 +8,9 @@ import { publish as hubPublish } from "../hub";
 import { publicStep, type StepRow } from "../routes/public";
 import { ToolError, type ToolContext, type ToolDef } from "./context";
 import { cardsPropose } from "./tools/cards";
+import { glossarySet } from "./tools/glossary";
+import { workedLineRecord } from "./tools/worked";
+import { goalNote, goalPlanSet } from "./tools/goal";
 import { graphSet, placementRecord } from "./tools/graph";
 import { askLearner, getLearnerState } from "./tools/learner";
 import { lessonFinish, lessonPlan, stepSubmit } from "./tools/lessons";
@@ -24,6 +27,10 @@ export const TOOLS: ToolDef<any>[] = [
   stepSubmit,
   lessonFinish,
   cardsPropose,
+  goalPlanSet,
+  goalNote,
+  glossarySet,
+  workedLineRecord,
   getLearnerState,
   itemReplace,
 ];

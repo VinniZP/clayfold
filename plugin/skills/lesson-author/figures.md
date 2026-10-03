@@ -18,7 +18,7 @@ Static and stepwise is the default (V4). A widget earns its place only for motio
 - **V1** `teaches` states in one sentence the structure, process or relationship shown. Everything drawn serves that sentence: no backgrounds, icons, mascots, shadows or 3D. *Coherence principle, d = 0.86 (Mayer).*
 - **V2** Labels sit inside the figure next to the part they name; no separate legend. Body text and figure sit in the same step. *Spatial contiguity, d = 1.10 (Mayer).*
 - **V3** `caption` is optional and adds what the body does not say; it never repeats a body sentence.
-- **V6** The figure parses and renders; its labels use the exact terms of the body text and `GLOSSARY.md`, in the learner's language.
+- **V6** The figure parses and renders; its labels use the exact terms of the body text and the topic glossary, in the learner's language.
 - `alt` describes the content fully enough to learn from without the picture.
 
 ## mermaid

@@ -9,11 +9,11 @@ const parse = (kind: Parameters<typeof toolArgs>[0]) => {
 };
 const AUTHORING = ["cards_propose", "item_replace", "lesson_finish", "lesson_plan", "step_submit"];
 
-test("tutor: memory tools and three plugin tools; every authoring tool removed", () => {
+test("tutor: memory tools, the tutoring tools and goal_note; every authoring tool removed", () => {
   const t = parse("tutor");
   expect(t.tools).toEqual(["Edit", "Glob", "Grep", "Read", "Write"]);
-  expect(t.allowed).toEqual(["Edit", "Glob", "Grep", "Read", "Write", "ask_learner", "get_learner_state", "source_search"]);
-  expect(t.denied).toEqual([...AUTHORING, "graph_set", "placement_record", "source_add"].sort());
+  expect(t.allowed).toEqual(["Edit", "Glob", "Grep", "Read", "Write", "ask_learner", "get_learner_state", "goal_note", "source_search", "worked_line_record"]);
+  expect(t.denied).toEqual([...AUTHORING, "glossary_set", "goal_plan_set", "graph_set", "placement_record", "source_add"].sort());
 });
 
 test("review adds item_replace; onboard has the web and graph tools but cannot author; lesson has everything", () => {
@@ -22,7 +22,14 @@ test("review adds item_replace; onboard has the web and graph tools but cannot a
   const onboard = parse("onboard");
   expect(onboard.tools).toContain("WebSearch");
   expect(onboard.allowed).toEqual(expect.arrayContaining(["graph_set", "source_add", "placement_record", "ask_learner"]));
-  expect(onboard.denied).toEqual(AUTHORING);
-  expect(parse("lesson").denied).toEqual([]);
+  expect(onboard.denied).toEqual([...AUTHORING, "goal_plan_set", "worked_line_record"].sort());
+  expect(parse("lesson").denied).toEqual(["goal_plan_set", "worked_line_record"]);
   expect(parse("lesson").allowed).toEqual(expect.arrayContaining([...AUTHORING, "source_add", "WebFetch"]));
+});
+
+test("goal: the web, memory, ask_learner and goal_plan_set; no topic tools", () => {
+  const goal = parse("goal");
+  expect(goal.tools).toContain("WebSearch");
+  expect(goal.allowed.filter((t) => /^[a-z_]+$/.test(t))).toEqual(["ask_learner", "goal_plan_set"]);
+  expect(goal.denied).toEqual(expect.arrayContaining(["graph_set", "source_add", "lesson_plan", "goal_note"]));
 });

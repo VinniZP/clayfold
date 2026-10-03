@@ -24,7 +24,7 @@ export type Effect =
 
 export type ActivityLabels = { label: string; doneLabel: string };
 
-type Activity = "webSearch" | "webFetch" | "readNotes" | "sourceAdd" | "sourceSearch" | "graphSet" | "lessonPlan" | "lessonFinish" | "cardsPropose" | "learnerState" | "placement" | "itemReplace" | "recordWrite" | "recordEdit" | "mission" | "resources" | "glossary" | "notes" | "files";
+type Activity = "webSearch" | "webFetch" | "readNotes" | "sourceAdd" | "sourceSearch" | "graphSet" | "goalPlan" | "glossarySet" | "workedLine" | "lessonPlan" | "lessonFinish" | "cardsPropose" | "learnerState" | "placement" | "itemReplace" | "recordWrite" | "recordEdit" | "mission" | "resources" | "glossary" | "notes" | "files";
 
 const ACTIVITIES: Record<string, Activity> = {
   WebSearch: "webSearch",
@@ -35,6 +35,9 @@ const ACTIVITIES: Record<string, Activity> = {
   source_add: "sourceAdd",
   source_search: "sourceSearch",
   graph_set: "graphSet",
+  goal_plan_set: "goalPlan",
+  glossary_set: "glossarySet",
+  worked_line_record: "workedLine",
   lesson_plan: "lessonPlan",
   lesson_finish: "lessonFinish",
   cards_propose: "cardsPropose",
@@ -83,8 +86,8 @@ function stepOutcomeText(stepNo: number, resultText: string): string | null {
   return null;
 }
 
-/** Tools whose results change the onboarding phases (sources, graph, placement). */
-const ONBOARDING_TOOLS = new Set(["source_add", "graph_set", "placement_record"]);
+/** Tools whose results change the onboarding phases (sources, graph, placement, goal plan). */
+const ONBOARDING_TOOLS = new Set(["source_add", "graph_set", "placement_record", "goal_plan_set"]);
 
 type Json = Record<string, any>;
 

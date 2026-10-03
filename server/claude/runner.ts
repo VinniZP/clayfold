@@ -4,10 +4,10 @@ import { db, newId, now } from "../db";
 import { languageInstruction } from "../i18n";
 import { publish } from "../hub";
 import { createWorkspace, syncTopicTitle } from "../workspace";
-import type { ConversationKind } from "../../shared/api";
+import type { ConversationKind, TopicSummary } from "../../shared/api";
 import { childEnv } from "./env";
 import { interruptionMessage, interruptionNote, pendingInterruption, turnsToResume, withNote, type InterruptReason, type TurnInfo } from "./interruptions";
-import { toolArgs } from "./scope";
+import { toolArgs, type Scope } from "./scope";
 import { StreamParser, type Effect, type StoredMessage } from "./stream";
 
 const CANCEL_GRACE_MS = 15_000;
@@ -58,12 +58,13 @@ type ConversationRow = {
   lesson_id: string | null;
   session_id: string | null;
   slug: string;
+  topic_kind: TopicSummary["kind"];
 };
 
 function loadConversation(conversationId: string): ConversationRow {
   const row = db()
     .query<ConversationRow, [string]>(
-      `SELECT c.id, c.topic_id, c.kind, c.lesson_id, c.session_id, t.slug
+      `SELECT c.id, c.topic_id, c.kind, c.lesson_id, c.session_id, t.slug, t.kind AS topic_kind
        FROM conversations c JOIN topics t ON t.id = c.topic_id WHERE c.id = ?`,
     )
     .get(conversationId);
@@ -146,7 +147,7 @@ export async function cancelAll(): Promise<void> {
   await Promise.allSettled(pending);
 }
 
-function buildArgs(text: string, sessionId: string | null, kind: ConversationKind): string[] {
+function buildArgs(text: string, sessionId: string | null, scope: Scope): string[] {
   return [
     config.claudeBin,
     "-p",
@@ -160,7 +161,7 @@ function buildArgs(text: string, sessionId: string | null, kind: ConversationKin
     config.pluginDir,
     "--setting-sources",
     "",
-    ...toolArgs(kind),
+    ...toolArgs(scope),
     "--permission-mode",
     "dontAsk",
     "--permission-prompts",
@@ -181,7 +182,7 @@ function start(conversationId: string, turn: Turn, queue: Turn[]): void {
   const conv = loadConversation(conversationId);
   const interruption = pendingInterruption(conversationId);
   const text = interruption ? withNote(turn.text, interruptionNote(interruption)) : turn.text;
-  const proc = Bun.spawn(buildArgs(text, conv.session_id, conv.kind), {
+  const proc = Bun.spawn(buildArgs(text, conv.session_id, conv.topic_kind === "goal" ? "goal" : conv.kind), {
     cwd: createWorkspace(conv.slug),
     env: childEnv({ CLAYFOLD_MCP_URL: `http://127.0.0.1:${config.port}/mcp`, CLAYFOLD_TOPIC_ID: conv.topic_id }),
     stdin: "ignore",

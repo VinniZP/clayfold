@@ -12,4 +12,4 @@ Learning records live in `learning-records/` as `0001-<dash-slug>.md`, numbered 
 
 Add `Status: superseded by 000N` at the top of an older record when a newer one contradicts it; keep the old file.
 
-A record needs evidence: a placement answer, a check passed, attempts that show a corrected or recurring misconception, or a shift in the mission. Material that was only covered, terms already in `GLOSSARY.md`, and session logs stay out.
+A record needs evidence: a placement answer, a check passed, attempts that show a corrected or recurring misconception, or a shift in the mission. Material that was only covered, terms already in the topic glossary, and session logs stay out.

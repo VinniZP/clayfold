@@ -1,0 +1,26 @@
+{
+  "name": "clayfold-monitor",
+  "version": "0.3.0",
+  "description": "Clayfold server and frontend statistics and the Claude Code instances the server runs, in a pane",
+  "types": "./types/index.d.ts",
+  "userConfig": {
+    "port": {
+      "type": "number",
+      "title": "Server port",
+      "description": "CLAYFOLD_PORT of the Clayfold server",
+      "default": 4317
+    },
+    "vitePort": {
+      "type": "number",
+      "title": "Vite port",
+      "description": "Port of the Vite dev server (bun run dev:web)",
+      "default": 5173
+    },
+    "longRunMinutes": {
+      "type": "number",
+      "title": "Long run threshold",
+      "description": "Minutes after which a running instance is highlighted",
+      "default": 10
+    }
+  }
+}

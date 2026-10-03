@@ -75,16 +75,52 @@ export function rebuildLesson(
 
 lessons.post("/:lessonId/rebuild", (c) => c.json(rebuildLesson(lessonRow(c.req.param("lessonId"))), 202));
 
+/**
+ * Continues a failed lesson in its own authoring session: the outline and published steps stay, and Claude
+ * submits the steps still missing. A step left mid-check by the dead run counts as a rejected attempt.
+ */
+export function resumeLesson(
+  lesson: { id: string; status: string },
+  database: Database = db(),
+  run: typeof runTurn = runTurn,
+): StartLessonResponse {
+  if (lesson.status !== "failed") fail(409, "only an interrupted lesson can be continued");
+  const conv = database
+    .query<{ id: string; session_id: string | null }, [string]>(
+      "SELECT id, session_id FROM conversations WHERE lesson_id = ? AND kind = 'lesson' ORDER BY created_at DESC, rowid DESC LIMIT 1",
+    )
+    .get(lesson.id);
+  if (!conv?.session_id) fail(409, "the lesson's authoring session is gone; rebuild the lesson instead");
+  database.transaction(() => {
+    database.query("UPDATE steps SET status = 'rejected' WHERE lesson_id = ? AND status = 'checking'").run(lesson.id);
+    database.query("UPDATE lessons SET status = 'generating' WHERE id = ?").run(lesson.id);
+  })();
+  run({
+    conversationId: conv.id,
+    text: `[Platform: the run that authored lesson ${lesson.id} stopped before the lesson was finished. Continue it: submit with step_submit every outline step that is not published or dropped yet, then finish the lesson and propose cards as the lesson-author skill says.]`,
+    display: null,
+  });
+  return { lessonId: lesson.id, conversationId: conv.id };
+}
+
+lessons.post("/:lessonId/resume", (c) => c.json(resumeLesson(lessonRow(c.req.param("lessonId"))), 202));
+
 lessons.post("/:lessonId/tutor", async (c) => {
   const lesson = lessonRow(c.req.param("lessonId"));
   const req = await readBody(
     c,
-    z.object({ itemId: z.string().min(1).optional(), stepId: z.string().min(1).optional(), text: z.string().trim().min(1).max(4000) }),
+    z.object({
+      itemId: z.string().min(1).optional(),
+      stepId: z.string().min(1).optional(),
+      line: z.number().int().min(0).max(11).optional(),
+      text: z.string().trim().min(1).max(4000),
+    }),
   );
   if (req.itemId && !db().query("SELECT 1 FROM items WHERE id = ? AND topic_id = ?").get(req.itemId, lesson.topic_id)) fail(404, "item not found");
   if (req.stepId && !db().query("SELECT 1 FROM steps WHERE id = ? AND lesson_id = ?").get(req.stepId, lesson.id)) fail(404, "step not found");
   const conversationId = latestConversation(lesson.id, "tutor") ?? createConversation(lesson.topic_id, "tutor", lesson.id);
-  const context = buildTutorContext({ lessonId: lesson.id, itemId: req.itemId, stepId: req.stepId });
+  if (req.line !== undefined && !req.stepId) fail(400, "line needs stepId");
+  const context = buildTutorContext({ lessonId: lesson.id, itemId: req.itemId, stepId: req.stepId, line: req.line });
   runTurn({ conversationId, text: `<context>\n${context}\n</context>\n<learner>${req.text}</learner>`, display: req.text });
   return c.json({ conversationId }, 202);
 });

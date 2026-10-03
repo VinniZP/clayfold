@@ -1,5 +1,5 @@
 import type { Database } from "bun:sqlite";
-import type { Cite, Item, PublicCite, PublicItem, PublicStep, Step } from "../../shared/schemas";
+import { isOpenBlank, type Cite, type Item, type PublicCite, type PublicItem, type PublicStep, type Step } from "../../shared/schemas";
 import { db } from "../db";
 
 export type ItemRow = {
@@ -110,7 +110,9 @@ export function publicStep(row: StepRow, database: Database = db()): PublicStep 
         kind: "worked_example",
         title: step.title,
         problem: step.problem,
-        lines: step.lines.map((line, idx) => (line.blank ? { idx, blankPrompt: line.blank.prompt } : { idx, text: line.text })),
+        lines: step.lines.map((line, idx) =>
+          line.blank ? { idx, blankPrompt: line.blank.prompt, ...(isOpenBlank(line.blank) ? { blankOpen: true } : {}) } : { idx, text: line.text },
+        ),
         ...(step.figure ? { figure: step.figure } : {}),
         cites: publicCites(step.cites, database),
       };

@@ -1,7 +1,8 @@
-import type { AttemptRequest, AttemptResponse, ChatMessage, ItemState, LessonView, NoteRequest, ReviewSession, Settings, TodayView, TopicSummary } from "@shared/api";
+import type { AttemptRequest, AttemptResponse, ChatMessage, ItemState, LessonView, NarrationView, NoteRequest, ReviewSession, Settings, SettingsUpdate, TodayView, TopicDetail, TopicSummary, VoiceView } from "@shared/api";
 import type { TopicEvent } from "@shared/events";
 import type { PublicStep } from "@shared/schemas";
-import { lang } from "../lib/i18n";
+import { marked } from "marked";
+import { lang, t } from "../lib/i18n";
 import * as fx from "./fixtures";
 import * as sim from "./sim";
 
@@ -39,6 +40,7 @@ class MockEventSource {
 }
 
 const createdTopics: Record<string, TopicSummary> = {};
+const openLinesAsked = new Set<string>();
 let seq = 0;
 const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const lessonState = sim.lessonState;
@@ -108,6 +110,27 @@ function grade(itemId: string, body: AttemptRequest): AttemptResponse {
 
 // ---------- Routes ----------
 
+function createTopic(request: string, kind: TopicSummary["kind"], goal: TopicDetail["goal"] = null) {
+  const id = `t-new-${++seq}`;
+  const conversationId = `c-new-${seq}`;
+  const createdAt = new Date().toISOString();
+  createdTopics[id] = { id, slug: id, title: request.slice(0, 60), createdAt, dueCards: 0, nodesMastered: 0, nodesTotal: 0, running: false, kind, goalId: goal?.id ?? null, plan: kind === "goal" ? { total: 0, opened: 0 } : null };
+  fx.topicDetails[id] = {
+    topic: createdTopics[id]!,
+    nodes: [],
+    lessons: [],
+    sources: [],
+    conversations: [{ id: conversationId, kind: "onboard", lessonId: null, createdAt }],
+    onboarding: kind === "goal" ? sim.goalPhases() : sim.phases(),
+    plan: [],
+    goal,
+    goalNotes: [],
+  };
+  fx.conversations[conversationId] = { topicId: id, kind: "onboard", messages: [{ id: `u-${seq}`, role: "user", text: request, createdAt }] };
+  fx.memoryFiles[id] = [];
+  return { id, conversationId };
+}
+
 const json = (data: unknown, status = 200) => new Response(data === undefined ? null : JSON.stringify(data), { status, headers: { "content-type": "application/json" } });
 
 function summaries(): TopicSummary[] {
@@ -159,6 +182,25 @@ function lessonView(id: string): LessonView | null {
       revealedLines: {},
     };
   }
+  if (id === "l-git-rebase") {
+    const lesson = fx.topicDetails["t-git"]!.lessons.find((l) => l.id === id)!;
+    const outline = [
+      { kind: "activate", title: "Warm-up" },
+      { kind: "explain", title: "What rebase does" },
+      { kind: "practice", title: "Rebase a branch" },
+      { kind: "check", title: "Final check" },
+    ];
+    return {
+      lesson: { ...lesson, summary: null },
+      outline,
+      stepStatus: outline.map((_, i) => (i === 0 ? "published" : "pending")),
+      steps: [{ ...(fx.condSteps[0] as PublicStep), id: "gr-0" }],
+      authorConversationId: null,
+      tutorConversationId: null,
+      itemStates: {},
+      revealedLines: {},
+    };
+  }
   if (id === "l-git") {
     return {
       lesson: { ...fx.topicDetails["t-git"]!.lessons[0]!, summary: null },
@@ -175,7 +217,49 @@ function lessonView(id: string): LessonView | null {
 }
 
 // The language survives the reload that follows a switch through the web app's stored copy.
-let settings: Settings = { language: lang() };
+let settings: Settings = { language: lang(), narration: { keySet: false, voiceId: null, model: "eleven_v4" } };
+
+// ---------- Narration ----------
+
+const voices: VoiceView[] = [
+  { id: "v-aria", name: "Aria - Calm, Clear", previewUrl: null },
+  { id: "v-roger", name: "Roger - Warm, Conversational", previewUrl: null },
+];
+
+const SECONDS_PER_BLOCK = 4;
+
+/** Silent 8 kHz mono WAV: the mock plays no voice, only the timing that drives the highlight. */
+function silentWav(seconds: number): Blob {
+  const rate = 8000;
+  const n = Math.round(rate * seconds);
+  const v = new DataView(new ArrayBuffer(44 + n));
+  const tag = (at: number, str: string) => [...str].forEach((c, i) => v.setUint8(at + i, c.charCodeAt(0)));
+  tag(0, "RIFF");
+  v.setUint32(4, 36 + n, true);
+  tag(8, "WAVE");
+  tag(12, "fmt ");
+  v.setUint32(16, 16, true);
+  v.setUint16(20, 1, true);
+  v.setUint16(22, 1, true);
+  v.setUint32(24, rate, true);
+  v.setUint32(28, rate, true);
+  v.setUint16(32, 1, true);
+  v.setUint16(34, 8, true);
+  tag(36, "data");
+  v.setUint32(40, n, true);
+  new Uint8Array(v.buffer, 44).fill(128);
+  return new Blob([v.buffer], { type: "audio/wav" });
+}
+
+function narration(stepId: string): NarrationView | null {
+  const step = fx.condSteps.find((st) => st.id === stepId);
+  if (step?.kind !== "explain") return null;
+  const blocks = marked.lexer(step.body).filter((tok) => tok.type !== "space" && tok.type !== "def").length;
+  return {
+    audioUrl: `/api/steps/${stepId}/narration/audio`,
+    segments: Array.from({ length: blocks }, (_, i) => ({ block: i, start: i * SECONDS_PER_BLOCK, end: (i + 1) * SECONDS_PER_BLOCK - 0.3 })),
+  };
+}
 
 async function route(method: string, path: string, body: Record<string, unknown>): Promise<Response> {
   const url = new URL(path, location.origin);
@@ -184,20 +268,28 @@ async function route(method: string, path: string, body: Record<string, unknown>
 
   if (p === "/api/topics" && method === "GET") return json(summaries());
   if (p === "/api/topics" && method === "POST") {
-    const id = `t-new-${++seq}`;
-    const conversationId = `c-new-${seq}`;
-    const title = String(body.request ?? "New topic").slice(0, 60);
-    createdTopics[id] = { id, slug: id, title, createdAt: new Date().toISOString(), dueCards: 0, nodesMastered: 0, nodesTotal: 0, running: false };
-    fx.topicDetails[id] = {
-      topic: createdTopics[id]!,
-      nodes: [],
-      lessons: [],
-      sources: [],
-      conversations: [{ id: conversationId, kind: "onboard", lessonId: null, createdAt: new Date().toISOString() }],
-      onboarding: sim.phases(),
-    };
-    fx.conversations[conversationId] = { topicId: id, kind: "onboard", messages: [{ id: `u-${seq}`, role: "user", text: String(body.request), createdAt: new Date().toISOString() }] };
-    fx.memoryFiles[id] = [];
+    const kind = body.kind === "goal" ? "goal" : "topic";
+    const { id, conversationId } = createTopic(String(body.request ?? "New topic"), kind);
+    setTimeout(() => (kind === "goal" ? sim.planGoal(id, conversationId) : sim.interview(id, conversationId)), 600);
+    return json({ topicId: id, conversationId });
+  }
+  if ((m = p.match(/^\/api\/topics\/([^/]+)\/notes\/discuss$/))) {
+    const goal = fx.topicDetails[m[1]!];
+    const convId = goal?.conversations[0]?.id;
+    if (!goal || !convId || goal.goalNotes.length === 0) return json({ error: "there are no new notes from the goal's courses" }, 409);
+    goal.goalNotes = [];
+    fx.conversations[convId]!.messages.push({ id: `u-${++seq}`, role: "user", text: "Let's check the plan against what the courses found out.", createdAt: new Date().toISOString() });
+    sim.reply(goal.topic.id, convId, "You build through an AI assistant, so the courses will teach reading and checking code rather than typing it. Shall I update the plan?", ["Reading the notes"]);
+    return json({ conversationId: convId }, 202);
+  }
+  if ((m = p.match(/^\/api\/topics\/([^/]+)\/plan\/([^/]+)\/open$/))) {
+    const goal = fx.topicDetails[m[1]!];
+    const entry = goal?.plan.find((e) => e.id === m![2]);
+    if (!goal || !entry) return json({ error: "Plan entry not found" }, 404);
+    if (entry.topic) return json({ error: "This topic is already opened" }, 409);
+    const { id, conversationId } = createTopic(entry.title, "topic", { id: goal.topic.id, title: goal.topic.title, why: entry.why });
+    entry.topic = fx.topicDetails[id]!.topic;
+    goal.topic.plan = { total: goal.plan.length, opened: goal.plan.filter((e) => e.topic).length };
     setTimeout(() => sim.interview(id, conversationId), 600);
     return json({ topicId: id, conversationId });
   }
@@ -225,6 +317,12 @@ async function route(method: string, path: string, body: Record<string, unknown>
     const v = lessonView(m[1]!);
     return v ? json(v) : json({ error: "Lesson not found" }, 404);
   }
+  if ((m = p.match(/^\/api\/lessons\/([^/]+)\/resume$/))) {
+    const lesson = Object.values(fx.topicDetails).flatMap((d) => d.lessons).find((l) => l.id === m![1]);
+    if (lesson?.status !== "failed") return json({ error: "only an interrupted lesson can be continued" }, 409);
+    lesson.status = "generating";
+    return json({ lessonId: lesson.id, conversationId: "c-author-resume" }, 202);
+  }
   if ((m = p.match(/^\/api\/lessons\/([^/]+)\/rebuild$/))) {
     const topicId = "t-bayes";
     const conversationId = `c-rebuild-${++seq}`;
@@ -237,6 +335,24 @@ async function route(method: string, path: string, body: Record<string, unknown>
     const conversationId = "c-tutor";
     fx.conversations[conversationId] ??= { topicId: "t-bayes", kind: "tutor", messages: [] };
     fx.conversations[conversationId].messages.push({ id: `tu-${++seq}`, role: "user", text: String(body.text), createdAt: new Date().toISOString() });
+    const lessonId = m[1]!;
+    const stepId = String(body.stepId ?? "");
+    const lineIdx = typeof body.line === "number" ? body.line : null;
+    const line = lineIdx === null ? undefined : fx.workedLines[stepId]?.[lineIdx];
+    if (lineIdx !== null && line) {
+      const key = `${stepId}:${lineIdx}`;
+      const first = !openLinesAsked.has(key);
+      openLinesAsked.add(key);
+      setTimeout(() => {
+        if (first) {
+          sim.reply("t-bayes", conversationId, "Line 6 asks: **why is the answer so far below the test's 90% sensitivity?** Answer in your own words.", ["Reading the line"]);
+          return;
+        }
+        sim.reply("t-bayes", conversationId, "Yes: there are far more healthy people, so even a small share of false alarms among them outnumbers the true detections. I've opened the line.", ["Recording your answer"]);
+        setTimeout(() => emit("t-bayes", { type: "worked.answered", lessonId, stepId, idx: lineIdx, correct: true, text: line.text }), 2600);
+      }, 400);
+      return json({ conversationId });
+    }
     setTimeout(
       () =>
         sim.reply(
@@ -271,7 +387,8 @@ async function route(method: string, path: string, body: Record<string, unknown>
     const text = String(body.text);
     const phase = c?.kind === "onboard" ? sim.activePhase(topicId) : null;
     setTimeout(() => {
-      if (phase === "interview") sim.runOnboarding(topicId, id, "mission", text);
+      if (phase === "interview" && fx.topicDetails[topicId]?.topic.kind === "goal") sim.finishGoalPlan(topicId, id, text);
+      else if (phase === "interview") sim.runOnboarding(topicId, id, "mission", text);
       else if (phase === "placement") sim.runPlacementAnswer(topicId, id, text);
       else sim.reply(topicId, id, "Noted. If you want to change anything in the plan, tell me and I'll adjust the map and the upcoming lessons.", ["Reading the message"]);
     }, 300);
@@ -293,6 +410,12 @@ async function route(method: string, path: string, body: Record<string, unknown>
     const key = fx.keys[m[1]!];
     Object.assign(stateOf(m[1]!), { gaveUp: true, solution: key?.solution, correctAnswer: key?.correctAnswer });
     return json({ solution: key?.solution ?? "", correctAnswer: key?.correctAnswer ?? "" });
+  }
+  if ((m = p.match(/^\/api\/worked\/([^/]+)\/lines\/(\d+)\/reveal$/))) {
+    const line = fx.workedLines[m[1]!]?.[Number(m[2])];
+    if (!line) return json({ error: "No such line" }, 404);
+    (fx.revealedLines[m[1]!] ??= []).push({ idx: Number(m[2]), text: line.text });
+    return json({ correct: false, text: line.text });
   }
   if ((m = p.match(/^\/api\/worked\/([^/]+)\/lines\/(\d+)$/))) {
     const line = fx.workedLines[m[1]!]?.[Number(m[2])];
@@ -333,8 +456,31 @@ async function route(method: string, path: string, body: Record<string, unknown>
   if (p === "/api/stats/activity") return json(fx.activity(Number(url.searchParams.get("days") ?? 7)));
   if (p === "/api/today") return json(fx.today);
   if (p === "/api/settings") {
-    if (method === "PUT") settings = body as Settings;
+    if (method === "PUT") {
+      const { language, voiceId, ttsModel } = body as SettingsUpdate;
+      settings = {
+        language: language ?? settings.language,
+        narration: { ...settings.narration, voiceId: voiceId ?? settings.narration.voiceId, model: ttsModel ?? settings.narration.model },
+      };
+    }
     return json(settings);
+  }
+  if (p === "/api/settings/elevenlabs-key") {
+    const keySet = method === "PUT";
+    settings = { ...settings, narration: { ...settings.narration, keySet, voiceId: settings.narration.voiceId ?? voices[0]!.id } };
+    return json(settings);
+  }
+  if (p === "/api/settings/voices") return settings.narration.keySet ? json(voices) : json({ error: t("narration.noKey") }, 409);
+  if ((m = p.match(/^\/api\/steps\/([^/]+)\/narration$/))) {
+    if (!settings.narration.keySet) return json({ error: t("narration.noKey") }, 409);
+    const view = narration(m[1]!);
+    if (!view) return json({ error: "only explain steps are narrated" }, 400);
+    await wait(1500);
+    return json(view);
+  }
+  if ((m = p.match(/^\/api\/steps\/([^/]+)\/narration\/audio$/))) {
+    const view = narration(m[1]!);
+    return view ? new Response(silentWav(view.segments.length * SECONDS_PER_BLOCK)) : json({ error: "narration not found" }, 404);
   }
   if (p === "/api/goal") {
     fx.today.goal.minutes = body.minutes as TodayView["goal"]["minutes"];
@@ -345,7 +491,10 @@ async function route(method: string, path: string, body: Record<string, unknown>
     return json(fx.weak.filter((w) => !topicId || w.topicId === topicId).slice(0, Number(url.searchParams.get("limit") ?? 10)));
   }
   if (p === "/api/audit/sample") return json(fx.audit);
+  if (p === "/api/glossary") return json(fx.glossary);
   if (p === "/api/system") return json(fx.system());
+  if (p === "/api/update" && method === "POST") fx.update.state = body.mode === "now" ? "installing" : "waiting";
+  if (p === "/api/update") return json(fx.update);
   if (p.match(/^\/api\/audit\/[^/]+$/)) return json(undefined, 202);
   return json({ error: `No mock for ${method} ${p}` }, 404);
 }

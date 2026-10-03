@@ -1,5 +1,5 @@
 import type { Lang } from "./i18n";
-import type { Answer, Card, GraphNode, Level, PublicItem, PublicStep } from "./schemas";
+import type { Answer, Card, GoalPlanEntry, GraphNode, Level, PublicItem, PublicStep } from "./schemas";
 
 // REST contract. All routes are under /api and exchange JSON.
 // Errors: non-2xx with body ApiError.
@@ -18,11 +18,17 @@ export type TopicSummary = {
   nodesTotal: number;
   /** A Claude run is in progress in one of the topic's conversations. */
   running: boolean;
+  /** A goal holds no lessons: its onboarding plans the topics that lead to it. */
+  kind: "topic" | "goal";
+  /** The goal whose plan opened this topic. */
+  goalId: string | null;
+  /** Goals only: plan entries, and how many of them are opened as topics. */
+  plan: { total: number; opened: number } | null;
 };
 
 /** Onboarding stages, derived from stored state (workspace files, sources, graph, placement). */
 export type OnboardingPhase = {
-  key: "interview" | "mission" | "sources" | "graph" | "placement";
+  key: "interview" | "mission" | "sources" | "graph" | "placement" | "plan";
   label: string;
   status: "done" | "active" | "pending";
   /** Short fact about the stage, e.g. "10 sources", "14 topics". */
@@ -54,6 +60,8 @@ export type LessonSummary = {
   learnerStatus: "not_started" | "in_progress" | "completed";
 };
 
+// POST /api/lessons/:lessonId/resume -> StartLessonResponse (continues a failed lesson in its own authoring
+// session; 409 when the lesson is not failed or the session is gone)
 // POST /api/lessons/:lessonId/rebuild -> StartLessonResponse (a new lesson-author run for the same nodes;
 // the old lesson stays until the new one is finished)
 
@@ -66,11 +74,35 @@ export type TopicDetail = {
   sources: SourceView[];
   conversations: { id: string; kind: ConversationKind; lessonId: string | null; createdAt: string }[];
   onboarding: OnboardingPhase[];
+  /** Goals only, in plan order. */
+  plan: GoalPlanEntryView[];
+  /** The goal whose plan opened this topic, with the entry's reason for it. */
+  goal: { id: string; title: string; why: string } | null;
+  /** Goals only: facts the goal's courses recorded that the goal conversation has not received yet. */
+  goalNotes: GoalNoteView[];
 };
 
-// POST /api/topics  { request }  -> CreateTopicResponse  (starts the onboarding run)
-export type CreateTopicRequest = { request: string };
+// GET /api/glossary -> GlossaryEntry[]  (every topic's terms, by term)
+export type GlossaryEntry = {
+  topicId: string;
+  topicTitle: string;
+  term: string;
+  definition: string;
+  original: string | null;
+  avoid: string[];
+  updatedAt: string;
+};
+
+export type GoalNoteView = { id: string; text: string; topicId: string; topicTitle: string; createdAt: string };
+
+export type GoalPlanEntryView = Omit<GoalPlanEntry, "brief"> & { topic: TopicSummary | null };
+
+// POST /api/topics  { request, kind? }  -> CreateTopicResponse  (starts the onboarding run)
+export type CreateTopicRequest = { request: string; kind?: TopicSummary["kind"] };
 export type CreateTopicResponse = { topicId: string; conversationId: string };
+
+// POST /api/topics/:goalId/plan/:entryId/open -> CreateTopicResponse  (creates the entry's topic and starts its onboarding)
+// POST /api/topics/:goalId/notes/discuss -> { conversationId }  (sends the unseen goal notes to the goal conversation)
 
 // GET /api/topics -> TopicSummary[]
 // GET /api/topics/:topicId -> TopicDetail
@@ -167,7 +199,8 @@ export type WorkedLineResponse = { correct: boolean; text: string };
 // POST /api/steps/:stepId/reflect { text } -> 202
 
 // Tutor: POST /api/lessons/:lessonId/tutor { itemId?, stepId?, text } -> { conversationId }
-export type TutorRequest = { itemId?: string; stepId?: string; text: string };
+/** line: a worked-example line of stepId whose open blank the learner answers through the tutor. */
+export type TutorRequest = { itemId?: string; stepId?: string; line?: number; text: string };
 
 // Review
 // GET /api/review?topicId= -> ReviewSession
@@ -229,15 +262,37 @@ export type TodayView = {
   nextReview: { date: string; cards: number } | null;
 };
 
-// Settings: GET /api/settings -> Settings ; PUT /api/settings { language } -> Settings
+// Settings: GET /api/settings -> Settings ; PUT /api/settings SettingsUpdate -> Settings
 // The language applies to the UI and to everything Claude writes from the next run on; existing content keeps its language.
+// PUT /api/settings/elevenlabs-key { key } -> Settings (400 when ElevenLabs rejects the key) ; DELETE -> Settings
+// The key goes to the OS credential store and never leaves the server.
+// GET /api/settings/voices -> VoiceView[] (409 without a key)
 
-export type Settings = { language: Lang };
+export const TTS_MODELS = ["eleven_v4", "eleven_v4_turbo"] as const;
+export type TtsModel = (typeof TTS_MODELS)[number];
+
+export type Settings = {
+  language: Lang;
+  narration: { keySet: boolean; voiceId: string | null; model: TtsModel };
+};
+
+export type SettingsUpdate = { language?: Lang; voiceId?: string; ttsModel?: TtsModel };
+
+export type VoiceView = { id: string; name: string; previewUrl: string | null };
+
+// Narration: POST /api/steps/:stepId/narration -> NarrationView (explain steps only; 409 without a key)
+// The first call writes a spoken script and synthesises it; later calls with the same voice and model return the stored audio.
+// GET /api/steps/:stepId/narration/audio -> audio/mpeg
+
+/** `block` indexes the top-level blocks of the step body as rendered; times are seconds into the audio. */
+export type NarrationSegment = { block: number; start: number; end: number };
+
+export type NarrationView = { audioUrl: string; segments: NarrationSegment[] };
 
 // Claude Code mode: GET /api/system -> SystemView
 // The running server and every `claude` process it controls.
 
-export type ClaudeInstanceKind = ConversationKind | "critic" | "grading";
+export type ClaudeInstanceKind = ConversationKind | "critic" | "grading" | "narration";
 
 export type ClaudeInstance = {
   pid: number;
@@ -297,4 +352,28 @@ export type FinishedRun = {
   error: string | null;
   /** Stopped by the learner or by a server shutdown. */
   cancelled: boolean;
+};
+
+// Updates: GET /api/update -> UpdateView; POST /api/update { mode: UpdateMode } -> UpdateView
+// A new version is any commit on origin/main that HEAD does not contain.
+
+export type UpdateCommit = { sha: string; subject: string };
+
+/** Why this checkout cannot update itself; the UI still lists the new commits. */
+export type UpdateBlock = "dirty" | "branch" | "ahead" | "launcher";
+
+/** `now` restarts at once and re-runs the cut-off Claude turns; `idle` waits until no Claude process runs. */
+export type UpdateMode = "now" | "idle";
+
+export type UpdateView = {
+  /** Short HEAD commit; null outside a git checkout. */
+  version: string | null;
+  /** Commits on origin/main missing from HEAD, newest first. */
+  commits: UpdateCommit[];
+  blocked: UpdateBlock | null;
+  state: "idle" | "waiting" | "installing" | "restarting" | "failed";
+  /** Claude processes the server runs now. */
+  running: number;
+  /** The last failed update, while `state` is `failed`. */
+  error: string | null;
 };

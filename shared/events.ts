@@ -29,8 +29,10 @@ export type TopicEvent =
   | { type: "step.status"; lessonId: string; idx: number; status: "checking" | "rejected" | "dropped"; violations: Violation[] }
   | { type: "step.published"; lessonId: string; step: PublicStep }
   | { type: "lesson.finished"; lessonId: string; summary: string }
+  | { type: "worked.answered"; lessonId: string; stepId: string; idx: number; correct: boolean; text: string }
   | { type: "cards.proposed"; cardIds: string[] }
   | { type: "graph.updated" }
+  | { type: "plan.updated" }
   | { type: "onboarding.updated" }
   | { type: "sources.updated" }
   | { type: "memory.updated" }

@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { Card, GraphNode, Item, LessonPlan, Step } from "../../shared/schemas";
-import { checkBloomShare, checkCaption, checkCard, checkDuplicates, checkGraph, checkItem, checkLessonPlan, checkStep, Report } from "./deterministic";
+import { checkBlanks, checkBloomShare, checkCaption, checkCard, checkDuplicates, checkGraph, checkItem, checkLessonPlan, checkStep, Report } from "./deterministic";
 import { activateStep, card, clozeItem, explainStep, orderItem, singleItem } from "./test-fixtures";
 
 const rules = (r: Report) => r.violations.map((v) => v.rule);
@@ -257,4 +257,18 @@ describe("lesson plan and graph", () => {
   test("prerequisite from the stored graph", () => expect(checkGraph([node("b", ["a"])], new Map([["a", []]]))).toEqual([]));
   test("cycle through the stored graph", () => expect(checkGraph([node("a", ["b"])], new Map([["b", ["a"]]])).length).toBe(1));
   test("duplicate id", () => expect(checkGraph([node("a"), node("a")], new Map()).map((v) => v.path)).toEqual(["nodes.1.id"]));
+});
+
+test("Q1: a closed blank with a plain-words phrase fails; values, commands and open blanks pass", () => {
+  const r = new Report();
+  checkBlanks(
+    [
+      { blank: { prompt: "Which id?", answers: ["call_7"] } },
+      { blank: { prompt: "Command?", answers: ['git commit -m "Update the readme"'] } },
+      { blank: { prompt: "What next?", answers: ["calls the model again"] } },
+      { blank: { prompt: "What next?", criteria: ["names the next call"] } },
+    ],
+    r,
+  );
+  expect(r.violations.map((v) => v.path)).toEqual(["lines.2.blank"]);
 });

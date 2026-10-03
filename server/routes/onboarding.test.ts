@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test";
-import { derivePhases, firstSuccessCriterion, type OnboardingFacts } from "./onboarding";
+import { deriveGoalPhases, derivePhases, firstSuccessCriterion, type OnboardingFacts } from "./onboarding";
 
 const MISSION = `# Mission: Git basics\n\n## Why\nKeep a version history.\n\n## Success means\n- in 5 minutes I create a repository, commit and roll a file back to an earlier version\n- second\n`;
-const fresh: OnboardingFacts = { mission: null, okSources: 0, publishers: 0, nodes: 0, placed: 0, running: true, stopped: false };
+const fresh: OnboardingFacts = { mission: null, okSources: 0, publishers: 0, nodes: 0, placed: 0, planned: 0, running: true, stopped: false };
 const statuses = (f: OnboardingFacts) => derivePhases(f).map((p) => `${p.key}:${p.status}`);
 
 describe("derivePhases", () => {
@@ -37,6 +37,18 @@ describe("derivePhases", () => {
     const phases = derivePhases({ ...all, running: false });
     expect(phases.every((p) => p.status === "done")).toBe(true);
     expect(phases.map((p) => p.detail).slice(2)).toEqual(["9 sources · 5 publishers", "14 topics", "3 marked"]);
+  });
+});
+
+describe("deriveGoalPhases", () => {
+  const goal = (f: Partial<OnboardingFacts>) => deriveGoalPhases({ ...fresh, ...f }).map((p) => `${p.key}:${p.status}`);
+
+  test("the interview ends with MISSION.md; the plan ends with entries and the end of the run", () => {
+    expect(goal({})).toEqual(["interview:active", "plan:pending"]);
+    expect(goal({ mission: MISSION })).toEqual(["interview:done", "plan:active"]);
+    expect(goal({ mission: MISSION, planned: 6 })).toEqual(["interview:done", "plan:active"]);
+    expect(goal({ mission: MISSION, planned: 6, running: false })).toEqual(["interview:done", "plan:done"]);
+    expect(deriveGoalPhases({ ...fresh, mission: MISSION, planned: 6 })[1]!.detail).toBe("6 courses");
   });
 });
 

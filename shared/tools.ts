@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { Card, GraphNode, Item, LessonPlan, Slug, Step } from "./schemas";
+import { Card, GlossaryTerm, GoalPlanEntry, GraphNode, Item, LessonPlan, Slug, Step } from "./schemas";
 import type { RuleId, Violation } from "./rules";
 
 // MCP tool contract between the plugin skills and the server.
@@ -41,6 +41,16 @@ export const TOOL_INPUTS = {
   step_submit: { lessonId: z.string().min(1), index: z.number().int().min(0).max(15), step: Step },
   lesson_finish: { lessonId: z.string().min(1), summary: z.string().min(10).max(1000) },
   cards_propose: { lessonId: z.string().min(1).optional(), cards: z.array(Card).min(1).max(12) },
+  goal_plan_set: { entries: z.array(GoalPlanEntry).min(1).max(15) },
+  goal_note: { text: z.string().min(10).max(500) },
+  glossary_set: { terms: z.array(GlossaryTerm).min(1).max(30) },
+  worked_line_record: {
+    stepId: z.string().min(1),
+    line: z.number().int().min(0).max(11),
+    /** The learner's answer as they gave it, or what they said when giving up. */
+    answer: z.string().min(1).max(1000),
+    outcome: z.enum(["correct", "gave_up"]),
+  },
   get_learner_state: { nodeIds: z.array(Slug).max(20).optional() },
   item_replace: {
     queueId: z.string().min(1),
@@ -78,6 +88,10 @@ export type GateOutcome = {
   violations: Violation[];
 };
 
+export type GoalPlanSetResult = { ok: true; total: number };
+export type GoalNoteResult = { ok: true };
+export type GlossarySetResult = { ok: true; total: number };
+export type WorkedLineRecordResult = { ok: true };
 export type GraphSetResult = { ok: true; total: number; added: number; updated: number };
 export type PlacementRecordResult = { ok: true };
 export type LessonPlanResult = { lessonId: string };
@@ -89,7 +103,8 @@ export type CardsProposeResult = {
 };
 
 export type LearnerState = {
-  topic: { id: string; title: string };
+  /** goal: the title of the goal whose plan opened this topic, or null. */
+  topic: { id: string; title: string; goal: string | null };
   nodes: {
     id: string;
     title: string;
@@ -113,6 +128,8 @@ export type LearnerState = {
   notes: { text: string; lessonId: string | null; at: string }[];
   regenQueue: { queueId: string; targetType: "item" | "card"; reason: RegenReason; content: unknown }[];
   lessonsDone: { lessonId: string; title: string; nodeIds: string[]; finishedAt: string }[];
+  /** The topic glossary; text marks terms from it as [[surface|Term]]. */
+  glossary: { term: string; definition: string; original: string | null }[];
 };
 
 export type RegenReason = "possible_leak" | "dead_distractor" | "leech" | "learner_report";

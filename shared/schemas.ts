@@ -134,14 +134,31 @@ export type ItemFormat = Item["format"];
 export const StepKind = z.enum(["activate", "explain", "worked_example", "practice", "reflect", "check"]);
 export type StepKind = z.infer<typeof StepKind>;
 
+/** A closed blank takes a short exact answer: a value, identifier, command or term. */
+const ClosedBlank = z.object({ prompt: z.string().min(5).max(300), answers: z.array(z.string().min(1).max(200)).min(1).max(6) }).strict();
+/** An open blank takes an action or reason in the learner's words; the tutor judges it by meaning against the criteria. */
+const OpenBlank = z.object({ prompt: z.string().min(5).max(300), criteria: z.array(z.string().min(5).max(300)).min(1).max(4) }).strict();
+export type Blank = z.infer<typeof ClosedBlank> | z.infer<typeof OpenBlank>;
+
+/** Words in a closed answer written in plain words; a longer plain-words answer is a phrase that people word differently. */
+export const CLOSED_ANSWER_MAX_WORDS = 3;
+
+/** A sentence-like answer: more than CLOSED_ANSWER_MAX_WORDS words of letters only, unlike a value, identifier or command. */
+export function isPhraseAnswer(answer: string): boolean {
+  const a = answer.trim();
+  return /^[\p{L}\s,]+$/u.test(a) && a.split(/\s+/).length > CLOSED_ANSWER_MAX_WORDS;
+}
+
+/** True for a blank answered through the tutor: an open blank, or a closed one with a phrase among its answers. */
+export function isOpenBlank(blank: Blank): boolean {
+  return "criteria" in blank || blank.answers.some(isPhraseAnswer);
+}
+
 export const WorkedLine = z
   .object({
     text: Markdown,
     /** A faded line: the learner fills it in before `text` is shown (L5). */
-    blank: z
-      .object({ prompt: z.string().min(5).max(300), answers: z.array(z.string().min(1).max(200)).min(1).max(6) })
-      .strict()
-      .optional(),
+    blank: z.union([ClosedBlank, OpenBlank]).optional(),
   })
   .strict();
 
@@ -225,6 +242,30 @@ export const GraphNode = z
   .strict();
 export type GraphNode = z.infer<typeof GraphNode>;
 
+export const GlossaryTerm = z
+  .object({
+    term: z.string().min(1).max(80),
+    /** What it is, in one or two sentences. */
+    definition: z.string().min(10).max(400),
+    /** The field's original term when the learner's language uses another word, usually English. */
+    original: z.string().min(1).max(80).optional(),
+    /** Words not to use for this concept. */
+    avoid: z.array(z.string().min(1).max(80)).max(6).optional(),
+  })
+  .strict();
+export type GlossaryTerm = z.infer<typeof GlossaryTerm>;
+
+export const GoalPlanEntry = z
+  .object({
+    id: Slug,
+    stage: z.string().min(2).max(80),
+    title: z.string().min(2).max(120),
+    why: z.string().min(10).max(300),
+    brief: z.string().min(20).max(2000),
+  })
+  .strict();
+export type GoalPlanEntry = z.infer<typeof GoalPlanEntry>;
+
 export const Level = z.enum(["novice", "intermediate", "advanced"]);
 export type Level = z.infer<typeof Level>;
 
@@ -277,7 +318,8 @@ export type PublicStep =
       title: string;
       problem: string;
       /** Faded lines arrive with `text` omitted until answered. */
-      lines: { idx: number; text?: string; blankPrompt?: string }[];
+      /** blankOpen: the learner answers this line through the tutor. */
+      lines: { idx: number; text?: string; blankPrompt?: string; blankOpen?: boolean }[];
       figure?: PublicFigure;
       cites: PublicCite[];
     }

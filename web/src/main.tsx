@@ -8,10 +8,12 @@ import { Layout } from "./components/Layout";
 import { Empty, ErrorBox } from "./components/ui";
 import { btn, card } from "./theme/ui";
 import { AuditPage } from "./pages/Audit";
+import { GlossaryPage } from "./pages/Glossary";
 import { Home } from "./pages/Home";
 import { LessonPage } from "./pages/Lesson";
 import { MemoryIndex, MemoryPage } from "./pages/Memory";
 import { ReviewPage } from "./pages/Review";
+import { SettingsPage } from "./pages/Settings";
 import { TopicPage, TopicsPage } from "./pages/Topic";
 import "overlayscrollbars/overlayscrollbars.css";
 import "./styles/global.css";
@@ -65,6 +67,8 @@ const router = createBrowserRouter([
       { path: "/memory", element: <MemoryIndex /> },
       { path: "/memory/:topicId", element: <MemoryPage /> },
       { path: "/audit", element: <AuditPage /> },
+      { path: "/glossary", element: <GlossaryPage /> },
+      { path: "/settings", element: <SettingsPage /> },
       { path: "*", element: <NotFound /> },
     ],
   },
