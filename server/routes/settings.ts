@@ -1,8 +1,9 @@
 import type { Database } from "bun:sqlite";
 import { Hono } from "hono";
 import { z } from "zod";
-import { TTS_MODELS, type Settings, type TtsModel } from "../../shared/api";
+import { CLAUDE_MODELS, CLAUDE_ROLES, EFFORTS, TTS_MODELS, type Settings, type TtsModel } from "../../shared/api";
 import { LANGS } from "../../shared/i18n";
+import { roleSettingsView, setRoleSetting } from "../claude/roles";
 import { db } from "../db";
 import { ElevenLabsError, elevenLabs } from "../elevenlabs";
 import { language, setLanguage, t } from "../i18n";
@@ -29,6 +30,7 @@ export function narrationSettings(database: Database = db()): { voiceId: string 
 const settingsView = async (): Promise<Settings> => ({
   language: language(),
   narration: { keySet: Boolean(await elevenLabsKey.get()), ...narrationSettings() },
+  claude: roleSettingsView(),
 });
 
 /** An ElevenLabs failure as a client error: 401 is a bad key, anything else a failed upstream call. */
@@ -41,10 +43,22 @@ export const settings = new Hono();
 
 settings.get("/settings", async (c) => c.json(await settingsView()));
 settings.put("/settings", async (c) => {
-  const body = await readBody(c, z.object({ language: z.enum(LANGS).optional(), voiceId: z.string().min(1).optional(), ttsModel: z.enum(TTS_MODELS).optional() }));
+  const body = await readBody(
+    c,
+    z.object({
+      language: z.enum(LANGS).optional(),
+      voiceId: z.string().min(1).optional(),
+      ttsModel: z.enum(TTS_MODELS).optional(),
+      claudeRole: z.object({ role: z.enum(CLAUDE_ROLES), model: z.enum(CLAUDE_MODELS).nullable(), effort: z.enum(EFFORTS).nullable() }).optional(),
+    }),
+  );
   if (body.language) setLanguage(body.language);
   if (body.voiceId) writeSetting("narration_voice", body.voiceId, db());
   if (body.ttsModel) writeSetting("narration_model", body.ttsModel, db());
+  if (body.claudeRole) {
+    const { role, ...setting } = body.claudeRole;
+    setRoleSetting(role, setting);
+  }
   return c.json(await settingsView());
 });
 

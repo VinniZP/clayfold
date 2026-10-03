@@ -83,7 +83,8 @@ export function claudeInstances(runs: Run[], calls: Call[], stats: Map<number, P
       {
         pid: run.pid,
         kind: conv.kind,
-        model: config.model,
+        model: run.model,
+        effort: run.effort,
         startedAt: run.startedAt,
         conversationId: conv.id,
         topicId: conv.topic_id,
@@ -101,6 +102,7 @@ export function claudeInstances(runs: Run[], calls: Call[], stats: Map<number, P
       pid: call.pid,
       kind: call.purpose,
       model: call.model,
+      effort: call.effort,
       startedAt: call.startedAt,
       conversationId: null,
       topicId: null,

@@ -112,6 +112,7 @@ function Instance({ instance: it }: { instance: ClaudeInstance }) {
   const meta = [
     `PID ${it.pid}`,
     it.model,
+    it.effort ? t("claudeMode.effort", { effort: t(`settings.effort.${it.effort}`) }) : null,
     it.rssMb !== null ? mb(it.rssMb) : null,
     it.cpuPercent !== null ? `CPU ${pct(it.cpuPercent)}` : null,
     it.queued ? t("claudeMode.queued", { count: it.queued }) : null,

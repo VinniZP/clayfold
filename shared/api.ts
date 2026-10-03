@@ -264,6 +264,7 @@ export type TodayView = {
 
 // Settings: GET /api/settings -> Settings ; PUT /api/settings SettingsUpdate -> Settings
 // The language applies to the UI and to everything Claude writes from the next run on; existing content keeps its language.
+// A Claude role's model and effort apply from the next `claude` process of that role.
 // PUT /api/settings/elevenlabs-key { key } -> Settings (400 when ElevenLabs rejects the key) ; DELETE -> Settings
 // The key goes to the OS credential store and never leaves the server.
 // GET /api/settings/voices -> VoiceView[] (409 without a key)
@@ -271,12 +272,32 @@ export type TodayView = {
 export const TTS_MODELS = ["eleven_v4", "eleven_v4_turbo"] as const;
 export type TtsModel = (typeof TTS_MODELS)[number];
 
+export const CLAUDE_MODELS = ["fable", "opus", "sonnet", "haiku"] as const;
+export type ClaudeModel = (typeof CLAUDE_MODELS)[number];
+
+export const EFFORTS = ["low", "medium", "high", "xhigh", "max"] as const;
+export type Effort = (typeof EFFORTS)[number];
+
+/** Haiku models take no effort parameter (supportedModels of the Claude API effort docs). */
+export const supportsEffort = (model: string): boolean => !model.includes("haiku");
+
+export const CLAUDE_ROLES = ["onboard", "lesson", "tutor", "review", "critic", "grading", "narration"] as const satisfies readonly ClaudeInstanceKind[];
+
+/** Null fields use the server defaults: CLAYFOLD_MODEL or CLAYFOLD_CRITIC_MODEL, and the role's default effort. */
+export type ClaudeRoleSetting = { model: ClaudeModel | null; effort: Effort | null };
+
 export type Settings = {
   language: Lang;
   narration: { keySet: boolean; voiceId: string | null; model: TtsModel };
+  claude: Record<ClaudeInstanceKind, ClaudeRoleSetting & { defaultModel: string; defaultEffort: Effort }>;
 };
 
-export type SettingsUpdate = { language?: Lang; voiceId?: string; ttsModel?: TtsModel };
+export type SettingsUpdate = {
+  language?: Lang;
+  voiceId?: string;
+  ttsModel?: TtsModel;
+  claudeRole?: ClaudeRoleSetting & { role: ClaudeInstanceKind };
+};
 
 export type VoiceView = { id: string; name: string; previewUrl: string | null };
 
@@ -298,6 +319,8 @@ export type ClaudeInstance = {
   pid: number;
   kind: ClaudeInstanceKind;
   model: string;
+  /** Null when the model takes no --effort. */
+  effort: Effort | null;
   startedAt: string;
   /** Conversation runs only; critic and grading calls belong to no conversation. */
   conversationId: string | null;

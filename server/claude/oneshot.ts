@@ -1,12 +1,14 @@
 import { tmpdir } from "node:os";
+import type { Effort } from "../../shared/api";
 import { config } from "../config";
 import { childEnv } from "./env";
+import { effortArgs, roleRun } from "./roles";
 
 export type OneShotResult<T> = { ok: true; value: T; costUsd: number | null } | { ok: false; error: string };
 
 export type JsonPromptPurpose = "critic" | "grading" | "narration";
 
-type ActiveCall = { pid: number; purpose: JsonPromptPurpose; model: string; startedAt: string };
+type ActiveCall = { pid: number; purpose: JsonPromptPurpose; model: string; effort: Effort | null; startedAt: string };
 
 const active = new Set<ActiveCall>();
 
@@ -23,10 +25,9 @@ export async function runJsonPrompt<T>(opts: {
   prompt: string;
   schema: object;
   purpose: JsonPromptPurpose;
-  model?: string;
   timeoutMs?: number;
 }): Promise<OneShotResult<T>> {
-  const model = opts.model ?? config.criticModel;
+  const { model, effort } = roleRun(opts.purpose);
   const args = [
     config.claudeBin,
     "-p",
@@ -37,6 +38,7 @@ export async function runJsonPrompt<T>(opts: {
     JSON.stringify(opts.schema),
     "--model",
     model,
+    ...effortArgs(effort),
     "--tools",
     "",
     "--setting-sources",
@@ -52,7 +54,7 @@ export async function runJsonPrompt<T>(opts: {
     stdout: "pipe",
     stderr: "pipe",
   });
-  const call: ActiveCall = { pid: proc.pid, purpose: opts.purpose, model, startedAt: new Date().toISOString() };
+  const call: ActiveCall = { pid: proc.pid, purpose: opts.purpose, model, effort, startedAt: new Date().toISOString() };
   active.add(call);
   const timer = setTimeout(() => proc.kill("SIGINT"), opts.timeoutMs ?? 120_000);
   try {

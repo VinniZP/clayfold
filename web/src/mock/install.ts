@@ -1,3 +1,4 @@
+import { CLAUDE_ROLES, type Effort } from "@shared/api";
 import type { AttemptRequest, AttemptResponse, ChatMessage, ItemState, LessonView, NarrationView, NoteRequest, ReviewSession, Settings, SettingsUpdate, TodayView, TopicDetail, TopicSummary, VoiceView } from "@shared/api";
 import type { TopicEvent } from "@shared/events";
 import type { PublicStep } from "@shared/schemas";
@@ -217,7 +218,13 @@ function lessonView(id: string): LessonView | null {
 }
 
 // The language survives the reload that follows a switch through the web app's stored copy.
-let settings: Settings = { language: lang(), narration: { keySet: false, voiceId: null, model: "eleven_v4" } };
+let settings: Settings = {
+  language: lang(),
+  narration: { keySet: false, voiceId: null, model: "eleven_v4" },
+  claude: Object.fromEntries(
+    CLAUDE_ROLES.map((role) => [role, { model: null, effort: null, defaultModel: ["critic", "grading", "narration"].includes(role) ? "sonnet" : "opus", defaultEffort: ({ onboard: "medium", lesson: "high", critic: "high" } as Record<string, Effort>)[role] ?? "low" }]),
+  ) as Settings["claude"],
+};
 
 // ---------- Narration ----------
 
@@ -457,10 +464,13 @@ async function route(method: string, path: string, body: Record<string, unknown>
   if (p === "/api/today") return json(fx.today);
   if (p === "/api/settings") {
     if (method === "PUT") {
-      const { language, voiceId, ttsModel } = body as SettingsUpdate;
+      const { language, voiceId, ttsModel, claudeRole } = body as SettingsUpdate;
       settings = {
         language: language ?? settings.language,
         narration: { ...settings.narration, voiceId: voiceId ?? settings.narration.voiceId, model: ttsModel ?? settings.narration.model },
+        claude: claudeRole
+          ? { ...settings.claude, [claudeRole.role]: { ...settings.claude[claudeRole.role], model: claudeRole.model, effort: claudeRole.effort } }
+          : settings.claude,
       };
     }
     return json(settings);

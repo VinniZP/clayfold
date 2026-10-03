@@ -4,9 +4,10 @@ import { db, newId, now } from "../db";
 import { languageInstruction } from "../i18n";
 import { publish } from "../hub";
 import { createWorkspace, syncTopicTitle } from "../workspace";
-import type { ConversationKind, TopicSummary } from "../../shared/api";
+import type { ConversationKind, Effort, TopicSummary } from "../../shared/api";
 import { childEnv } from "./env";
 import { interruptionMessage, interruptionNote, pendingInterruption, turnsToResume, withNote, type InterruptReason, type TurnInfo } from "./interruptions";
+import { effortArgs, roleRun } from "./roles";
 import { toolArgs, type Scope } from "./scope";
 import { StreamParser, type Effect, type StoredMessage } from "./stream";
 
@@ -19,6 +20,8 @@ type Turn = TurnInfo;
 type Run = {
   topicId: string;
   startedAt: string;
+  model: string;
+  effort: Effort | null;
   /** Labels of the latest activities in this run, oldest first. */
   activities: string[];
   proc: Subprocess<"ignore", "pipe", "pipe">;
@@ -91,11 +94,13 @@ export function runInfo(conversationId: string): { runningSince: string | null; 
 }
 
 /** Conversation runs in progress, one `claude` process each. */
-export function activeRuns(): { conversationId: string; pid: number; startedAt: string; activities: string[]; queued: number }[] {
+export function activeRuns(): { conversationId: string; pid: number; startedAt: string; model: string; effort: Effort | null; activities: string[]; queued: number }[] {
   return [...runs].map(([conversationId, run]) => ({
     conversationId,
     pid: run.proc.pid,
     startedAt: run.startedAt,
+    model: run.model,
+    effort: run.effort,
     activities: [...run.activities],
     queued: run.queue.length,
   }));
@@ -147,7 +152,7 @@ export async function cancelAll(): Promise<void> {
   await Promise.allSettled(pending);
 }
 
-function buildArgs(text: string, sessionId: string | null, scope: Scope): string[] {
+function buildArgs(text: string, sessionId: string | null, scope: Scope, role: { model: string; effort: Effort | null }): string[] {
   return [
     config.claudeBin,
     "-p",
@@ -167,7 +172,8 @@ function buildArgs(text: string, sessionId: string | null, scope: Scope): string
     "--permission-prompts",
     "none",
     "--model",
-    config.model,
+    role.model,
+    ...effortArgs(role.effort),
     "--max-budget-usd",
     String(config.maxBudgetUsd),
     "--append-system-prompt",
@@ -182,7 +188,8 @@ function start(conversationId: string, turn: Turn, queue: Turn[]): void {
   const conv = loadConversation(conversationId);
   const interruption = pendingInterruption(conversationId);
   const text = interruption ? withNote(turn.text, interruptionNote(interruption)) : turn.text;
-  const proc = Bun.spawn(buildArgs(text, conv.session_id, conv.topic_kind === "goal" ? "goal" : conv.kind), {
+  const role = roleRun(conv.kind);
+  const proc = Bun.spawn(buildArgs(text, conv.session_id, conv.topic_kind === "goal" ? "goal" : conv.kind, role), {
     cwd: createWorkspace(conv.slug),
     env: childEnv({ CLAYFOLD_MCP_URL: `http://127.0.0.1:${config.port}/mcp`, CLAYFOLD_TOPIC_ID: conv.topic_id }),
     stdin: "ignore",
@@ -190,7 +197,7 @@ function start(conversationId: string, turn: Turn, queue: Turn[]): void {
     stderr: "pipe",
   });
   const startedAt = now();
-  const run: Run = { topicId: conv.topic_id, startedAt, activities: [], proc, turn, queue, cancelled: null, done: Promise.resolve() };
+  const run: Run = { topicId: conv.topic_id, startedAt, ...role, activities: [], proc, turn, queue, cancelled: null, done: Promise.resolve() };
   runs.set(conversationId, run);
   db().query("UPDATE conversations SET last_active_at = ? WHERE id = ?").run(startedAt, conversationId);
   publish(conv.topic_id, { type: "conv.status", conversationId, running: true, startedAt });
