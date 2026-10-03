@@ -5,7 +5,7 @@ import { cardCites, itemCites, stepCites, stepFigure, stepItems, type PathCite }
 import { normalizeForQuote } from "./text";
 
 // Model-based checks, each a narrow yes/no question with a rule ID. No holistic scores.
-// Three independent calls run in parallel: blind solve (Q1), options-only (Q2), rubric (Q6, L8, Q5, V1, V2, L3, L6, L16, C1).
+// Three independent calls run in parallel: blind solve (Q1), options-only (Q2), rubric (Q6, L8, Q5, V1, V2, L3, L6, L16, L19, C1).
 
 export type CriticRunner = <T>(opts: { prompt: string; schema: object; purpose: "critic"; timeoutMs?: number }) => Promise<OneShotResult<T>>;
 export type CriticCheck = { rule: RuleId; pass: boolean; message: string; path?: string };
@@ -325,6 +325,15 @@ export function stepRubric(step: Step, level: Level): RubricQuestion[] {
   }
   if (step.kind === "explain") {
     qs.push({ id: ids(), rule: "L3", path: "body", question: `In the body, are the terms and parts introduced before the mechanism that uses them is explained?` });
+  }
+  if (step.kind === "explain" || step.kind === "worked_example") {
+    const field = step.kind === "explain" ? "body" : "problem";
+    qs.push({
+      id: ids(),
+      rule: "L19",
+      path: field,
+      question: `Does the ${field} name each concept with the term practitioners of the field use in the text's language (the English term where they say it in English), rather than an invented or word-for-word translation?`,
+    });
   }
   if (step.kind === "worked_example") {
     if (level === "novice") {

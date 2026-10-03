@@ -1,4 +1,4 @@
-import type { ActivityDay, AuditEntry, CardView, ChatMessage, ItemState, LessonSummary, MemoryFile, NodeView, NoteView, SourceView, SystemView, TodayView, TopicDetail, WeakSpot } from "@shared/api";
+import type { ActivityDay, AuditEntry, CardView, ChatMessage, GlossaryEntry, ItemState, LessonSummary, MemoryFile, NodeView, NoteView, SourceView, SystemView, TodayView, TopicDetail, UpdateView, WeakSpot } from "@shared/api";
 import type { PublicCite, PublicFigure, PublicItem, PublicStep } from "@shared/schemas";
 
 // Development fixtures for VITE_MOCK=1. Content is illustrative.
@@ -271,6 +271,7 @@ Two groups get a positive result. The answer to the question is the share of the
       { idx: 2, blankPrompt: "How many healthy people will test positive (9% of 990)?" },
       { idx: 3, text: "Total positives: 9 + 89 = **98**." },
       { idx: 4, blankPrompt: "What share of the 98 positives is actually sick?" },
+      { idx: 5, blankPrompt: "In one sentence: why is the answer so far below the test's 90% sensitivity?", blankOpen: true },
     ],
     figure: chartFig,
     cites,
@@ -390,6 +391,7 @@ export const workedLines: Record<string, Record<number, { answers: string[]; tex
   "st-3": {
     2: { answers: ["89", "89,1", "89.1"], text: "9% of 990 ≈ **89 people** get a false positive result." },
     4: { answers: ["9/98", "9%", "0,09", "0.09", "9.2%", "9,2%"], text: "9 / 98 ≈ **9%**: nine of every 98 positives are actually sick." },
+    5: { answers: [], text: "Healthy people outnumber the sick 99 to 1, so their 89 false alarms outweigh the 9 true detections." },
   },
 };
 
@@ -424,7 +426,7 @@ export const condSteps: PublicStep[] = [
     idx: 1,
     kind: "explain",
     title: "Joint and conditional probability",
-    body: "Conditional probability is the joint probability divided by the probability of the condition: P(A | B) = P(A and B) / P(B).",
+    body: "[[Conditional probability]] is the [[joint probability|Joint probability]] divided by the probability of the condition: P(A | B) = P(A and B) / P(B).",
     figure: brokenMermaid,
     cites,
     checks: [
@@ -523,8 +525,11 @@ const convs = (prefix: string, days: number[]) =>
 
 export const topicDetails: Record<string, TopicDetail> = {
   "t-bayes": {
-    topic: { id: "t-bayes", slug: "bayes", title: "Bayesian statistics", createdAt: iso(20), dueCards: 3, nodesMastered: 1, nodesTotal: bayesNodes.length, running: false },
+    topic: { id: "t-bayes", slug: "bayes", title: "Bayesian statistics", createdAt: iso(20), dueCards: 3, nodesMastered: 1, nodesTotal: bayesNodes.length, running: false, kind: "topic", goalId: null, plan: null },
     nodes: bayesNodes,
+    plan: [],
+    goal: null,
+    goalNotes: [],
     lessons: bayesLessons,
     sources: bayesSources,
     conversations: [{ id: "c-onb-bayes", kind: "onboard", lessonId: null, createdAt: iso(20) }, ...convs("cb", [1, 2, 2, 4, 6, 8, 9, 11, 13, 15, 16, 22, 27, 30]).slice(1)],
@@ -537,9 +542,14 @@ export const topicDetails: Record<string, TopicDetail> = {
     ],
   },
   "t-git": {
-    topic: { id: "t-git", slug: "git", title: "Git basics", createdAt: iso(40), dueCards: 2, nodesMastered: 2, nodesTotal: gitNodes.length, running: false },
+    topic: { id: "t-git", slug: "git", title: "Git basics", createdAt: iso(40), dueCards: 2, nodesMastered: 2, nodesTotal: gitNodes.length, running: false, kind: "topic", goalId: "t-goal", plan: null },
     nodes: gitNodes,
-    lessons: [{ id: "l-git", topicId: "t-git", title: "Branching and merging", objective: "Create branches, merge them and resolve a simple conflict.", level: "intermediate", nodeIds: ["merge"], status: "ready", createdAt: iso(3), stepsReady: 1, stepsTotal: 1, sourcesStale: false, supersededBy: null, learnerStatus: "not_started" }],
+    plan: [],
+    goal: { id: "t-goal", title: "Workout tracking app", why: "Keep every version of the app and roll back a change that broke it." },
+    goalNotes: [],
+    lessons: [{ id: "l-git", topicId: "t-git", title: "Branching and merging", objective: "Create branches, merge them and resolve a simple conflict.", level: "intermediate", nodeIds: ["merge"], status: "ready", createdAt: iso(3), stepsReady: 1, stepsTotal: 1, sourcesStale: false, supersededBy: null, learnerStatus: "not_started" },
+      { id: "l-git-rebase", topicId: "t-git", title: "Rebase", objective: "Move a branch onto a new base and resolve conflicts along the way.", level: "intermediate", nodeIds: ["rebase"], status: "failed", createdAt: iso(1), stepsReady: 1, stepsTotal: 4, sourcesStale: false, supersededBy: null, learnerStatus: "not_started" },
+    ],
     sources: [{ id: "g1", url: "https://git-scm.com/book/en/v2", title: "Pro Git", kind: "book", note: "chapters 2–3", status: "ok" }],
     conversations: convs("cg", [0, 3, 5, 10, 17, 24, 33, 38]),
     onboarding: [
@@ -551,8 +561,11 @@ export const topicDetails: Record<string, TopicDetail> = {
     ],
   },
   "t-stretch": {
-    topic: { id: "t-stretch", slug: "stretch", title: "Back stretches", createdAt: iso(0, 8), dueCards: 0, nodesMastered: 0, nodesTotal: 0, running: true },
+    topic: { id: "t-stretch", slug: "stretch", title: "Back stretches", createdAt: iso(0, 8), dueCards: 0, nodesMastered: 0, nodesTotal: 0, running: true, kind: "topic", goalId: null, plan: null },
     nodes: [],
+    plan: [],
+    goal: null,
+    goalNotes: [],
     lessons: [],
     sources: [],
     conversations: [{ id: "c-onb-stretch", kind: "onboard", lessonId: null, createdAt: iso(0, 8) }],
@@ -564,7 +577,41 @@ export const topicDetails: Record<string, TopicDetail> = {
       { key: "placement", label: "Level", status: "pending", detail: null },
     ],
   },
+  "t-goal": {
+    topic: { id: "t-goal", slug: "goal", title: "Workout tracking app", createdAt: iso(41), dueCards: 0, nodesMastered: 0, nodesTotal: 0, running: false, kind: "goal", goalId: null, plan: { total: 0, opened: 0 } },
+    nodes: [],
+    plan: [],
+    goal: null,
+    goalNotes: [],
+    lessons: [],
+    sources: [],
+    conversations: [{ id: "c-goal", kind: "onboard", lessonId: null, createdAt: iso(41) }],
+    onboarding: [
+      { key: "interview", label: "Interview", status: "done", detail: "I log a workout in under a minute" },
+      { key: "plan", label: "Course plan", status: "done", detail: "6 courses" },
+    ],
+  },
 };
+
+/** A goal's course plan; an entry with a topic id is opened. */
+export function goalPlan(entries: [stage: string, id: string, title: string, why: string, topicId?: string][]): TopicDetail["plan"] {
+  return entries.map(([stage, id, title, why, topicId]) => ({ id, stage, title, why, topic: topicId ? (topicDetails[topicId]?.topic ?? null) : null }));
+}
+
+export const GOAL_PLAN: Parameters<typeof goalPlan>[0] = [
+  ["A working prototype", "computer-basics", "Files, folders and the terminal", "Run the tools an app needs without fear of breaking the computer."],
+  ["A working prototype", "git", "Git basics", "Keep every version of the app and roll back a change that broke it.", "t-git"],
+  ["A working prototype", "app-structure", "How a mobile app works: screens, state, navigation", "Understand the code an AI assistant writes for your screens and fix it."],
+  ["Data that survives a restart", "data-storage", "Storing data on the device", "Keep the workout log when the app closes."],
+  ["Friends can install it", "deploy", "Building and publishing an app", "Get the app from your laptop onto a friend's phone."],
+  ["Friends can install it", "accounts-keys", "Developer accounts, keys and costs", "Know what the stores require and what it costs before you publish."],
+];
+
+topicDetails["t-goal"]!.plan = goalPlan(GOAL_PLAN);
+topicDetails["t-goal"]!.topic.plan = { total: GOAL_PLAN.length, opened: 1 };
+topicDetails["t-goal"]!.goalNotes = [
+  { id: "gn-1", text: "Writes code only through an AI assistant, not by hand.", topicId: "t-git", topicTitle: "Git basics", createdAt: iso(2) },
+];
 
 // ---------- Conversations ----------
 
@@ -575,7 +622,7 @@ export const conversations: Record<string, { topicId: string; kind: TopicDetail[
     messages: [
       { id: "m1", role: "user", text: "I want to understand Bayesian statistics so I can read A/B test results at work.", createdAt: iso(20) },
       { id: "m2", role: "activity", text: "Reading the request", doneText: "Read the request", createdAt: iso(20) },
-      { id: "m3", role: "assistant", text: "Great goal. To pick the right level, tell me: where would you start if you had to find the probability of disease after a positive test?", createdAt: iso(20) },
+      { id: "m3", role: "assistant", text: "Great goal. To pick the right level, tell me: where would you start if you had to find the probability of disease after a positive test, given the test's [[sensitivity|Sensitivity]]?", createdAt: iso(20) },
       {
         id: "m4",
         role: "ask",
@@ -594,6 +641,32 @@ export const conversations: Record<string, { topicId: string; kind: TopicDetail[
         role: "assistant",
         text: "Got it. We'll start with **conditional probability** and the difference between P(A | B) and P(B | A): that is exactly where the test's accuracy is easy to mistake for the answer.\n\nI gathered three sources and a map of 8 nodes. The first lesson covers conditional probability, the second Bayes' theorem through a medical test.",
         createdAt: iso(20),
+      },
+    ],
+  },
+  "c-goal": {
+    topicId: "t-goal",
+    kind: "onboard",
+    messages: [
+      { id: "g1", role: "user", text: "I want to make a mobile app to track my workouts.", createdAt: iso(41) },
+      { id: "g2", role: "assistant", text: "Good goal. What should the first version let you do?", createdAt: iso(41) },
+      {
+        id: "g3",
+        role: "ask",
+        text: "What is the smallest version that would already help you?",
+        options: [{ label: "Log a workout in under a minute" }, { label: "See progress on a chart" }, { label: "Share workouts with a friend" }],
+        multi: false,
+        allowFree: true,
+        createdAt: iso(41),
+      },
+      { id: "g4", role: "user", text: "Log a workout in under a minute", createdAt: iso(41) },
+      { id: "g5", role: "activity", text: "Updating the mission", doneText: "Updated the mission", createdAt: iso(41) },
+      { id: "g6", role: "activity", text: "Planning the courses", doneText: "Planned the courses", createdAt: iso(41) },
+      {
+        id: "g7",
+        role: "assistant",
+        text: "The plan has **6 courses** in three stages: a working prototype, data that survives a restart, and an app your friends can install. At 4 hours a week that is about 4 months.\n\nOpen the first course from the plan. If you want to change it, tell me here.",
+        createdAt: iso(41),
       },
     ],
   },
@@ -624,7 +697,7 @@ export const conversations: Record<string, { topicId: string; kind: TopicDetail[
 // ---------- Cards, review, memory, notes, audit ----------
 
 export const cards: CardView[] = [
-  { id: "cd1", topicId: "t-bayes", kind: "basic", front: "What is a test's sensitivity?", back: "P(test+ | sick): the share of positive results among the sick.", nodeId: "bayes-theorem", status: "active", due: iso(0), lapses: 9 },
+  { id: "cd1", topicId: "t-bayes", kind: "basic", front: "What is a test's [[sensitivity|Sensitivity]]?", back: "P(test+ | sick): the share of positive results among the sick.", nodeId: "bayes-theorem", status: "active", due: iso(0), lapses: 9 },
   { id: "cd2", topicId: "t-bayes", kind: "cloze", front: "P(A | B) = P(A and B) / ____", back: "P(B)", nodeId: "cond-prob", status: "active", due: iso(0), lapses: 3 },
   { id: "cd3", topicId: "t-bayes", kind: "basic", front: "Why is a positive test for a rare disease often false?", back: "Healthy people far outnumber the sick, so even a small share of false alarms among them exceeds the number of detections.", nodeId: "base-rate", status: "active", due: iso(0), lapses: 1 },
   { id: "cd4", topicId: "t-git", kind: "basic", front: "What does git merge --no-ff do?", back: "Always creates a merge commit, even when a fast-forward is possible.", nodeId: "merge", status: "active", due: iso(0), lapses: 4 },
@@ -788,3 +861,25 @@ export const system = (): SystemView => ({
     { conversationId: "c-ls-git", kind: "lesson", topicId: "t-git", topicTitle: "Git basics", lessonId: null, startedAt: secondsAgo(900), finishedAt: secondsAgo(640), costUsd: 0.84, error: null, cancelled: false },
   ],
 });
+
+export const update: UpdateView = {
+  version: "7c72939",
+  commits: [
+    { sha: "b41e0a2", subject: "feat: narrate lesson steps with ElevenLabs" },
+    { sha: "9d3c7f1", subject: "feat: plan several courses toward one goal" },
+    { sha: "52aa8e4", subject: "fix: keep the tutor context after a language switch" },
+  ],
+  blocked: null,
+  state: "idle",
+  running: 1,
+  error: null,
+};
+
+// ---------- Glossary ----------
+
+export const glossary: GlossaryEntry[] = [
+  { topicId: "t-bayes", topicTitle: "Bayesian statistics", term: "Conditional probability", definition: "The probability of an event given that another event has happened, written P(A | B).", original: null, avoid: ["dependent probability"], updatedAt: iso(9) },
+  { topicId: "t-bayes", topicTitle: "Bayesian statistics", term: "Joint probability", definition: "The probability that two events happen together, written P(A and B).", original: null, avoid: [], updatedAt: iso(9) },
+  { topicId: "t-bayes", topicTitle: "Bayesian statistics", term: "Sensitivity", definition: "The share of positive results among the people who have the condition: P(test+ | sick).", original: "true positive rate", avoid: ["accuracy"], updatedAt: iso(5) },
+  { topicId: "t-git", topicTitle: "Git basics", term: "Commit", definition: "A snapshot of the staging area saved in the repository.", original: null, avoid: ["save"], updatedAt: iso(30) },
+];

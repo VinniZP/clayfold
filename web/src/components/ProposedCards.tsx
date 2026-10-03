@@ -9,7 +9,7 @@ import { useTopicStream } from "../lib/stream";
 import { useResource } from "../lib/useResource";
 import { color, radius } from "../theme/tokens.stylex";
 import { btn, chip, field, layout, text } from "../theme/ui";
-import { Empty, ErrorBox, Skeleton, Spinner } from "./ui";
+import { Empty, ErrorBox, Markdown, Skeleton, Spinner } from "./ui";
 
 const s = stylex.create({
   list: { display: "grid", gap: 10, marginTop: 10, padding: 0, listStyle: "none" },
@@ -89,8 +89,12 @@ function ProposedCard({ card, onDone }: { card: CardView; onDone: (o: Outcome) =
         </form>
       ) : (
         <div {...stylex.props(s.face)}>
-          <p {...stylex.props(s.front)}>{card.front}</p>
-          <p {...stylex.props(s.back)}>{card.back}</p>
+          <p {...stylex.props(s.front)}>
+            <Markdown src={card.front} inline />
+          </p>
+          <p {...stylex.props(s.back)}>
+            <Markdown src={card.back} inline />
+          </p>
         </div>
       )}
       {mode === "report" && (
@@ -172,7 +176,9 @@ export function ProposedCards({ topicId }: { topicId: string }) {
         {list.map((c) =>
           outcomes[c.id] ? (
             <li key={c.id} {...stylex.props(s.card, s.settled)}>
-              <p {...stylex.props(s.front)}>{c.front}</p>
+              <p {...stylex.props(s.front)}>
+                <Markdown src={c.front} inline />
+              </p>
               <p {...stylex.props(chip.base)}>{t(OUTCOME[outcomes[c.id]!])}</p>
             </li>
           ) : (

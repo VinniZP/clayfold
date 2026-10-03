@@ -8,7 +8,7 @@ import type { PublicItem } from "@shared/schemas";
 import { DayProgress } from "../components/DayProgress";
 import { useHeader } from "../components/header";
 import { ItemView, type ItemResult } from "../components/ItemView";
-import { CardHead, Empty, ErrorBox, PageLoading, Progress, Spinner } from "../components/ui";
+import { CardHead, Empty, ErrorBox, Markdown, PageLoading, Progress, Spinner } from "../components/ui";
 import { api, errorText } from "../lib/api";
 import { t, useLang } from "../lib/i18n";
 import { useResource } from "../lib/useResource";
@@ -101,7 +101,9 @@ function CardReview({ card, onRated }: { card: ReviewCard; onRated: (r: ReviewRa
 
   return (
     <div {...stylex.props(st.flash)}>
-      <p {...stylex.props(st.front)}>{card.front}</p>
+      <p {...stylex.props(st.front)}>
+        <Markdown src={card.front} inline />
+      </p>
       {!shown ? (
         <button ref={revealRef} type="button" onClick={() => setShown(true)} {...stylex.props(btn.base, btn.primary, btn.lg)}>
           <Eye size={18} aria-hidden="true" /> {t("review.showAnswer")}
@@ -109,7 +111,7 @@ function CardReview({ card, onRated }: { card: ReviewCard; onRated: (r: ReviewRa
       ) : (
         <>
           <div ref={backRef} tabIndex={-1} aria-live="polite" {...stylex.props(st.back)}>
-            {card.back}
+            <Markdown src={card.back} inline />
           </div>
           <p {...stylex.props(text.small, text.muted)}>{t("review.howEasy")}</p>
           <div role="group" aria-label={t("review.rating")} {...stylex.props(st.rates)}>

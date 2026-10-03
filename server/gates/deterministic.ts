@@ -1,4 +1,4 @@
-import type { Bloom, Card, GraphNode, Item, LessonPlan, Step } from "../../shared/schemas";
+import { isPhraseAnswer, type Blank, type Bloom, type Card, type GraphNode, type Item, type LessonPlan, type Step } from "../../shared/schemas";
 import { CONTENT_RULES, foldLetters } from "../../shared/i18n";
 import type { RuleId, Violation } from "../../shared/rules";
 import { itemSurface, stepBodyText, stepFigure, stepItems, type ItemRole } from "./content";
@@ -183,6 +183,7 @@ export async function checkStep(step: Step, ctx: StepContext): Promise<Report> {
     const n = words(step.body).length;
     if (n > EXPLAIN_MAX_WORDS) r.fail("L4", `body has ${n} words; split the segment so each is at most ${EXPLAIN_MAX_WORDS}`, "body");
   }
+  if (step.kind === "worked_example") checkBlanks(step.lines, r);
   const items = stepItems(step);
   for (const { item, path, role } of items) checkItem(item, path, role, r);
   checkCaption(step, r);
@@ -191,6 +192,17 @@ export async function checkStep(step: Step, ctx: StepContext): Promise<Report> {
   checkDuplicates(items, ctx.existingSurfaces, r);
   if (step.kind === "check") checkBloomShare([...ctx.lessonBlooms, ...items.map((i) => i.item.bloom)], r);
   return r;
+}
+
+/** Q1: a closed blank holds every accepted form; an answer in plain words has more forms than a list can hold. */
+export function checkBlanks(lines: { blank?: Blank }[], r: Report): void {
+  lines.forEach((line, i) => {
+    if (!line.blank || !("answers" in line.blank)) return;
+    r.check("Q1");
+    if (line.blank.answers.some(isPhraseAnswer)) {
+      r.fail("Q1", "an answer in plain words is phrased differently by every learner; give this blank criteria for the tutor instead of answers", `lines.${i}.blank`);
+    }
+  });
 }
 
 export function checkCard(card: Card, path: string, r: Report): void {

@@ -3,7 +3,7 @@ import type { Database } from "bun:sqlite";
 import { openDb } from "../db";
 import { learnerStatus, lessonSummary, supersedingLesson, type LessonRow } from "./lesson-summary";
 import { answerWorkedLine, submitAttempt, takeHint } from "./grading";
-import { rebuildLesson } from "./lessons";
+import { rebuildLesson, resumeLesson } from "./lessons";
 import { insertStep, items, seed } from "./test-fixtures";
 
 let database: Database;
@@ -51,6 +51,23 @@ test("rebuild starts a new lesson-author run on the old lesson's first node and 
   expect(sent).toEqual([{ conversationId: res.conversationId, text: "/clayfold:lesson-author b", display: null }]);
   expect(database.query("SELECT kind, lesson_id FROM conversations WHERE id = ?").get(res.conversationId)).toEqual({ kind: "lesson", lesson_id: null });
   expect(database.query("SELECT status FROM lessons WHERE id = 'ls1'").get()).toEqual({ status: "generating" });
+});
+
+test("resume reopens a failed lesson in its own session and turns a step left mid-check into a rejected attempt", () => {
+  const sent: { conversationId: string; text: string; display?: string | null }[] = [];
+  const resume = (status: string) => resumeLesson({ id: "ls1", status }, database, (t) => sent.push(t));
+  expect(() => resume("ready")).toThrow("only an interrupted lesson");
+  database.query("INSERT INTO conversations (id, topic_id, kind, lesson_id) VALUES ('cv1', 'tp1', 'lesson', 'ls1')").run();
+  expect(() => resume("failed")).toThrow("session is gone");
+
+  database.query("UPDATE conversations SET session_id = 'sess1' WHERE id = 'cv1'").run();
+  database.query("UPDATE lessons SET status = 'failed' WHERE id = 'ls1'").run();
+  database.query("INSERT INTO steps (id, lesson_id, idx, kind, content, status) VALUES ('st_c', 'ls1', 1, 'practice', '{}', 'checking')").run();
+  expect(resume("failed")).toEqual({ lessonId: "ls1", conversationId: "cv1" });
+  expect(sent).toHaveLength(1);
+  expect(sent[0]!.text).toContain("lesson ls1 stopped");
+  expect(database.query("SELECT status FROM lessons WHERE id = 'ls1'").get()).toEqual({ status: "generating" });
+  expect(database.query("SELECT status FROM steps WHERE id = 'st_c'").get()).toEqual({ status: "rejected" });
 });
 
 describe("supersession", () => {

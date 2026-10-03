@@ -61,12 +61,35 @@ function describeStep(step: Step): string {
   }
 }
 
+/** The open blank of a worked-example line the learner answers through the tutor, with its answer sheet and their earlier answers. */
+function describeOpenLine(stepRow: StepRow, idx: number, database: Database): string | null {
+  const step = JSON.parse(stepRow.content) as Step;
+  const line = step.kind === "worked_example" ? step.lines[idx] : undefined;
+  if (!line?.blank) return null;
+  const blank = line.blank;
+  const criteria =
+    "criteria" in blank
+      ? `Criteria the answer must cover:\n${blank.criteria.map((c) => `- ${c}`).join("\n")}`
+      : `No criteria were written for this line: judge by meaning against the hidden line. Accepted phrasings, as examples only: ${blank.answers.join(" | ")}`;
+  const earlier = database
+    .query<{ answer: string; correct: number }, [string, number]>("SELECT answer, correct FROM worked_answers WHERE step_id = ? AND line_idx = ? ORDER BY created_at, rowid")
+    .all(stepRow.id, idx);
+  return [
+    `Open question on line ${idx + 1} of this worked example (stepId "${stepRow.id}", line ${idx}); the learner answers it through you, in their own words.`,
+    `Question: ${blank.prompt}`,
+    `Hidden line, the reference the learner has not seen: ${line.text}`,
+    criteria,
+    earlier.length ? `Their earlier answers on this line: ${earlier.map((e) => `"${e.answer || "(revealed)"}" ${e.correct ? "correct" : "not accepted"}`).join("; ")}` : "No earlier answers on this line.",
+    `Record the result with worked_line_record (stepId "${stepRow.id}", line ${idx}): outcome "correct" once their answer covers every criterion by meaning, in any wording; "gave_up" when they give up.`,
+  ].join("\n");
+}
+
 /**
  * L17 context for a tutor turn: the item with its key, misconceptions, solution and hints; the learner's
  * attempts on it; unmastered prerequisites of its node; the step text; and the last 24 h of attempts.
  */
 export function buildTutorContext(
-  opts: { lessonId: string; itemId?: string; stepId?: string; at?: Date },
+  opts: { lessonId: string; itemId?: string; stepId?: string; line?: number; at?: Date },
   database: Database = db(),
 ): string {
   const at = opts.at ?? new Date();
@@ -80,6 +103,10 @@ export function buildTutorContext(
   const stepId = opts.stepId ?? row?.step_id ?? null;
   const stepRow = stepId ? database.query<StepRow, [string]>("SELECT * FROM steps WHERE id = ?").get(stepId) : null;
   if (stepRow) parts.push(describeStep(JSON.parse(stepRow.content) as Step));
+  if (stepRow && opts.line !== undefined) {
+    const section = describeOpenLine(stepRow, opts.line, database);
+    if (section) parts.push(section);
+  }
 
   if (row) {
     const item = JSON.parse(row.content) as Item;

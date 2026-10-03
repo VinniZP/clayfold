@@ -2,7 +2,7 @@ import { beforeEach, expect, test } from "bun:test";
 import type { Database } from "bun:sqlite";
 import type { Step } from "../../shared/schemas";
 import { openDb } from "../db";
-import { answerWorkedLine, giveUp, submitAttempt, takeHint } from "./grading";
+import { answerWorkedLine, giveUp, GradingError, revealWorkedLine, submitAttempt, takeHint } from "./grading";
 import { lessonItemStates, lessonRevealedLines } from "./progress";
 import { publicStep, type StepRow } from "./public";
 import { insertStep, items, seed } from "./test-fixtures";
@@ -64,6 +64,32 @@ test("answered worked lines are revealed after reload; unanswered ones stay hidd
   expect(lessonViewJson()).not.toContain("SECRET-WORKED-LINE");
   answerWorkedLine({ id: stepId, content: JSON.stringify(worked) }, 1, "no", { database });
   expect(lessonRevealedLines("ls1", database)).toEqual({ [stepId]: [{ idx: 1, text: "SECRET-WORKED-LINE" }] });
+});
+
+test("open blanks and phrase answers go through the tutor: the public view says so and exact checking refuses them", () => {
+  const open: Step = {
+    ...worked,
+    lines: [
+      { text: "Line one" },
+      { text: "SECRET-OPEN-LINE", blank: { prompt: "What next?", criteria: ["names the next call"] } },
+      { text: "SECRET-PHRASE-LINE", blank: { prompt: "And then?", answers: ["calls the model again"] } },
+      { text: "SECRET-CLOSED-LINE", blank: { prompt: "Which id?", answers: ["call_7", 'git commit -m "Fix it now"'] } },
+    ],
+  };
+  const { stepId } = insertStep(database, 0, open);
+  const lines = (publicStep(database.query<StepRow, []>("SELECT * FROM steps").get()!, database) as Extract<ReturnType<typeof publicStep>, { kind: "worked_example" }>).lines;
+  expect(lines.map((l) => l.blankOpen ?? false)).toEqual([false, true, true, false]);
+  expect(lessonViewJson()).not.toContain("SECRET-OPEN-LINE");
+
+  const row = { id: stepId, content: JSON.stringify(open) };
+  expect(() => answerWorkedLine(row, 1, "it calls the model", { database })).toThrow(GradingError);
+  expect(() => answerWorkedLine(row, 2, "calls the model again", { database })).toThrow("answered through the tutor");
+  expect(answerWorkedLine(row, 3, "CALL_7", { database })).toEqual({ correct: true, text: "SECRET-CLOSED-LINE" });
+  expect(revealWorkedLine(row, 1, { database })).toEqual({ correct: false, text: "SECRET-OPEN-LINE" });
+  expect(database.query("SELECT line_idx, answer, correct FROM worked_answers ORDER BY line_idx").all()).toEqual([
+    { line_idx: 1, answer: "", correct: 0 },
+    { line_idx: 3, answer: "CALL_7", correct: 1 },
+  ]);
 });
 
 test("hint levels persist in the database across a fresh module instance", async () => {

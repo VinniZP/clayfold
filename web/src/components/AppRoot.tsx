@@ -1,6 +1,7 @@
 import * as stylex from "@stylexjs/stylex";
 import { useLayoutEffect, type ReactNode } from "react";
 import { useTheme } from "../lib/theme";
+import { TermPopover } from "./TermPopover";
 import { bridge, darkTheme, lightTheme } from "../theme/themes";
 import { bp, color, font } from "../theme/tokens.stylex";
 
@@ -27,6 +28,7 @@ export function AppRoot({ children }: { children: ReactNode }) {
   return (
     <div data-app-root="" {...stylex.props(s.root)}>
       {children}
+      <TermPopover />
     </div>
   );
 }

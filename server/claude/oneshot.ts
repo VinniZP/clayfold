@@ -4,7 +4,7 @@ import { childEnv } from "./env";
 
 export type OneShotResult<T> = { ok: true; value: T; costUsd: number | null } | { ok: false; error: string };
 
-export type JsonPromptPurpose = "critic" | "grading";
+export type JsonPromptPurpose = "critic" | "grading" | "narration";
 
 type ActiveCall = { pid: number; purpose: JsonPromptPurpose; model: string; startedAt: string };
 
@@ -17,7 +17,7 @@ export function activeJsonPrompts(): ActiveCall[] {
 
 /**
  * Runs a single tool-less `claude -p` call that must answer with JSON matching `schema`
- * (--json-schema). Used by the critic and by short-answer grading.
+ * (--json-schema). Used by the critic, short-answer grading and narration scripts.
  */
 export async function runJsonPrompt<T>(opts: {
   prompt: string;

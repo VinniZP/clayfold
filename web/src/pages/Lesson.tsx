@@ -1,5 +1,5 @@
 import * as stylex from "@stylexjs/stylex";
-import { ArrowLeft, ArrowRight, BookOpen, Check, CircleSlash, Copy, MessageCircle, NotebookText, PanelRightClose, ShieldCheck, TriangleAlert } from "lucide-react";
+import { ArrowLeft, ArrowRight, BookOpen, Check, CircleSlash, Copy, MessageCircle, NotebookText, PanelRightClose, RotateCcw, ShieldCheck, TriangleAlert } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { Link, useParams, useSearchParams } from "react-router";
 import type { LessonView } from "@shared/api";
@@ -13,13 +13,14 @@ import { StaleSources } from "../components/LessonStatus";
 import { useHeader } from "../components/header";
 import type { ItemResult } from "../components/ItemView";
 import { ProposedCards } from "../components/ProposedCards";
-import { StepView, type TutorHooks } from "../components/Steps";
+import { StepView, type LineResults, type TutorHooks } from "../components/Steps";
 import { CardHead, Clay, Empty, ErrorBox, Markdown, PageLoading, Progress, Spinner } from "../components/ui";
-import { api } from "../lib/api";
+import { api, errorText } from "../lib/api";
 import { formatDateTime, kindLabel, levelLabel } from "../lib/format";
 import { t, useLang } from "../lib/i18n";
 import { useOverlayScroll } from "../lib/overlayScroll";
 import { useStreamStatus, useTopicStream } from "../lib/stream";
+import { useGlossaryScope } from "../lib/glossary";
 import { useResource } from "../lib/useResource";
 import { bp, color, font, radius } from "../theme/tokens.stylex";
 import { banner, btn, card, chip, layout, shadow, text } from "../theme/ui";
@@ -80,6 +81,8 @@ const s = stylex.create({
     gridTemplateColumns: { default: "minmax(280px, 320px) minmax(0, 1fr)", [bp.mobile]: "minmax(0, 1fr)" },
     gap: { default: 20, [bp.mobile]: 12 },
     alignItems: "start",
+    scrollSnapAlign: { default: "start", [bp.mobile]: "none" },
+    scrollMarginTop: 24,
   },
   gridDocked: { gridTemplateColumns: "minmax(270px, 310px) minmax(0, 1fr) minmax(280px, 320px)", gap: 16 },
   outline: {
@@ -158,6 +161,8 @@ const s = stylex.create({
   main: { minWidth: 0, paddingBlock: { default: 28, [bp.mobile]: 20 }, paddingInline: { default: 30, [bp.mobile]: 18 }, minHeight: 560, display: "grid", gap: 20, alignContent: "start" },
   progressRow: { display: "flex", flexWrap: "wrap", alignItems: "center", gap: 14 },
   progressBar: { flexGrow: 1, flexBasis: 160 },
+  interrupted: { flexWrap: "wrap" },
+  interruptedText: { flexGrow: 1, flexBasis: 240 },
   wait: { display: "grid", justifyItems: "center", gap: 10, paddingBlock: 72, paddingInline: 24, textAlign: "center", color: color.textMuted, outline: "none" },
   waitText: { maxWidth: "44ch", color: color.text },
   nav: { display: "flex", justifyContent: "space-between", gap: 12, paddingTop: 20, borderTopWidth: 1, borderTopStyle: "solid", borderTopColor: color.border },
@@ -246,16 +251,41 @@ export function LessonPage() {
   const outlineRef = useRef<HTMLElement>(null);
   useOverlayScroll(outlineRef);
   const [offer, setOffer] = useState<Offer | null>(null);
-  const [tutorCtx, setTutorCtx] = useState<{ itemId?: string; stepId?: string }>({});
+  const [tutorCtx, setTutorCtx] = useState<{ itemId?: string; stepId?: string; line?: number }>({});
+  const [lineResults, setLineResults] = useState<Record<string, LineResults>>({});
   const [tutorConv, setTutorConv] = useState<string | null>(null);
   const [autoSend, setAutoSend] = useState<{ text: string; nonce: number } | null>(null);
   const offered = useRef(new Set<string>());
   const navigated = useRef(false);
   const v = view.data;
+  const [resuming, setResuming] = useState(false);
+  const [resumeError, setResumeError] = useState<string | null>(null);
+  const resume = async () => {
+    setResuming(true);
+    setResumeError(null);
+    try {
+      await api.resumeLesson(lessonId);
+      await view.reload();
+    } catch (err) {
+      setResumeError(errorText(err));
+    } finally {
+      setResuming(false);
+    }
+  };
   const topicId = v?.lesson.topicId ?? null;
+  useGlossaryScope(topicId);
   const streamStatus = useStreamStatus(topicId);
   const topics = useResource(api.topics, topicId ? "topics" : null);
   const topicTitle = topics.data?.find((t) => t.id === topicId)?.title ?? null;
+
+  // The lesson grid is the page's snap point: stopping near it lines the sticky outline and tutor up with the viewport.
+  useEffect(() => {
+    const root = document.documentElement;
+    root.style.scrollSnapType = "y proximity";
+    return () => {
+      root.style.scrollSnapType = "";
+    };
+  }, []);
 
   useEffect(() => {
     if (!v) return;
@@ -300,6 +330,10 @@ export function LessonPage() {
           return;
         case "lesson.finished":
           if (e.lessonId === lessonId) setSummary(e.summary);
+          return;
+        case "worked.answered":
+          if (e.lessonId !== lessonId) return;
+          setLineResults((m) => ({ ...m, [e.stepId]: { ...m[e.stepId], [e.idx]: { text: e.text, correct: e.correct } } }));
           return;
         case "tutor.offer": {
           if (e.lessonId !== lessonId) return;
@@ -363,6 +397,12 @@ export function LessonPage() {
         setOffer(null);
         setTutorCtx({ itemId, stepId });
         setTutorOpen(true);
+      },
+      onAnswerLine: (stepId, line) => {
+        setOffer(null);
+        setTutorCtx({ stepId, line });
+        setTutorOpen(true);
+        setAutoSend({ text: t("lesson.answerLineMessage", { n: line + 1 }), nonce: Date.now() });
       },
     }),
     [openOffer],
@@ -513,9 +553,13 @@ export function LessonPage() {
 
         <section aria-label={t("lesson.step")} {...stylex.props(card.base, s.main)}>
           {v.lesson.status === "failed" && (
-            <p role="alert" {...stylex.props(banner.base, banner.danger)}>
-              <TriangleAlert size={16} aria-hidden="true" /> {t("lesson.interrupted")}
-            </p>
+            <div role="alert" {...stylex.props(banner.base, banner.danger, s.interrupted)}>
+              <TriangleAlert size={16} aria-hidden="true" />
+              <span {...stylex.props(s.interruptedText)}>{resumeError ? t("lesson.resumeFailed", { error: resumeError }) : t("lesson.interrupted")}</span>
+              <button type="button" disabled={resuming} onClick={resume} {...stylex.props(btn.base, btn.danger, btn.sm)}>
+                {resuming ? <Spinner /> : <RotateCcw size={14} aria-hidden="true" />} {t("lesson.resume")}
+              </button>
+            </div>
           )}
           {total === 0 ? (
             <div id="step-placeholder" tabIndex={-1} {...stylex.props(s.wait)}>
@@ -555,6 +599,7 @@ export function LessonPage() {
                     onCheckResults={(_, r) => setCheckResults(r)}
                     itemStates={v.itemStates}
                     revealedLines={v.revealedLines[st.id] ?? []}
+                    lineResults={lineResults[st.id]}
                   />
                 </div>
               ))}

@@ -8,7 +8,7 @@ Prepare the learner's next review session. Write learner-facing text in their la
 
 ## 1. Load
 
-Call `get_learner_state`. Read `MISSION.md`, `GLOSSARY.md`, `RESOURCES.md` and `learning-records/`.
+Call `get_learner_state`; its `glossary` holds the terms to use. Read `MISSION.md`, `RESOURCES.md` and `learning-records/`.
 
 ## 2. Work the regeneration queue
 

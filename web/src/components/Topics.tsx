@@ -1,5 +1,5 @@
 import * as stylex from "@stylexjs/stylex";
-import { ArrowRight, Repeat2, Search, Sparkles } from "lucide-react";
+import { ArrowRight, Flag, Repeat2, Search, Sparkles } from "lucide-react";
 import { useId, useState } from "react";
 import { Link, useNavigate } from "react-router";
 import type { TopicSummary } from "@shared/api";
@@ -17,6 +17,9 @@ const pulse = stylex.keyframes({
 
 const s = stylex.create({
   form: { display: "grid", gap: 8 },
+  kinds: { display: "flex", flexWrap: "wrap", gap: 6 },
+  kind: { height: 34, paddingInline: 14, borderWidth: 0, borderRadius: radius.pill, backgroundColor: color.surface, color: color.textMuted, fontSize: 14, fontWeight: 600, cursor: "pointer" },
+  kindOn: { backgroundColor: color.primary, color: color.onPrimary },
   row: { display: "flex", gap: 12, flexDirection: { default: "row", [bp.phone]: "column" } },
   inputWrap: { position: "relative", flexGrow: 1, minWidth: 0 },
   inputIcon: { position: "absolute", left: 22, top: "50%", transform: "translateY(-50%)", color: color.textMuted, pointerEvents: "none" },
@@ -130,6 +133,7 @@ export function topicObject(title: string): ClayName {
 
 export function NewTopicForm({ big }: { big?: boolean }) {
   useLang();
+  const [kind, setKind] = useState<TopicSummary["kind"]>("topic");
   const [value, setValue] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -143,7 +147,7 @@ export function NewTopicForm({ big }: { big?: boolean }) {
         setBusy(true);
         setError(null);
         try {
-          const res = await api.createTopic(value.trim());
+          const res = await api.createTopic(value.trim(), kind);
           navigate(`/topics/${res.topicId}?c=${encodeURIComponent(res.conversationId)}`);
         } catch (err) {
           setError(errorText(err));
@@ -152,8 +156,15 @@ export function NewTopicForm({ big }: { big?: boolean }) {
       }}
       {...stylex.props(s.form)}
     >
+      <div role="group" aria-label={t("topics.kindLabel")} {...stylex.props(s.kinds)}>
+        {(["topic", "goal"] as const).map((k) => (
+          <button key={k} type="button" aria-pressed={kind === k} onClick={() => setKind(k)} {...stylex.props(s.kind, kind === k && s.kindOn)}>
+            {t(k === "goal" ? "topics.kind.goal" : "topics.kind.topic")}
+          </button>
+        ))}
+      </div>
       <label htmlFor={id} {...stylex.props(layout.srOnly)}>
-        {t("topics.prompt")}
+        {t(kind === "goal" ? "topics.goalPrompt" : "topics.prompt")}
       </label>
       <div {...stylex.props(s.row)}>
         <div {...stylex.props(s.inputWrap)}>
@@ -162,13 +173,13 @@ export function NewTopicForm({ big }: { big?: boolean }) {
             id={id}
             value={value}
             onChange={(e) => setValue(e.target.value)}
-            placeholder={t("topics.placeholder")}
+            placeholder={t(kind === "goal" ? "topics.goalPlaceholder" : "topics.placeholder")}
             autoComplete="off"
             {...stylex.props(s.input, !big && s.inputSmall)}
           />
         </div>
         <button type="submit" disabled={!value.trim() || busy} {...stylex.props(btn.base, btn.primary, s.submit, !big && s.submitSmall)}>
-          {busy ? <Spinner /> : <Sparkles size={19} aria-hidden="true" />} {t("topics.create")}
+          {busy ? <Spinner /> : <Sparkles size={19} aria-hidden="true" />} {t(kind === "goal" ? "topics.createGoal" : "topics.create")}
         </button>
       </div>
       {error && (
@@ -191,6 +202,11 @@ export function TopicCard({ topic, tone }: { topic: TopicSummary; tone: Tone }) 
       </h3>
       <div {...stylex.props(s.body)}>
         <div {...stylex.props(s.chips)}>
+          {topic.kind === "goal" && (
+            <span {...stylex.props(chip.base, s.chipOnCard)}>
+              <Flag size={13} aria-hidden="true" /> {t("topics.kind.goal")}
+            </span>
+          )}
           {topic.running && (
             <span {...stylex.props(chip.base, s.chipOnCard)}>
               <span aria-hidden="true" {...stylex.props(s.dot)} /> {t("topics.working")}
@@ -202,12 +218,21 @@ export function TopicCard({ topic, tone }: { topic: TopicSummary; tone: Tone }) 
             </span>
           )}
         </div>
-        <div {...stylex.props(s.bottom)}>
-          <p {...stylex.props(s.status)}>
-            {topic.nodesTotal ? t("topics.masteredOf", { mastered: topic.nodesMastered, count: topic.nodesTotal }) : t("topics.mapBuilding")}
-          </p>
-          <Progress value={topic.nodesMastered} max={topic.nodesTotal} label={t("topics.masteredLabel", { mastered: topic.nodesMastered, total: topic.nodesTotal })} onCard fill={FILL[tone]} />
-        </div>
+        {topic.plan ? (
+          <div {...stylex.props(s.bottom)}>
+            <p {...stylex.props(s.status)}>
+              {topic.plan.total ? t("topics.planOpened", { opened: topic.plan.opened, count: topic.plan.total }) : t("topics.planBuilding")}
+            </p>
+            <Progress value={topic.plan.opened} max={topic.plan.total} label={t("topics.planOpened", { opened: topic.plan.opened, count: topic.plan.total })} onCard fill={FILL[tone]} />
+          </div>
+        ) : (
+          <div {...stylex.props(s.bottom)}>
+            <p {...stylex.props(s.status)}>
+              {topic.nodesTotal ? t("topics.masteredOf", { mastered: topic.nodesMastered, count: topic.nodesTotal }) : t("topics.mapBuilding")}
+            </p>
+            <Progress value={topic.nodesMastered} max={topic.nodesTotal} label={t("topics.masteredLabel", { mastered: topic.nodesMastered, total: topic.nodesTotal })} onCard fill={FILL[tone]} />
+          </div>
+        )}
       </div>
       <Clay name={topicObject(topic.title)} size={96} xstyle={s.art} />
     </li>

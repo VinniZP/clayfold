@@ -8,6 +8,8 @@ import { criticEnabled, critiqueCards, critiqueItem, critiqueStep, type CriticRu
 import { checkCard, checkDuplicates, checkItem, checkStep, Report } from "./deterministic";
 import { checkLessonDiversity } from "./diversity";
 import { checkCites } from "./quotes";
+import { checkTermMarks, glossaryKeys } from "./terms";
+import { stripTermMarksDeep } from "../../shared/terms";
 
 // schema -> deterministic -> quotes -> critic. A stage runs only when every earlier stage passed;
 // every check that ran is recorded, passes included, for the audit page.
@@ -79,7 +81,7 @@ function activeSurfaces(db: Database, topicId: string, excludeItemId?: string): 
   return db
     .query<{ content: string }, [string, string]>("SELECT content FROM items WHERE topic_id = ? AND status = 'active' AND id != ?")
     .all(topicId, excludeItemId ?? "")
-    .map((row) => itemSurface(JSON.parse(row.content) as Item));
+    .map((row) => itemSurface(stripTermMarksDeep(JSON.parse(row.content) as Item)));
 }
 
 /** Blooms of the lesson's graded items; ungraded prequestions (activate) do not count toward Q5. */
@@ -96,12 +98,14 @@ export async function gateStep(
 ): Promise<GateRun> {
   const schema = schemaStage(Step, input.step);
   if (!schema.ok) return schema.run;
-  const step = schema.value;
+  // Every check below reads the text as the learner sees it; the marks themselves are checked once, here.
+  const step = stripTermMarksDeep(schema.value);
   const run = schema.run;
 
   const det = await checkStep(step, { existingSurfaces: activeSurfaces(deps.db, input.topicId), lessonBlooms: lessonBlooms(deps.db, input.lessonId) });
   checkNodes(deps.db, input.topicId, stepItems(step).map(({ item, path }) => ({ nodeId: item.nodeId, path })), det);
   checkLessonDiversity(deps.db, { topicId: input.topicId, lessonId: input.lessonId, step }, det);
+  checkTermMarks(schema.value, "step", glossaryKeys(deps.db, input.topicId), det);
   if (!reportStage("deterministic", det, run)) return run;
   if (!quoteStage(deps.db, input.topicId, stepCites(step), run)) return run;
   if (criticEnabled()) criticStage(await critiqueStep(step, { level: input.level, displayOrders: input.displayOrders }, deps.critic), run);
@@ -114,11 +118,12 @@ export async function gateItem(
 ): Promise<GateRun> {
   const schema = schemaStage(Item, input.item, "item");
   if (!schema.ok) return schema.run;
-  const item = schema.value;
+  const item = stripTermMarksDeep(schema.value);
   const run = schema.run;
 
   const r = new Report();
   checkItem(item, "item", input.role, r);
+  checkTermMarks(schema.value, "item", glossaryKeys(deps.db, input.topicId), r, "item");
   checkNodes(deps.db, input.topicId, [{ nodeId: item.nodeId, path: "item" }], r);
   checkDuplicates([{ item, path: "item" }], activeSurfaces(deps.db, input.topicId, input.replacesItemId), r);
   if (!reportStage("deterministic", r, run)) return run;
@@ -132,17 +137,20 @@ export async function gateCards(deps: GateDeps, input: { topicId: string; cards:
   const prefix = input.pathPrefix ?? "cards";
   const runs: GateRun[] = [];
   const passed: { index: number; card: Card }[] = [];
+  const glossary = glossaryKeys(deps.db, input.topicId);
   input.cards.forEach((raw, index) => {
     const path = `${prefix}.${index}`;
     const schema = schemaStage(Card, raw, path);
     runs.push(schema.run);
     if (!schema.ok) return;
+    const card = stripTermMarksDeep(schema.value);
     const r = new Report();
-    checkCard(schema.value, path, r);
-    checkNodes(deps.db, input.topicId, [{ nodeId: schema.value.nodeId, path }], r);
+    checkCard(card, path, r);
+    checkTermMarks(schema.value, "card", glossary, r, path);
+    checkNodes(deps.db, input.topicId, [{ nodeId: card.nodeId, path }], r);
     if (!reportStage("deterministic", r, schema.run)) return;
-    if (!quoteStage(deps.db, input.topicId, cardCites(schema.value, path), schema.run)) return;
-    passed.push({ index, card: schema.value });
+    if (!quoteStage(deps.db, input.topicId, cardCites(card, path), schema.run)) return;
+    passed.push({ index, card });
   });
   if (passed.length === 0 || !criticEnabled()) return runs;
 

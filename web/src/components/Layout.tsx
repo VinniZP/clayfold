@@ -1,8 +1,8 @@
 import * as stylex from "@stylexjs/stylex";
-import { ArrowLeft, Bell, Brain, House, Layers, Menu, Moon, Repeat2, Search, ShieldCheck, Snowflake, SquareTerminal, Sun, X } from "lucide-react";
+import { ArrowLeft, Bell, BookA, Brain, CircleArrowUp, House, Layers, Menu, Moon, Repeat2, Search, Settings, ShieldCheck, Snowflake, SquareTerminal, Sun, X } from "lucide-react";
 import { useCallback, useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { Link, NavLink, Outlet, useLocation, useNavigate } from "react-router";
-import type { TodayView, TopicSummary } from "@shared/api";
+import type { TodayView, TopicSummary, UpdateMode, UpdateView } from "@shared/api";
 import { LANGS, translate, type Lang, type MessageKey } from "@shared/i18n";
 import { api, errorText } from "../lib/api";
 import { setClaudeMode, useClaudeMode } from "../lib/claudeMode";
@@ -225,6 +225,26 @@ const s = stylex.create({
   workingWide: { display: { default: "inline-flex", [bp.mobile]: "none" } },
   workingText: { overflow: "hidden", textOverflow: "ellipsis" },
   workingTopic: { color: color.textMuted, fontWeight: 500 },
+  updateWide: { display: { default: "block", [bp.mobile]: "none" } },
+  updateBtn: { fontFamily: font.body, cursor: "pointer" },
+  updatePop: {
+    display: "grid",
+    gap: 12,
+    padding: 16,
+    // On a phone the pill sits mid-bar, so the popover spans the screen below the bar instead.
+    position: { default: "absolute", [bp.mobile]: "fixed" },
+    top: { default: "calc(100% + 8px)", [bp.mobile]: 64 },
+    left: { default: "auto", [bp.mobile]: 16 },
+    right: { default: 0, [bp.mobile]: 16 },
+    width: { default: 360, [bp.mobile]: "auto" },
+    minWidth: { default: "100%", [bp.mobile]: 0 },
+  },
+  updateTitle: { margin: 0, fontSize: 15, fontWeight: 700 },
+  updateList: { display: "grid", gap: 6, maxHeight: 220, overflowY: "auto", fontSize: 14 },
+  updateSha: { marginInlineEnd: 8, fontFamily: font.mono, fontSize: 12.5, color: color.textMuted },
+  updateNote: { margin: 0, fontSize: 14, color: color.textMuted },
+  updateError: { margin: 0, fontSize: 14, color: color.danger, overflowWrap: "anywhere" },
+  updateActions: { display: "flex", flexWrap: "wrap", gap: 8 },
   pulseDot: {
     position: "relative",
     flexShrink: 0,
@@ -319,7 +339,9 @@ const NAV: { to: string; label: MessageKey; icon: ReactNode; end?: boolean; due?
   { to: "/topics", label: "nav.topics", icon: <Layers size={22} /> },
   { to: "/review", label: "nav.review", icon: <Repeat2 size={22} />, due: true },
   { to: "/memory", label: "nav.memory", icon: <Brain size={22} /> },
+  { to: "/glossary", label: "nav.glossary", icon: <BookA size={22} /> },
   { to: "/audit", label: "nav.audit", icon: <ShieldCheck size={22} /> },
+  { to: "/settings", label: "nav.settings", icon: <Settings size={22} /> },
 ];
 
 const dueLabel = (n: number) => t("nav.due", { cards: t("count.cards", { count: n }) });
@@ -460,21 +482,26 @@ function SearchBox() {
   );
 }
 
-function Notifications({ due }: { due: number }) {
-  useLang();
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
+/** Closes an open popover on a pointer press outside `ref` or on Escape. */
+function useDismiss(open: boolean, ref: React.RefObject<HTMLElement | null>, close: () => void) {
   useEffect(() => {
     if (!open) return;
-    const onDown = (e: PointerEvent) => !ref.current?.contains(e.target as Node) && setOpen(false);
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
+    const onDown = (e: PointerEvent) => !ref.current?.contains(e.target as Node) && close();
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && close();
     document.addEventListener("pointerdown", onDown);
     document.addEventListener("keydown", onKey);
     return () => {
       document.removeEventListener("pointerdown", onDown);
       document.removeEventListener("keydown", onKey);
     };
-  }, [open]);
+  }, [open, ref, close]);
+}
+
+function Notifications({ due }: { due: number }) {
+  useLang();
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useDismiss(open, ref, () => setOpen(false));
   return (
     <div ref={ref} {...stylex.props(s.rel)}>
       <button
@@ -559,6 +586,139 @@ function WorkingPill({ topics, compact }: { topics: TopicSummary[]; compact?: bo
         {!compact && <span {...stylex.props(s.workingTopic)}> · {where}</span>}
       </span>
     </Link>
+  );
+}
+
+const UPDATE_BUSY_POLL_MS = 2000;
+const LISTED_COMMITS = 8;
+
+const updateBusy = (view: UpdateView | null) => view !== null && (view.state === "waiting" || view.state === "installing" || view.state === "restarting");
+
+/**
+ * The server's update state, asked for on page load and whenever the tab regains focus (the server
+ * fetches origin at most every 30 minutes), and polled while an update runs. Reloads the page once
+ * the server answers from another version.
+ */
+function useUpdate(): [UpdateView | null, (view: UpdateView) => void] {
+  const [view, setView] = useState<UpdateView | null>(null);
+  const loaded = useRef<string | null>(null);
+  const busy = updateBusy(view);
+  useEffect(() => {
+    const poll = () =>
+      api.update().then(
+        (next) => {
+          if (loaded.current && next.version && next.version !== loaded.current) return window.location.reload();
+          loaded.current ??= next.version;
+          setView(next);
+        },
+        // The server is down while it restarts.
+        () => {},
+      );
+    void poll();
+    if (busy) {
+      const timer = setInterval(poll, UPDATE_BUSY_POLL_MS);
+      return () => clearInterval(timer);
+    }
+    const onFocus = () => document.visibilityState === "visible" && void poll();
+    window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", onFocus);
+    return () => {
+      window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", onFocus);
+    };
+  }, [busy]);
+  return [view, setView];
+}
+
+const UPDATE_LABEL: Record<UpdateView["state"], MessageKey> = {
+  idle: "update.available",
+  waiting: "update.waiting",
+  installing: "update.installing",
+  restarting: "update.restarting",
+  failed: "update.failed",
+};
+
+function UpdatePill({ view, onChange, compact }: { view: UpdateView | null; onChange: (view: UpdateView) => void; compact?: boolean }) {
+  useLang();
+  const [open, setOpen] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const ref = useRef<HTMLDivElement>(null);
+  const close = useCallback(() => setOpen(false), []);
+  useDismiss(open, ref, close);
+  if (!view || (view.commits.length === 0 && view.state === "idle")) return null;
+
+  const label = t(UPDATE_LABEL[view.state]);
+  const processes = t("count.claudeProcesses", { count: view.running });
+  const start = (mode: UpdateMode) => {
+    setError(null);
+    api.startUpdate(mode).then(onChange, (e) => setError(errorText(e)));
+  };
+  const canStart = (view.state === "idle" || view.state === "failed") && !view.blocked;
+  const rest = view.commits.length - LISTED_COMMITS;
+
+  return (
+    <div ref={ref} {...stylex.props(s.rel, !compact && s.updateWide)}>
+      <button
+        type="button"
+        aria-expanded={open}
+        onClick={() => setOpen((o) => !o)}
+        {...stylex.props(s.pill, s.working, s.updateBtn, compact && s.workingCompact)}
+      >
+        {updateBusy(view) ? <span {...stylex.props(s.pulseDot)} aria-hidden="true" /> : <CircleArrowUp size={18} aria-hidden="true" />}
+        <span {...stylex.props(s.workingText)}>{label}</span>
+      </button>
+      {open && (
+        <div role="dialog" aria-label={label} {...stylex.props(s.popover, shadow.pop, s.updatePop)}>
+          {view.commits.length > 0 && (
+            <>
+              <p {...stylex.props(s.updateTitle)}>{t("update.title", { changes: t("count.changes", { count: view.commits.length }) })}</p>
+              <ul {...stylex.props(layout.plainList, s.updateList)}>
+                {view.commits.slice(0, LISTED_COMMITS).map((c) => (
+                  <li key={c.sha}>
+                    <span {...stylex.props(s.updateSha)}>{c.sha}</span>
+                    {c.subject}
+                  </li>
+                ))}
+                {rest > 0 && <li {...stylex.props(s.updateNote)}>{t("update.more", { count: rest })}</li>}
+              </ul>
+            </>
+          )}
+          {view.state === "failed" && view.error && <p {...stylex.props(s.updateError)}>{t("update.failedNote", { error: view.error })}</p>}
+          {view.state === "waiting" && (
+            <>
+              <p {...stylex.props(s.updateNote)}>{t("update.waitingFor", { processes })}</p>
+              <div {...stylex.props(s.updateActions)}>
+                <button type="button" onClick={() => start("now")} {...stylex.props(btn.base, btn.soft, btn.sm)}>
+                  {t("update.now")}
+                </button>
+              </div>
+            </>
+          )}
+          {view.blocked && <p {...stylex.props(s.updateNote)}>{t(`update.blocked.${view.blocked}`)}</p>}
+          {canStart && view.running === 0 && (
+            <div {...stylex.props(s.updateActions)}>
+              <button type="button" onClick={() => start("idle")} {...stylex.props(btn.base, btn.primary, btn.sm)}>
+                {t("update.install")}
+              </button>
+            </div>
+          )}
+          {canStart && view.running > 0 && (
+            <>
+              <div {...stylex.props(s.updateActions)}>
+                <button type="button" onClick={() => start("idle")} {...stylex.props(btn.base, btn.primary, btn.sm)}>
+                  {t("update.idle")}
+                </button>
+                <button type="button" onClick={() => start("now")} {...stylex.props(btn.base, btn.soft, btn.sm)}>
+                  {t("update.now")}
+                </button>
+              </div>
+              <p {...stylex.props(s.updateNote)}>{t("update.nowNote", { processes })}</p>
+            </>
+          )}
+          {error && <p {...stylex.props(s.updateError)}>{error}</p>}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -690,6 +850,7 @@ export function Layout() {
   const drawer = useRef<HTMLDialogElement>(null);
   const onHeader = useCallback((info: HeaderInfo) => setHeader(info), []);
   const running = useRunningTopics();
+  const [update, setUpdate] = useUpdate();
   const claudeMode = useClaudeMode();
   useOverlayScroll(drawer);
 
@@ -721,6 +882,7 @@ export function Layout() {
             Clayfold
           </Link>
           <WorkingPill topics={running} compact />
+          <UpdatePill view={update} onChange={setUpdate} compact />
           <button type="button" aria-label={t("nav.openMenu")} onClick={() => drawer.current?.showModal()} {...stylex.props(btn.base, btn.icon)}>
             <Menu size={20} aria-hidden="true" />
           </button>
@@ -771,6 +933,7 @@ export function Layout() {
             </Link>
             <div {...stylex.props(s.topTools)}>
               <SearchBox />
+              <UpdatePill view={update} onChange={setUpdate} />
               <WorkingPill topics={running} />
               <StreakPill streak={streak} />
               <Notifications due={due} />

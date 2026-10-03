@@ -1,24 +1,22 @@
-# GLOSSARY.md format
+# Glossary terms
 
-`GLOSSARY.md` is the canonical language of the workspace: every lesson, item and card uses its terms, so the learner meets one word per concept.
+The topic glossary, stored with `glossary_set`, is the one vocabulary of the workspace: lessons, items, cards and the tutor use its terms, so the learner meets one word per concept, the word the field uses.
 
-```md
-# Glossary: {Topic}
-
-{One sentence on what the glossary covers.}
-
-## {Group, when clusters emerge}
-
-**Index** (staging area):
-The Git area where the contents of the next commit are assembled.
-_Avoid_: buffer, cache
-
-**Commit**:
-A snapshot of the index contents saved in the repository.
-_Avoid_: save, version
+```json
+{
+  "terms": [
+    {
+      "term": "Staging area",
+      "definition": "The Git area where the contents of the next [[Commit|commit]] are assembled.",
+      "avoid": ["buffer", "cache"]
+    },
+    { "term": "Commit", "definition": "A snapshot of the staging area saved in the repository." }
+  ]
+}
 ```
 
-- One or two sentences per term: what it is, not how to use it.
-- Pick one word per concept and list the aliases to avoid; keep the original English term in parentheses where learners will meet it.
-- Use glossary terms inside other definitions.
-- Update a definition in place when a later lesson refines it.
+- `term` is the word practitioners use in the learner's language, written in that language. Where they use the English word ("pull request", "tool call"), that word is the term.
+- `original` is the field's original term when `term` translates it, so the learner can read sources in either language; leave it out when `term` is already the original.
+- `definition`: one or two sentences on what it is, not how to use it, in the learner's language. It may mark other glossary terms.
+- `avoid` lists words for the same concept that the lessons do not use.
+- Calling `glossary_set` with an existing term replaces its entry: refine a definition there when a later lesson sharpens it.

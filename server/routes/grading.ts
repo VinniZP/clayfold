@@ -1,6 +1,6 @@
 import type { Database } from "bun:sqlite";
 import type { AttemptRequest, AttemptResponse, GiveUpResponse, HintResponse, WorkedLineResponse } from "../../shared/api";
-import type { Answer, Item } from "../../shared/schemas";
+import { isOpenBlank, type Answer, type Blank, type Item } from "../../shared/schemas";
 import { runJsonPrompt, type OneShotResult } from "../claude/oneshot";
 import { db, newId } from "../db";
 import { t } from "../i18n";
@@ -11,7 +11,7 @@ import { displayOrder, type ItemRow } from "./public";
 export class GradingError extends Error {
   constructor(
     message: string,
-    readonly status: 400 | 404 | 502 = 400,
+    readonly status: 400 | 404 | 409 | 502 = 400,
   ) {
     super(message);
   }
@@ -225,19 +225,37 @@ export function giveUp(itemId: string, opts: { database?: Database; at?: Date } 
 }
 
 /** Grades and records an answer to a faded worked-example line; the line's text is revealed after any attempt. */
+function blankLine(step: { content: string }, lineIdx: number): { text: string; blank: Blank } {
+  const content = JSON.parse(step.content) as { kind: string; lines?: { text: string; blank?: Blank }[] };
+  const line = content.kind === "worked_example" ? content.lines?.[lineIdx] : undefined;
+  if (!line?.blank) throw new GradingError("line has no blank");
+  return { text: line.text, blank: line.blank };
+}
+
+/** Stores the learner's result on a faded line; the line's text is theirs to read from now on. */
+export function recordWorkedLine(stepId: string, lineIdx: number, answer: string, correct: boolean, database: Database = db(), at = new Date()): void {
+  database
+    .query("INSERT INTO worked_answers (step_id, line_idx, answer, correct, created_at) VALUES (?, ?, ?, ?, ?)")
+    .run(stepId, lineIdx, answer, correct ? 1 : 0, at.toISOString());
+}
+
+/** Checks a closed blank by exact match. An open blank is answered through the tutor, which judges meaning. */
 export function answerWorkedLine(
   step: { id: string; content: string },
   lineIdx: number,
   answer: string,
   opts: { database?: Database; at?: Date } = {},
 ): WorkedLineResponse {
-  const database = opts.database ?? db();
-  const content = JSON.parse(step.content) as { kind: string; lines?: { text: string; blank?: { answers: string[] } }[] };
-  const line = content.kind === "worked_example" ? content.lines?.[lineIdx] : undefined;
-  if (!line?.blank) throw new GradingError("line has no blank");
+  const line = blankLine(step, lineIdx);
+  if (isOpenBlank(line.blank) || !("answers" in line.blank)) throw new GradingError("this line is answered through the tutor", 409);
   const correct = line.blank.answers.some((a) => normalize(a) === normalize(answer));
-  database
-    .query("INSERT INTO worked_answers (step_id, line_idx, answer, correct, created_at) VALUES (?, ?, ?, ?, ?)")
-    .run(step.id, lineIdx, answer, correct ? 1 : 0, (opts.at ?? new Date()).toISOString());
+  recordWorkedLine(step.id, lineIdx, answer, correct, opts.database, opts.at);
   return { correct, text: line.text };
+}
+
+/** Shows a faded line without an answer, recorded as not solved. */
+export function revealWorkedLine(step: { id: string; content: string }, lineIdx: number, opts: { database?: Database; at?: Date } = {}): WorkedLineResponse {
+  const line = blankLine(step, lineIdx);
+  recordWorkedLine(step.id, lineIdx, "", false, opts.database, opts.at);
+  return { correct: false, text: line.text };
 }

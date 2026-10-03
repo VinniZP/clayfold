@@ -20,6 +20,8 @@ Ask ONE question per turn with `ask_learner`: 3–5 concrete options that fit th
 
 Done when the goal, at least two observable success criteria, the constraints, prior knowledge and interests are known.
 
+When the request came from a goal's plan, compare the answers with what the request said about the learner; each difference becomes one `goal_note`.
+
 ## 2. Mission
 
 Write `MISSION.md` in the format of [mission-format.md](${CLAUDE_SKILL_DIR}/mission-format.md) and `NOTES.md` with the learner's preferences (address form, pace, format wishes). Both in the learner's language.

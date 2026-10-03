@@ -1,3 +1,4 @@
+import type { Database } from "bun:sqlite";
 import { Hono } from "hono";
 import { streamSSE } from "hono/streaming";
 import { z } from "zod";
@@ -5,6 +6,8 @@ import type {
   CardView,
   ConversationKind,
   CreateTopicResponse,
+  GoalNoteView,
+  GoalPlanEntryView,
   LessonSummary,
   NodeView,
   NoteView,
@@ -16,17 +19,20 @@ import type {
 import type { TopicEvent } from "../../shared/events";
 import type { Card } from "../../shared/schemas";
 import { isTopicRunning, runTurn } from "../claude/runner";
-import { db, newId } from "../db";
-import { subscribe } from "../hub";
+import { db, newId, now } from "../db";
+import { t } from "../i18n";
+import { publish, subscribe } from "../hub";
 import { createWorkspace, listMemory, uniqueSlug, watchWorkspace } from "../workspace";
 import { fail, readBody } from "./http";
 import { lessonSummary, type LessonRow } from "./lesson-summary";
-import { derivePhases, onboardingFacts } from "./onboarding";
+import { deriveGoalPhases, derivePhases, onboardingFacts } from "./onboarding";
 
-type TopicRow = { id: string; slug: string; title: string; created_at: string };
+type TopicRow = { id: string; slug: string; title: string; created_at: string; kind: TopicSummary["kind"]; goal_id: string | null };
+
+const TOPIC_COLUMNS = "id, slug, title, created_at, kind, goal_id";
 
 export function topicRow(topicId: string): TopicRow {
-  const row = db().query<TopicRow, [string]>("SELECT id, slug, title, created_at FROM topics WHERE id = ?").get(topicId);
+  const row = db().query<TopicRow, [string]>(`SELECT ${TOPIC_COLUMNS} FROM topics WHERE id = ?`).get(topicId);
   if (!row) fail(404, "topic not found");
   return row;
 }
@@ -40,6 +46,12 @@ function summary(t: TopicRow): TopicSummary {
          (SELECT count(*) FROM nodes WHERE topic_id = ?) AS total`,
     )
     .get(t.id, new Date().toISOString(), t.id, t.id)!;
+  const plan =
+    t.kind === "goal"
+      ? db()
+          .query<{ total: number; opened: number }, [string]>("SELECT count(*) AS total, count(topic_id) AS opened FROM goal_plan WHERE goal_id = ?")
+          .get(t.id)!
+      : null;
   return {
     id: t.id,
     slug: t.slug,
@@ -49,6 +61,9 @@ function summary(t: TopicRow): TopicSummary {
     nodesMastered: counts.mastered,
     nodesTotal: counts.total,
     running: isTopicRunning(t.id),
+    kind: t.kind,
+    goalId: t.goal_id,
+    plan,
   };
 }
 
@@ -68,19 +83,80 @@ export function createConversation(topicId: string, kind: ConversationKind, less
 
 export const topics = new Hono();
 
-topics.post("/", async (c) => {
-  const { request } = await readBody(c, z.object({ request: z.string().trim().min(3).max(2000) }));
-  const slug = uniqueSlug(request);
+function insertTopic(opts: { title: string; request: string; kind: TopicSummary["kind"]; goalId?: string }): string {
   const topicId = newId("tp");
-  db().query("INSERT INTO topics (id, slug, title, request) VALUES (?, ?, ?, ?)").run(topicId, slug, request.slice(0, 80), request);
+  const slug = uniqueSlug(opts.title);
+  db()
+    .query("INSERT INTO topics (id, slug, title, request, kind, goal_id) VALUES (?, ?, ?, ?, ?, ?)")
+    .run(topicId, slug, opts.title.slice(0, 80), opts.request, opts.kind, opts.goalId ?? null);
   createWorkspace(slug);
+  return topicId;
+}
+
+function startOnboarding(topicId: string, kind: TopicSummary["kind"], request: string): string {
   const conversationId = createConversation(topicId, "onboard");
-  runTurn({ conversationId, text: `/clayfold:onboard ${request}`, display: request });
+  runTurn({ conversationId, text: `/clayfold:${kind === "goal" ? "goal-plan" : "onboard"} ${request}`, display: request });
+  return conversationId;
+}
+
+topics.post("/", async (c) => {
+  const { request, kind } = await readBody(
+    c,
+    z.object({ request: z.string().trim().min(3).max(2000), kind: z.enum(["topic", "goal"]).default("topic") }),
+  );
+  const topicId = insertTopic({ title: request, request, kind });
+  const conversationId = startOnboarding(topicId, kind, request);
   return c.json({ topicId, conversationId } satisfies CreateTopicResponse, 201);
 });
 
+topics.post("/:goalId/plan/:entryId/open", (c) => {
+  const goal = topicRow(c.req.param("goalId"));
+  if (goal.kind !== "goal") fail(400, "this topic is not a goal");
+  const entry = db()
+    .query<{ title: string; brief: string; topic_id: string | null }, [string, string]>("SELECT title, brief, topic_id FROM goal_plan WHERE goal_id = ? AND id = ?")
+    .get(goal.id, c.req.param("entryId"));
+  if (!entry) fail(404, "plan entry not found");
+  if (entry.topic_id) fail(409, "this topic is already opened");
+  const topicId = db().transaction(() => {
+    const id = insertTopic({ title: entry.title, request: entry.brief, kind: "topic", goalId: goal.id });
+    db().query("UPDATE goal_plan SET topic_id = ? WHERE goal_id = ? AND id = ?").run(id, goal.id, c.req.param("entryId"));
+    return id;
+  })();
+  const conversationId = startOnboarding(topicId, "topic", entry.brief);
+  publish(goal.id, { type: "plan.updated" });
+  return c.json({ topicId, conversationId } satisfies CreateTopicResponse, 201);
+});
+
+/** Hands the goal's unseen notes to its planning conversation, which reviews the plan against them. */
+export function discussGoalNotes(goalId: string, database: Database = db(), run: typeof runTurn = runTurn): { conversationId: string } {
+  const notes = database
+    .query<{ id: string; text: string; title: string }, [string]>(
+      "SELECT n.id, n.text, t.title FROM goal_notes n JOIN topics t ON t.id = n.topic_id WHERE n.goal_id = ? AND n.seen_at IS NULL ORDER BY n.created_at",
+    )
+    .all(goalId);
+  if (notes.length === 0) fail(409, "there are no new notes from the goal's courses");
+  const conv = database
+    .query<{ id: string }, [string]>("SELECT id FROM conversations WHERE topic_id = ? AND kind = 'onboard' ORDER BY created_at DESC, rowid DESC LIMIT 1")
+    .get(goalId);
+  if (!conv) fail(409, "the goal has no planning conversation");
+  database.query("UPDATE goal_notes SET seen_at = ? WHERE id IN (SELECT value FROM json_each(?))").run(now(), JSON.stringify(notes.map((n) => n.id)));
+  const facts = notes.map((n) => `- ${n.title}: ${n.text}`).join("\n");
+  run({
+    conversationId: conv.id,
+    text: `[Platform: the goal's courses recorded these facts about the learner since the plan was made:\n${facts}\nCheck the plan and MISSION.md against them, as the goal-plan skill's later turns say.]`,
+    display: t("goal.discussNotes"),
+  });
+  return { conversationId: conv.id };
+}
+
+topics.post("/:goalId/notes/discuss", (c) => {
+  const goal = topicRow(c.req.param("goalId"));
+  if (goal.kind !== "goal") fail(400, "this topic is not a goal");
+  return c.json(discussGoalNotes(goal.id), 202);
+});
+
 topics.get("/", (c) => {
-  const rows = db().query<TopicRow, []>("SELECT id, slug, title, created_at FROM topics ORDER BY created_at DESC").all();
+  const rows = db().query<TopicRow, []>(`SELECT ${TOPIC_COLUMNS} FROM topics ORDER BY created_at DESC`).all();
   return c.json(rows.map(summary) satisfies TopicSummary[]);
 });
 
@@ -105,8 +181,28 @@ topics.get("/:topicId", (c) => {
       "SELECT id, kind, lesson_id AS lessonId, created_at AS createdAt FROM conversations WHERE topic_id = ? ORDER BY created_at",
     )
     .all(t.id);
-  const onboarding = derivePhases(onboardingFacts(t));
-  return c.json({ topic: summary(t), nodes, lessons, sources, conversations, onboarding } satisfies TopicDetail);
+  const facts = onboardingFacts(t);
+  const onboarding = t.kind === "goal" ? deriveGoalPhases(facts) : derivePhases(facts);
+  const plan = db()
+    .query<{ id: string; stage: string; title: string; why: string; topic_id: string | null }, [string]>(
+      "SELECT id, stage, title, why, topic_id FROM goal_plan WHERE goal_id = ? ORDER BY idx",
+    )
+    .all(t.id)
+    .map(({ topic_id, ...e }): GoalPlanEntryView => ({ ...e, topic: topic_id ? summary(topicRow(topic_id)) : null }));
+  const goal = t.goal_id
+    ? (db()
+        .query<{ id: string; title: string; why: string }, [string, string]>(
+          "SELECT g.id, g.title, coalesce(p.why, '') AS why FROM topics g LEFT JOIN goal_plan p ON p.goal_id = g.id AND p.topic_id = ? WHERE g.id = ?",
+        )
+        .get(t.id, t.goal_id) ?? null)
+    : null;
+  const goalNotes = db()
+    .query<GoalNoteView, [string]>(
+      `SELECT n.id, n.text, n.topic_id AS topicId, t.title AS topicTitle, n.created_at AS createdAt
+       FROM goal_notes n JOIN topics t ON t.id = n.topic_id WHERE n.goal_id = ? AND n.seen_at IS NULL ORDER BY n.created_at`,
+    )
+    .all(t.id);
+  return c.json({ topic: summary(t), nodes, lessons, sources, conversations, onboarding, plan, goal, goalNotes } satisfies TopicDetail);
 });
 
 topics.get("/:topicId/memory", async (c) => {

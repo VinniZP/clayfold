@@ -17,6 +17,8 @@ bun run build     # builds the UI into web/dist
 bun run start     # http://127.0.0.1:4317
 ```
 
+When `origin/main` has new commits, the top bar shows "New version". The update pulls them, rebuilds the UI and restarts the server, either at once or after Claude finishes its current work. Claude turns that a restart cuts off run again after it. The update needs a clean checkout of `main` and a server started with `bun run start`.
+
 The app speaks English by default; switch to Russian with the language button in the sidebar. The language also sets what Claude writes from the next run on: interviews, missions, lessons, cards and the tutor. Content written earlier keeps its language.
 
 Data lives in `data/` (SQLite database and one workspace folder per topic with `MISSION.md`, `RESOURCES.md`, `GLOSSARY.md`, `NOTES.md`, `learning-records/`). Back it up to keep your progress; it is not in git.

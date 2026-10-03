@@ -115,6 +115,58 @@ describe("tools", () => {
     expect(events.filter((e) => e.type === "graph.updated").length).toBe(3);
   });
 
+  test("goal_plan_set replaces the plan of a goal and keeps opened entries", async () => {
+    const entry = (id: string) => ({ id, stage: "First version", title: `Course ${id}`, why: `Needed for the goal: ${id}`, brief: `Learn ${id} for a workout tracking app` });
+    const plan = () => db.query("SELECT id, idx, topic_id FROM goal_plan WHERE goal_id = 'goal_1' ORDER BY idx").all();
+    expect((await call("goal_plan_set", { entries: [entry("a")] })).isError).toBe(true);
+    db.query("INSERT INTO topics (id, slug, title, request, kind) VALUES ('goal_1', 'goal-1', 'Workout app', 'build an app', 'goal')").run();
+
+    expect((await call("goal_plan_set", { entries: [entry("a"), entry("a")] }, "goal_1")).isError).toBe(true);
+    expect((await call("goal_plan_set", { entries: [entry("a"), entry("b"), entry("c")] }, "goal_1")).body).toEqual({ ok: true, total: 3 });
+    db.query("UPDATE goal_plan SET topic_id = ? WHERE id = 'b'").run(topicId);
+
+    const dropsOpened = await call("goal_plan_set", { entries: [entry("a")] }, "goal_1");
+    expect(dropsOpened.isError).toBe(true);
+    expect(dropsOpened.body.error).toContain("b");
+    expect((await call("goal_plan_set", { entries: [entry("b"), entry("d")] }, "goal_1")).body).toEqual({ ok: true, total: 2 });
+    expect(plan()).toEqual([
+      { id: "b", idx: 0, topic_id: topicId },
+      { id: "d", idx: 1, topic_id: null },
+    ]);
+  });
+
+  test("goal_note records a fact for the goal that opened the topic; a topic without a goal has none to tell", async () => {
+    expect((await call("goal_note", { text: "Builds only through an AI assistant" })).isError).toBe(true);
+    db.query("INSERT INTO topics (id, slug, title, request, kind) VALUES ('goal_1', 'goal-1', 'Workout app', 'build an app', 'goal')").run();
+    db.query("UPDATE topics SET goal_id = 'goal_1' WHERE id = ?").run(topicId);
+    expect((await call("goal_note", { text: "Builds only through an AI assistant" })).body).toEqual({ ok: true });
+    expect(db.query("SELECT goal_id, topic_id, text, seen_at FROM goal_notes").all()).toEqual([
+      { goal_id: "goal_1", topic_id: topicId, text: "Builds only through an AI assistant", seen_at: null },
+    ]);
+    expect((await call("get_learner_state", {})).body.topic.goal).toBe("Workout app");
+  });
+
+  test("glossary_set upserts terms by name ignoring case; get_learner_state returns them", async () => {
+    const r = await call("glossary_set", { terms: [{ term: "Commit", definition: "A snapshot of the staging area." }, { term: "Staging area", definition: "Where the next commit is assembled.", avoid: ["buffer"] }] });
+    expect(r.body).toEqual({ ok: true, total: 2 });
+    expect((await call("glossary_set", { terms: [{ term: "commit", definition: "A saved snapshot of the staging area.", original: "commit" }] })).body).toEqual({ ok: true, total: 2 });
+    expect((await call("get_learner_state", {})).body.glossary).toEqual([
+      { term: "commit", definition: "A saved snapshot of the staging area.", original: "commit" },
+      { term: "Staging area", definition: "Where the next commit is assembled.", original: null },
+    ]);
+  });
+
+  test("worked_line_record stores the tutor's verdict on an open line and tells the lesson page", async () => {
+    db.query("INSERT INTO lessons (id, topic_id, title, objective, level, node_ids, outline) VALUES ('ls_w', ?, 'L', 'Objective here', 'novice', '[]', '[]')").run(topicId);
+    const worked = { kind: "worked_example", title: "W", problem: "P", cites: [], lines: [{ text: "Line one" }, { text: "Call the model again", blank: { prompt: "What next?", criteria: ["names the next call"] } }] };
+    db.query("INSERT INTO steps (id, lesson_id, idx, kind, content, status) VALUES ('st_w', 'ls_w', 0, 'worked_example', ?, 'published')").run(JSON.stringify(worked));
+
+    expect((await call("worked_line_record", { stepId: "st_w", line: 0, answer: "x", outcome: "correct" })).isError).toBe(true);
+    expect((await call("worked_line_record", { stepId: "st_w", line: 1, answer: "it asks the model again", outcome: "correct" })).body).toEqual({ ok: true });
+    expect(db.query("SELECT line_idx, answer, correct FROM worked_answers").all()).toEqual([{ line_idx: 1, answer: "it asks the model again", correct: 1 }]);
+    expect(events).toContainEqual({ type: "worked.answered", lessonId: "ls_w", stepId: "st_w", idx: 1, correct: true, text: "Call the model again" });
+  });
+
   test("source_add and source_search", async () => {
     const added = await call("source_add", { url: "https://example.org/git-book", kind: "docs", note: "Git book chapter on the index" });
     expect(added.body).toEqual(expect.objectContaining({ ok: true, title: "Git", headings: expect.arrayContaining(["More"]) }));
@@ -233,7 +285,7 @@ describe("tools", () => {
     db.query("INSERT INTO regen_queue (id, topic_id, target_type, target_id, reason) VALUES ('q1', ?, 'item', ?, 'distractor never chosen')").run(topicId, second!.id);
 
     const state = (await call("get_learner_state", {})).body;
-    expect(state.topic).toEqual({ id: topicId, title: "Git basics" });
+    expect(state.topic).toEqual({ id: topicId, title: "Git basics", goal: null });
     expect(state.nodes.find((n: { id: string }) => n.id === "git-commit").unmasteredPrereqs).toEqual(["git-index"]);
     db.query("UPDATE nodes SET placement = 'known' WHERE id = 'git-index'").run();
     const placed = (await call("get_learner_state", {})).body.nodes as { id: string; mastery: string; unmasteredPrereqs: string[] }[];

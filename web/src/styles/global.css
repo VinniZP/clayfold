@@ -159,6 +159,31 @@
     background: none;
   }
 
+  /* A glossary term mark (lib/markdown.ts); components/TermPopover.tsx shows its definition */
+  .term {
+    border-radius: 4px;
+    text-decoration: underline dotted var(--accent-text);
+    text-decoration-thickness: 1.5px;
+    text-underline-offset: 3px;
+    cursor: help;
+  }
+
+  .term:hover,
+  .term[aria-describedby] {
+    background: var(--lilac-soft);
+  }
+
+  /* The block the narration is reading (components/Narration.tsx) */
+  .prose > * {
+    border-radius: 12px;
+    transition: background-color 0.25s, box-shadow 0.25s;
+  }
+
+  .prose > [data-narrating] {
+    background-color: var(--lilac-soft);
+    box-shadow: 0 0 0 8px var(--lilac-soft);
+  }
+
   .prose table {
     width: 100%;
     border-collapse: collapse;

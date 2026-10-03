@@ -4,7 +4,7 @@ import type { AttemptResponse, WorkedLineResponse } from "../../shared/api";
 import { db, newId } from "../db";
 import { publish } from "../hub";
 import { fail, readBody } from "./http";
-import { answerWorkedLine, giveUp, GradingError, submitAttempt, takeHint } from "./grading";
+import { answerWorkedLine, giveUp, GradingError, revealWorkedLine, submitAttempt, takeHint } from "./grading";
 import type { StepRow } from "./public";
 
 const AnswerSchema = z.discriminatedUnion("format", [
@@ -74,6 +74,11 @@ items.post("/worked/:stepId/lines/:lineIdx", async (c) => {
   const { answer } = await readBody(c, z.object({ answer: z.string().max(500) }));
   const lineIdx = Number(c.req.param("lineIdx"));
   return c.json(guard(() => answerWorkedLine(step, lineIdx, answer)) satisfies WorkedLineResponse);
+});
+
+items.post("/worked/:stepId/lines/:lineIdx/reveal", (c) => {
+  const step = stepRow(c.req.param("stepId"));
+  return c.json(guard(() => revealWorkedLine(step, Number(c.req.param("lineIdx")))) satisfies WorkedLineResponse);
 });
 
 items.post("/steps/:stepId/reflect", async (c) => {

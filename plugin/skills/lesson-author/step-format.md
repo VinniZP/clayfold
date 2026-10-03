@@ -111,7 +111,12 @@ One segment: at most 400 words of `body`, terms before the mechanism, 1–6 `cit
 
 ## worked_example (L5, L6)
 
-A problem and 2–12 solution `lines`. A full example has no blanks. A faded example gives some lines a `blank` with 1–6 accepted `answers`: the learner answers it before the line's `text` appears; fade the last steps first. Novice examples carry no "explain why" prompts (L6).
+A problem and 2–12 solution `lines`. A full example has no blanks. A faded example gives some lines a `blank`: the learner answers it before the line's `text` appears; fade the last steps first. Novice examples carry no "explain why" prompts (L6).
+
+A blank comes in two kinds:
+
+- **Closed**, for an answer with a short exact form: a value, identifier, command or term. `answers` lists 1–6 accepted forms, and the app checks them exactly. A plain-words answer longer than three words fails Q1: it belongs in an open blank.
+- **Open**, for an action or reason in words. `criteria` lists 1–4 things a right answer must state, each checkable by meaning; the learner answers through the tutor, which judges any wording against them and the line's `text`. The `prompt` says what to describe ("In one sentence: what does the harness do next, and with what data?").
 
 ```json
 {
@@ -121,7 +126,8 @@ A problem and 2–12 solution `lines`. A full example has no blanks. A faded exa
   "lines": [
     { "text": "Check the state: `git status` lists both files under \"Changes not staged for commit\"." },
     { "text": "Put only the file you need in the index: `git add README.md`.", "blank": { "prompt": "Which command puts only README.md in the index?", "answers": ["git add README.md", "git add ./README.md"] } },
-    { "text": "Record the index: `git commit -m \"Update README\"`. The file `app.js` stays modified and does not go into the commit.", "blank": { "prompt": "Which command saves the index to history with the message \"Update README\"?", "answers": ["git commit -m \"Update README\"", "git commit -m 'Update README'"] } }
+    { "text": "Record the index: `git commit -m \"Update README\"`. The file `app.js` stays modified and does not go into the commit.", "blank": { "prompt": "Which command saves the index to history with the message \"Update README\"?", "answers": ["git commit -m \"Update README\"", "git commit -m 'Update README'"] } },
+    { "text": "Check the result: `git status` now lists only `app.js`, because the commit took the index and `app.js` never entered it.", "blank": { "prompt": "In one sentence: what does git status show now, and why?", "criteria": ["says only app.js is still listed as changed", "explains that the commit took only what was in the index"] } }
   ],
   "cites": [{ "sourceId": "src_progit_basics", "quote": "Staged means that you have marked a modified file in its current version to go into your next commit snapshot." }]
 }

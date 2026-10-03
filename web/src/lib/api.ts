@@ -8,22 +8,28 @@ import type {
   ConversationView,
   CreateTopicResponse,
   GiveUpResponse,
+  GlossaryEntry,
   GoalMinutes,
   HintResponse,
   LessonView,
   MemoryFile,
+  NarrationView,
   NoteRequest,
   NoteView,
   ReportRequest,
   ReviewRating,
   ReviewSession,
   Settings,
+  SettingsUpdate,
   StartLessonResponse,
   SystemView,
   TodayView,
   TopicDetail,
   TopicSummary,
   TutorRequest,
+  UpdateMode,
+  UpdateView,
+  VoiceView,
   WeakSpot,
   WorkedLineResponse,
 } from "@shared/api";
@@ -74,13 +80,17 @@ const e = encodeURIComponent;
 
 export const api = {
   topics: () => get<TopicSummary[]>("/api/topics"),
-  createTopic: (text: string) => post<CreateTopicResponse>("/api/topics", { request: text }),
+  createTopic: (text: string, kind: TopicSummary["kind"] = "topic") => post<CreateTopicResponse>("/api/topics", { request: text, kind }),
+  glossary: () => get<GlossaryEntry[]>("/api/glossary"),
+  discussGoalNotes: (goalId: string) => post<{ conversationId: string }>(`/api/topics/${e(goalId)}/notes/discuss`),
+  openPlanEntry: (goalId: string, entryId: string) => post<CreateTopicResponse>(`/api/topics/${e(goalId)}/plan/${e(entryId)}/open`),
   topic: (id: string) => get<TopicDetail>(`/api/topics/${e(id)}`),
   memory: (id: string) => get<MemoryFile[]>(`/api/topics/${e(id)}/memory`),
   startLesson: (id: string, nodeId?: string) =>
     post<StartLessonResponse>(`/api/topics/${e(id)}/lessons`, nodeId ? { nodeId } : {}),
   lesson: (id: string) => get<LessonView>(`/api/lessons/${e(id)}`),
   rebuildLesson: (id: string) => post<StartLessonResponse>(`/api/lessons/${e(id)}/rebuild`),
+  resumeLesson: (id: string) => post<StartLessonResponse>(`/api/lessons/${e(id)}/resume`),
 
   conversation: (id: string) => get<ConversationView>(`/api/conversations/${e(id)}`),
   sendMessage: (id: string, text: string) => post<{ accepted: boolean }>(`/api/conversations/${e(id)}/messages`, { text }),
@@ -89,6 +99,7 @@ export const api = {
   attempt: (itemId: string, body: AttemptRequest) => post<AttemptResponse>(`/api/items/${e(itemId)}/attempt`, body),
   hint: (itemId: string, level: number) => post<HintResponse>(`/api/items/${e(itemId)}/hint`, { level }),
   giveUp: (itemId: string) => post<GiveUpResponse>(`/api/items/${e(itemId)}/giveup`),
+  revealWorkedLine: (stepId: string, idx: number) => post<WorkedLineResponse>(`/api/worked/${e(stepId)}/lines/${idx}/reveal`),
   workedLine: (stepId: string, idx: number, answer: string) =>
     post<WorkedLineResponse>(`/api/worked/${e(stepId)}/lines/${idx}`, { answer }),
   reflect: (stepId: string, text: string) => post<unknown>(`/api/steps/${e(stepId)}/reflect`, { text }),
@@ -112,12 +123,18 @@ export const api = {
   weak: (limit = 10, topicId?: string) => get<WeakSpot[]>(`/api/weak?limit=${limit}${topicId ? `&topicId=${e(topicId)}` : ""}`),
 
   settings: () => get<Settings>("/api/settings"),
-  setSettings: (body: Settings) => request<Settings>("PUT", "/api/settings", body),
+  setSettings: (body: SettingsUpdate) => request<Settings>("PUT", "/api/settings", body),
+  setElevenLabsKey: (key: string) => request<Settings>("PUT", "/api/settings/elevenlabs-key", { key }),
+  removeElevenLabsKey: () => request<Settings>("DELETE", "/api/settings/elevenlabs-key"),
+  voices: () => get<VoiceView[]>("/api/settings/voices"),
+  narrate: (stepId: string) => post<NarrationView>(`/api/steps/${e(stepId)}/narration`),
 
   auditSample: (n = 10) => get<AuditEntry[]>(`/api/audit/sample?n=${n}`),
   audit: (itemId: string, body: AuditVerdict) => post<unknown>(`/api/audit/${e(itemId)}`, body),
 
   system: () => get<SystemView>("/api/system"),
+  update: () => get<UpdateView>("/api/update"),
+  startUpdate: (mode: UpdateMode) => post<UpdateView>("/api/update", { mode }),
 };
 
 export function errorText(err: unknown): string {

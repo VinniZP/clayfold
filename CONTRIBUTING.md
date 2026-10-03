@@ -15,6 +15,8 @@ bun run dev:mock     # UI with mock data, no server or Claude calls
 
 `dev:mock` is the fastest way to work on the UI: it needs no Claude Code account and spends nothing.
 
+A Claude Code session opened in this repository loads the `clayfold-monitor` mod from `.claude/skills/clayfold-monitor`. Its pane (`/clayfold` opens it) shows the server's statistics and the Claude Code instances the server runs, with buttons to stop a run or start the server. Test it with `claude plugin test .claude/skills/clayfold-monitor`.
+
 ## Project layout
 
 | Path | What lives there |

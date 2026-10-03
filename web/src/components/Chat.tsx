@@ -11,7 +11,7 @@ import { t, useLang } from "../lib/i18n";
 import { useTopicStream } from "../lib/stream";
 import { useResource } from "../lib/useResource";
 import { color, motion, radius } from "../theme/tokens.stylex";
-import { btn, layout, text } from "../theme/ui";
+import { btn, field, layout, text } from "../theme/ui";
 import { Clay, ErrorBox, Markdown, Skeleton, type ClayName } from "./ui";
 
 type Msg = ChatMessage;
@@ -176,6 +176,7 @@ const s = stylex.create({
   check: { display: "grid", placeItems: "center", width: 18, height: 18, marginTop: 2, flexShrink: 0, borderWidth: 1.5, borderStyle: "solid", borderColor: color.borderStrong, borderRadius: 5 },
   checkOn: { backgroundColor: color.primary, borderColor: color.primary, color: color.onPrimary },
   start: { justifySelf: "start" },
+  comment: { minHeight: 44, fontSize: 14.5 },
   timeline: { borderRadius: radius.field, backgroundColor: color.surface2, fontSize: 13.5 },
   summary: {
     display: "flex",
@@ -262,7 +263,6 @@ const s = stylex.create({
     fieldSizing: "content",
     outline: "none",
   },
-  send: { width: 44, height: 44, borderRadius: "50%" },
 });
 
 /** Consecutive activity lines as one "what was done" list, with finished actions in the past tense. */
@@ -333,8 +333,12 @@ function RunStatus({ label, since, retry, onStop }: { label: string; since: stri
 function AskBlock({ msg, interactive, onAnswer }: { msg: Msg; interactive: boolean; onAnswer: (text: string) => void }) {
   useLang();
   const [picked, setPicked] = useState<string[]>([]);
+  const [comment, setComment] = useState("");
   const groupId = useId();
+  const commentId = useId();
   const options = msg.options ?? [];
+  const free = interactive && msg.allowFree !== false;
+  const answer = msg.multi ? [picked.join(", "), comment.trim()].filter(Boolean).join("\n\n") : comment.trim();
   return (
     <div {...stylex.props(s.ask)}>
       <div id={groupId}>
@@ -370,13 +374,49 @@ function AskBlock({ msg, interactive, onAnswer }: { msg: Msg; interactive: boole
           })}
         </div>
       )}
-      {interactive && msg.multi && (
-        <button type="button" disabled={picked.length === 0} onClick={() => onAnswer(picked.join(", "))} {...stylex.props(btn.base, btn.primary, btn.sm, s.start)}>
-          {t("chat.sendSelected")}
+      {free && (
+        <>
+          <label htmlFor={commentId} {...stylex.props(layout.srOnly)}>
+            {t(msg.multi ? "chat.comment" : "chat.ownAnswer")}
+          </label>
+          <textarea
+            id={commentId}
+            rows={2}
+            value={comment}
+            onChange={(e) => setComment(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing && answer) {
+                e.preventDefault();
+                onAnswer(answer);
+              }
+            }}
+            placeholder={t(msg.multi ? "chat.comment" : "chat.ownAnswer")}
+            {...stylex.props(field.input, field.textarea, s.comment)}
+          />
+        </>
+      )}
+      {(msg.multi ? interactive : free) && (
+        <button type="button" disabled={!answer} onClick={() => onAnswer(answer)} {...stylex.props(btn.base, btn.primary, btn.sm, s.start)}>
+          {t(msg.multi ? "chat.sendSelected" : "chat.sendOwn")}
         </button>
       )}
     </div>
   );
+}
+
+/** Claude writes its lead-in after calling ask_learner; show that text above the question it introduces. */
+function questionsAfterLeadIn(messages: Msg[]): Msg[] {
+  const out = [...messages];
+  for (let i = 0; i < out.length; i++) {
+    if (out[i]!.role !== "ask") continue;
+    let end = i + 1;
+    while (end < out.length && out[end]!.role === "assistant") end++;
+    if (end > i + 1) {
+      out.splice(i, end - i, ...out.slice(i + 1, end), out[i]!);
+      i = end - 1;
+    }
+  }
+  return out;
 }
 
 type Props = {
@@ -475,7 +515,7 @@ export function Chat({ conversationId, topicId, lessonId = null, onSend, placeho
 
   // Group consecutive activity lines into one compact list.
   const blocks: (Msg | Msg[])[] = [];
-  for (const m of state.messages) {
+  for (const m of questionsAfterLeadIn(state.messages)) {
     const prev = blocks[blocks.length - 1];
     if (m.role === "activity" && Array.isArray(prev)) prev.push(m);
     else blocks.push(m.role === "activity" ? [m] : m);
@@ -585,7 +625,7 @@ export function Chat({ conversationId, topicId, lessonId = null, onSend, placeho
           }}
           {...stylex.props(s.textarea)}
         />
-        <button type="submit" aria-label={t("chat.send")} disabled={!draft.trim() || !freeTextAllowed || state.running} {...stylex.props(btn.base, btn.iconSolid, s.send)}>
+        <button type="submit" aria-label={t("chat.send")} disabled={!draft.trim() || !freeTextAllowed || state.running} {...stylex.props(btn.base, btn.icon, btn.iconSolid)}>
           <SendHorizontal size={17} aria-hidden="true" />
         </button>
       </form>

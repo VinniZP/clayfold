@@ -197,6 +197,8 @@ export function Home() {
   };
   const act = activity ? summarize(activity) : null;
   const topicTitle = (id: string) => topics.find((t) => t.id === id)?.title ?? "";
+  const goals = topics.filter((t) => t.kind === "goal");
+  const courses = topics.filter((t) => t.kind === "topic");
   const nodes = details.flatMap((d) => d.nodes);
   const mastered = nodes.filter((n) => n.mastery === "mastered").length;
   const exitPassed = nodes.filter((n) => n.mastery === "exit_passed").length;
@@ -224,18 +226,33 @@ export function Home() {
       {hero}
 
       <div {...stylex.props(s.main)}>
+        {goals.length > 0 && (
+          <section aria-labelledby="goals-title">
+            <div {...stylex.props(s.sectionHead)}>
+              <h2 id="goals-title" {...stylex.props(s.sectionTitle)}>
+                {t("home.myGoals")}
+              </h2>
+            </div>
+            <ul {...stylex.props(s.courses)}>
+              {goals.map((g, i) => (
+                <TopicCard key={g.id} topic={g} tone={toneAt(i + 2)} />
+              ))}
+            </ul>
+          </section>
+        )}
+
         <section aria-labelledby="courses-title">
           <div {...stylex.props(s.sectionHead)}>
             <h2 id="courses-title" {...stylex.props(s.sectionTitle)}>
               {t("home.myCourses")}
             </h2>
-            {topics.length > 0 && <MoreLink to="/topics">{t("home.allCourses")}</MoreLink>}
+            {courses.length > 0 && <MoreLink to="/topics">{t("home.allCourses")}</MoreLink>}
           </div>
-          {topics.length === 0 ? (
+          {courses.length === 0 ? (
             <Empty title={t("home.noCoursesTitle")}>{t("home.noCoursesBody")}</Empty>
           ) : (
             <ul {...stylex.props(s.courses)}>
-              {topics.slice(0, 6).map((t, i) => (
+              {courses.slice(0, 6).map((t, i) => (
                 <TopicCard key={t.id} topic={t} tone={toneAt(i)} />
               ))}
             </ul>

@@ -6,6 +6,7 @@ import { defineTool, ToolError } from "../context";
 export const askLearner = defineTool({
   name: "ask_learner",
   description: `Show the learner a question with clickable options in the app (multi: allow several; allowFree: also accept a typed answer). Use it for interview questions, placement ("what would you do first?") and choices about what to do next. For a question with a correct answer, set shuffle: true (the app shuffles the order, Q3) and keep options of similar length and form (Q4).
+Options are concrete answers: the app shows its own field for a typed answer next to them, so an "other" or "my own answer" option only repeats it.
 After calling it, end your turn immediately: the learner's answer arrives as the next user message. Returns {shown: true, instruction}.`,
   handler() {
     const result: AskLearnerResult = { shown: true, instruction: "End your turn now and wait for the learner's answer." };
@@ -100,7 +101,12 @@ export function learnerState(db: Database, topicId: string, nodeIds?: string[]):
     .map((l) => ({ lessonId: l.id, title: l.title, nodeIds: JSON.parse(l.node_ids) as string[], finishedAt: l.finished_at }))
     .filter((l) => !filter || l.nodeIds.some(inScope));
 
-  return { topic, nodes, sources, recentAttempts: attempts, misconceptionsSeen, notes, regenQueue, lessonsDone };
+  const goal =
+    db.query<{ title: string }, [string]>("SELECT g.title FROM topics t JOIN topics g ON g.id = t.goal_id WHERE t.id = ?").get(topicId)?.title ?? null;
+  const glossary = db
+    .query<{ term: string; definition: string; original: string | null }, [string]>("SELECT term, definition, original FROM glossary_terms WHERE topic_id = ? ORDER BY term COLLATE NOCASE")
+    .all(topicId);
+  return { topic: { ...topic, goal }, nodes, sources, recentAttempts: attempts, misconceptionsSeen, notes, regenQueue, lessonsDone, glossary };
 }
 
 /** Topological order (every node after its prerequisites), stable by insertion order; the graph is a DAG (graph_set rejects cycles). */
