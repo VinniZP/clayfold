@@ -55,7 +55,7 @@ claude -p "<text>" --output-format stream-json --verbose --include-partial-messa
   [--resume <session_id>] --plugin-dir <root>/plugin --setting-sources ""
   --tools "Read,Write,Edit,Glob,Grep,WebSearch,WebFetch"
   --allowedTools "Read,Write,Edit,Glob,Grep,WebSearch,WebFetch,mcp__plugin_clayfold_clayfold__*"
-  --permission-mode dontAsk --permission-prompts none --model <config.model> --max-budget-usd <n>
+  --permission-mode dontAsk --permission-prompts none --model <model> [--effort <level>] --max-budget-usd <n>
   --append-system-prompt "<language instruction>" --system-prompt-snapshot off
 cwd: data/workspaces/<slug>     stdin: /dev/null     env: childEnv({ CLAYFOLD_MCP_URL, CLAYFOLD_TOPIC_ID })
 ```
@@ -65,6 +65,7 @@ cwd: data/workspaces/<slug>     stdin: /dev/null     env: childEnv({ CLAYFOLD_MC
 - Term marks `[[surface|Term]]` in model-written text resolve against `glossary_terms`, filled with `glossary_set`; the step gate rejects a mark whose term the topic glossary lacks (L19), the web Markdown renderer turns marks into terms, and one popover (`web/src/components/TermPopover.tsx`) shows their definitions.
 - A worked-example blank whose answer is in plain words (an open blank with `criteria`, or an older blank with a phrase among its `answers`) is answered through the tutor: the tutor turn carries the line and its criteria, and the tutor records the verdict with `worked_line_record`, which publishes `worked.answered`. Closed blanks keep exact checking in `server/routes/grading.ts`. Tutor turns carry no skill command; the server prepends the tutor context (L17).
 - The appended system prompt names the app language (`settings.language`, English by default); Claude writes everything the learner sees in it. `--system-prompt-snapshot off` lets a resumed conversation pick up a language change.
+- The model and effort come from the conversation kind's entry in `settings.claude_roles` (`server/claude/roles.ts`), set on the Settings page. Without an entry the model is `CLAYFOLD_MODEL` and the effort is the role default in `DEFAULT_EFFORT`. Haiku models get no `--effort`: they do not support it. The critic, grading and narration calls (`runJsonPrompt`) read the same setting by their purpose, with `CLAYFOLD_CRITIC_MODEL` as the default model.
 - `--strict-mcp-config` is not used: it also drops the plugin's MCP server.
 - Plugin skills are namespaced: `/clayfold:<skill>`.
 - The plugin's `.mcp.json` takes `url` and the `X-Clayfold-Topic` header from `CLAYFOLD_MCP_URL` and `CLAYFOLD_TOPIC_ID`, with `timeout: 180000` because `step_submit` waits for the critic.

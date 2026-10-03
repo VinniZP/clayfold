@@ -853,9 +853,9 @@ export const system = (): SystemView => ({
   backend: { pid: 48213, startedAt: bootedAt, bun: "1.3.6", port: 4317, rssMb: 182, heapMb: 41.3, cpuPercent: 2.4, dbMb: 6.8, model: "opus", criticModel: "sonnet", maxBudgetUsd: 5 },
   frontend: { builtAt: null, streams: 2 },
   instances: [
-    { pid: 51022, kind: "onboard", model: "opus", startedAt: secondsAgo(214), conversationId: "c-onb-stretch", topicId: "t-stretch", topicTitle: "Back stretches", lessonId: null, activities: ["Reading a page", "Searching for sources"], queued: 0, rssMb: 246, cpuPercent: 7.9 },
-    { pid: 51388, kind: "lesson", model: "opus", startedAt: secondsAgo(96), conversationId: "c-ls-bayes", topicId: "t-bayes", topicTitle: "Bayesian statistics", lessonId: "l-bayes", activities: ["Building the knowledge map", "Planning the lesson"], queued: 1, rssMb: 231, cpuPercent: 12.1 },
-    { pid: 51420, kind: "critic", model: "sonnet", startedAt: secondsAgo(11), conversationId: null, topicId: null, topicTitle: null, lessonId: null, activities: [], queued: 0, rssMb: 198, cpuPercent: 31.5 },
+    { pid: 51022, kind: "onboard", model: "opus", effort: "medium", startedAt: secondsAgo(214), conversationId: "c-onb-stretch", topicId: "t-stretch", topicTitle: "Back stretches", lessonId: null, activities: ["Reading a page", "Searching for sources"], queued: 0, rssMb: 246, cpuPercent: 7.9 },
+    { pid: 51388, kind: "lesson", model: "opus", effort: "medium", startedAt: secondsAgo(96), conversationId: "c-ls-bayes", topicId: "t-bayes", topicTitle: "Bayesian statistics", lessonId: "l-bayes", activities: ["Building the knowledge map", "Planning the lesson"], queued: 1, rssMb: 231, cpuPercent: 12.1 },
+    { pid: 51420, kind: "critic", model: "sonnet", effort: "high", startedAt: secondsAgo(11), conversationId: null, topicId: null, topicTitle: null, lessonId: null, activities: [], queued: 0, rssMb: 198, cpuPercent: 31.5 },
   ],
   finished: [
     { conversationId: "c-ls-git", kind: "lesson", topicId: "t-git", topicTitle: "Git basics", lessonId: null, startedAt: secondsAgo(900), finishedAt: secondsAgo(640), costUsd: 0.84, error: null, cancelled: false },

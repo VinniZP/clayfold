@@ -1,6 +1,5 @@
 import { beforeEach, expect, test } from "bun:test";
 import type { Database } from "bun:sqlite";
-import { config } from "../config";
 import { openDb } from "../db";
 import { claudeInstances, finishedView, parsePs } from "./system";
 import { seed } from "./test-fixtures";
@@ -22,17 +21,18 @@ test("parsePs reads pid, rss in KiB and cpu, skipping blank lines", () => {
 
 test("claudeInstances joins runs with their conversation and lists calls, oldest first", () => {
   const runs = [
-    { conversationId: "cv1", pid: 101, startedAt: "2026-01-10T10:00:00.000Z", activities: ["Searching for sources", "Planning the lesson"], queued: 1 },
-    { conversationId: "gone", pid: 303, startedAt: "2026-01-10T08:00:00.000Z", activities: [], queued: 0 },
+    { conversationId: "cv1", pid: 101, startedAt: "2026-01-10T10:00:00.000Z", model: "opus", effort: "low" as const, activities: ["Searching for sources", "Planning the lesson"], queued: 1 },
+    { conversationId: "gone", pid: 303, startedAt: "2026-01-10T08:00:00.000Z", model: "opus", effort: "high" as const, activities: [], queued: 0 },
   ];
-  const calls = [{ pid: 202, purpose: "critic" as const, model: "sonnet", startedAt: "2026-01-10T09:00:00.000Z" }];
+  const calls = [{ pid: 202, purpose: "critic" as const, model: "sonnet", effort: "high" as const, startedAt: "2026-01-10T09:00:00.000Z" }];
   const instances = claudeInstances(runs, calls, parsePs("101 2048 12.5"), database);
   expect(instances.map((i) => i.pid)).toEqual([202, 101]);
   expect(instances[0]).toMatchObject({ kind: "critic", model: "sonnet", conversationId: null, topicTitle: null, rssMb: null, cpuPercent: null });
   expect(instances[1]).toEqual({
     pid: 101,
     kind: "lesson",
-    model: config.model,
+    model: "opus",
+    effort: "low",
     startedAt: "2026-01-10T10:00:00.000Z",
     conversationId: "cv1",
     topicId: "tp1",

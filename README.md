@@ -29,8 +29,8 @@ Data lives in `data/` (SQLite database and one workspace folder per topic with `
 |---|---|---|
 | `CLAYFOLD_PORT` | `4317` | Server port |
 | `CLAYFOLD_DATA_DIR` | `./data` | Database and workspaces |
-| `CLAYFOLD_MODEL` | `opus` | Model for onboarding, lessons and the tutor |
-| `CLAYFOLD_CRITIC_MODEL` | `sonnet` | Model for the step critic |
+| `CLAYFOLD_MODEL` | `opus` | Default model for onboarding, lessons, the tutor and review; the Settings page overrides it per role |
+| `CLAYFOLD_CRITIC_MODEL` | `sonnet` | Default model for the critic, answer grading and narration scripts; the Settings page overrides it per role |
 | `CLAYFOLD_MAX_BUDGET_USD` | `5` | Spend ceiling per Claude run |
 | `CLAYFOLD_CLAUDE_BIN` | `claude` | Claude Code executable |
 
