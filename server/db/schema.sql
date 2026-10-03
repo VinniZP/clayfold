@@ -1,0 +1,216 @@
+-- Owner column: A = server core (routes, runner, review), B = quality + MCP (gates, tools).
+-- Every module may read any table; it writes only the tables its owner letter marks.
+
+PRAGMA journal_mode = WAL;
+PRAGMA foreign_keys = ON;
+
+CREATE TABLE IF NOT EXISTS topics (            -- A
+  id TEXT PRIMARY KEY,
+  slug TEXT NOT NULL UNIQUE,
+  title TEXT NOT NULL,
+  request TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+);
+
+CREATE TABLE IF NOT EXISTS conversations (     -- A
+  id TEXT PRIMARY KEY,
+  topic_id TEXT NOT NULL REFERENCES topics(id) ON DELETE CASCADE,
+  kind TEXT NOT NULL CHECK (kind IN ('onboard','lesson','tutor','review')),
+  lesson_id TEXT,
+  session_id TEXT,                              -- Claude Code session for --resume
+  created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+  last_active_at TEXT
+);
+
+CREATE TABLE IF NOT EXISTS messages (          -- A
+  id TEXT PRIMARY KEY,
+  conversation_id TEXT NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+  role TEXT NOT NULL CHECK (role IN ('user','assistant','activity','ask','error')),
+  text TEXT NOT NULL,
+  meta TEXT,                                    -- JSON: ask options, tool name, cost
+  created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+);
+
+CREATE TABLE IF NOT EXISTS nodes (             -- B writes graph; A writes mastery columns
+  topic_id TEXT NOT NULL REFERENCES topics(id) ON DELETE CASCADE,
+  id TEXT NOT NULL,
+  title TEXT NOT NULL,
+  kind TEXT NOT NULL,
+  summary TEXT NOT NULL,
+  prereqs TEXT NOT NULL,                        -- JSON array of node ids
+  placement TEXT CHECK (placement IN ('known','partial','unknown')),
+  placement_evidence TEXT,
+  mastery TEXT NOT NULL DEFAULT 'new' CHECK (mastery IN ('new','learning','exit_passed','mastered')),
+  exit_passed_at TEXT,
+  mastered_at TEXT,
+  PRIMARY KEY (topic_id, id)
+);
+
+CREATE TABLE IF NOT EXISTS sources (           -- B
+  id TEXT PRIMARY KEY,
+  topic_id TEXT NOT NULL REFERENCES topics(id) ON DELETE CASCADE,
+  url TEXT NOT NULL,
+  title TEXT NOT NULL,
+  kind TEXT NOT NULL,
+  note TEXT NOT NULL,
+  text TEXT,                                    -- extracted readable text; quotes are verified against it
+  status TEXT NOT NULL CHECK (status IN ('ok','failed')),
+  error TEXT,
+  fetched_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+  UNIQUE (topic_id, url)
+);
+
+CREATE TABLE IF NOT EXISTS lessons (           -- B (A sets status 'failed' when a run dies)
+  id TEXT PRIMARY KEY,
+  topic_id TEXT NOT NULL REFERENCES topics(id) ON DELETE CASCADE,
+  title TEXT NOT NULL,
+  objective TEXT NOT NULL,
+  level TEXT NOT NULL,
+  node_ids TEXT NOT NULL,                       -- JSON
+  outline TEXT NOT NULL,                        -- JSON [{kind,title}]
+  status TEXT NOT NULL DEFAULT 'generating' CHECK (status IN ('generating','ready','finished','failed')),
+  summary TEXT,
+  created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+  finished_at TEXT,
+  planned_sources TEXT,                         -- JSON source ids from lesson_plan (Q8)
+  sources_at_plan INTEGER,                      -- ok sources of the topic when the lesson was planned
+  announced_sources TEXT                        -- JSON source ids the lesson author has been told about
+);
+
+CREATE TABLE IF NOT EXISTS steps (             -- B
+  id TEXT PRIMARY KEY,
+  lesson_id TEXT NOT NULL REFERENCES lessons(id) ON DELETE CASCADE,
+  idx INTEGER NOT NULL,
+  kind TEXT NOT NULL,
+  content TEXT NOT NULL,                        -- JSON authoring Step (keys included)
+  status TEXT NOT NULL CHECK (status IN ('checking','published','rejected','dropped')),
+  attempts INTEGER NOT NULL DEFAULT 1,
+  published_at TEXT,
+  UNIQUE (lesson_id, idx)
+);
+
+CREATE TABLE IF NOT EXISTS items (             -- B inserts on publish; A updates status
+  id TEXT PRIMARY KEY,
+  topic_id TEXT NOT NULL REFERENCES topics(id) ON DELETE CASCADE,
+  lesson_id TEXT,
+  step_id TEXT,
+  role TEXT NOT NULL CHECK (role IN ('activate','check','practice','explain_check','review')),
+  node_id TEXT NOT NULL,
+  format TEXT NOT NULL,
+  content TEXT NOT NULL,                        -- JSON authoring Item
+  display_order TEXT,                           -- JSON permutation for options/entries (Q3)
+  status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active','flagged','retired')),
+  created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+);
+
+CREATE TABLE IF NOT EXISTS attempts (          -- A
+  id TEXT PRIMARY KEY,
+  item_id TEXT NOT NULL REFERENCES items(id) ON DELETE CASCADE,
+  answer TEXT NOT NULL,                         -- JSON Answer
+  correct INTEGER,                              -- NULL: ungraded or pending
+  chosen_option INTEGER,                        -- authoring index for single choice
+  misconception TEXT,
+  hints_used INTEGER NOT NULL DEFAULT 0,
+  gave_up INTEGER NOT NULL DEFAULT 0,
+  duration_ms INTEGER,
+  context TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+);
+
+CREATE TABLE IF NOT EXISTS cards (             -- B inserts proposals; A owns review state
+  id TEXT PRIMARY KEY,
+  topic_id TEXT NOT NULL REFERENCES topics(id) ON DELETE CASCADE,
+  lesson_id TEXT,
+  node_id TEXT NOT NULL,
+  content TEXT NOT NULL,                        -- JSON Card
+  status TEXT NOT NULL DEFAULT 'proposed' CHECK (status IN ('proposed','active','suspended','rejected')),
+  fsrs TEXT,                                    -- JSON ts-fsrs Card state
+  due TEXT,
+  lapses INTEGER NOT NULL DEFAULT 0,
+  reps INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+);
+
+CREATE TABLE IF NOT EXISTS reviews (           -- A
+  id TEXT PRIMARY KEY,
+  card_id TEXT NOT NULL REFERENCES cards(id) ON DELETE CASCADE,
+  rating INTEGER NOT NULL,
+  log TEXT NOT NULL,                            -- JSON ts-fsrs ReviewLog
+  duration_ms INTEGER,
+  reviewed_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+);
+
+CREATE TABLE IF NOT EXISTS notes (             -- A
+  id TEXT PRIMARY KEY,
+  topic_id TEXT NOT NULL REFERENCES topics(id) ON DELETE CASCADE,
+  lesson_id TEXT,
+  step_id TEXT,
+  quote TEXT,
+  text TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+);
+
+CREATE TABLE IF NOT EXISTS gate_results (      -- B
+  id TEXT PRIMARY KEY,
+  target_type TEXT NOT NULL CHECK (target_type IN ('step','item','card')),
+  target_id TEXT NOT NULL,
+  attempt INTEGER NOT NULL,
+  stage TEXT NOT NULL CHECK (stage IN ('schema','deterministic','quotes','critic')),
+  rule TEXT NOT NULL,
+  pass INTEGER NOT NULL,
+  message TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+);
+
+CREATE TABLE IF NOT EXISTS regen_queue (       -- A enqueues from learner signals; B resolves via item_replace
+  id TEXT PRIMARY KEY,
+  topic_id TEXT NOT NULL REFERENCES topics(id) ON DELETE CASCADE,
+  target_type TEXT NOT NULL CHECK (target_type IN ('item','card')),
+  target_id TEXT NOT NULL,
+  reason TEXT NOT NULL,
+  signal TEXT,                                  -- JSON evidence
+  status TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open','done','dropped')),
+  created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+);
+
+CREATE TABLE IF NOT EXISTS reports (           -- A
+  id TEXT PRIMARY KEY,
+  target_type TEXT NOT NULL,
+  target_id TEXT NOT NULL,
+  text TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+);
+
+CREATE TABLE IF NOT EXISTS audits (            -- A
+  id TEXT PRIMARY KEY,
+  item_id TEXT NOT NULL REFERENCES items(id) ON DELETE CASCADE,
+  verdict TEXT NOT NULL CHECK (verdict IN ('ok','missed_defect')),
+  note TEXT,
+  created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+);
+
+CREATE TABLE IF NOT EXISTS settings (          -- A
+  key TEXT PRIMARY KEY,
+  value TEXT NOT NULL                           -- JSON
+);
+
+CREATE TABLE IF NOT EXISTS hint_views (        -- A
+  item_id TEXT NOT NULL REFERENCES items(id) ON DELETE CASCADE,
+  level INTEGER NOT NULL,                       -- 1-based rung of the item's hint ladder
+  created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+);
+
+CREATE TABLE IF NOT EXISTS worked_answers (    -- A
+  step_id TEXT NOT NULL REFERENCES steps(id) ON DELETE CASCADE,
+  line_idx INTEGER NOT NULL,
+  answer TEXT NOT NULL,
+  correct INTEGER NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_messages_conv ON messages(conversation_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_attempts_item ON attempts(item_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_cards_due ON cards(status, due);
+CREATE INDEX IF NOT EXISTS idx_items_topic ON items(topic_id, status);
+CREATE INDEX IF NOT EXISTS idx_hint_views_item ON hint_views(item_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_worked_answers_step ON worked_answers(step_id);

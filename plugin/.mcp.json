@@ -1,0 +1,1 @@
+{"mcpServers":{"clayfold":{"type":"http","url":"${CLAYFOLD_MCP_URL}","headers":{"X-Clayfold-Topic":"${CLAYFOLD_TOPIC_ID}"},"timeout":180000}}}

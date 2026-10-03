@@ -1,0 +1,238 @@
+/*
+ * Global CSS kept outside StyleX: reset and base, the focus and reduced-motion baselines, and
+ * styles for HTML that is not rendered as React elements (markdown from marked + DOMPurify,
+ * mermaid / Vega / SVG figure internals). Colours come from the plain custom properties that
+ * theme/themes.ts `bridge` sets on the app root.
+ *
+ * Everything sits in the `base` layer, declared before StyleX's layers, so component styles win.
+ */
+@layer base {
+  *,
+  *::before,
+  *::after {
+    box-sizing: border-box;
+  }
+
+  /* Before React mounts there is no themed root yet; these match the backdrop tokens. */
+  html {
+    background: #ffc2ac;
+    color: #32253f;
+    color-scheme: light;
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    html:not([data-theme="light"]) {
+      background: #1b1322;
+      color: #f7eee6;
+      color-scheme: dark;
+    }
+  }
+
+  html[data-theme="dark"] {
+    background: #1b1322;
+    color: #f7eee6;
+    color-scheme: dark;
+  }
+
+  body {
+    margin: 0;
+    min-height: 100vh;
+    font-family: "Onest", ui-sans-serif, system-ui, sans-serif;
+    font-size: 15px;
+    line-height: 1.55;
+    font-optical-sizing: auto;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4,
+  p,
+  ul,
+  ol,
+  figure,
+  blockquote {
+    margin: 0;
+  }
+
+  img,
+  svg {
+    display: block;
+  }
+
+  button,
+  input,
+  select,
+  textarea {
+    font: inherit;
+    color: inherit;
+  }
+
+  button {
+    cursor: pointer;
+  }
+
+  a {
+    color: var(--accent-text);
+    text-underline-offset: 3px;
+  }
+
+  ::selection {
+    background: var(--selection);
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--focus);
+    outline-offset: 2px;
+  }
+
+  ::placeholder {
+    color: var(--text-muted);
+    opacity: 1;
+  }
+
+  /* Rendered markdown (components/ui.tsx Markdown) */
+  .prose {
+    max-width: 70ch;
+    overflow-wrap: anywhere;
+  }
+
+  .prose > * + * {
+    margin-top: 0.75em;
+  }
+
+  .prose p,
+  .prose li {
+    line-height: 1.65;
+  }
+
+  .prose ul,
+  .prose ol {
+    padding-left: 1.3em;
+  }
+
+  .prose li + li {
+    margin-top: 0.25em;
+  }
+
+  .prose h1,
+  .prose h2,
+  .prose h3 {
+    margin-top: 1.3em;
+    font-family: var(--font-display);
+    font-weight: 700;
+    font-size: 1.15em;
+    line-height: 1.25;
+  }
+
+  .prose > :is(h1, h2, h3):first-child {
+    margin-top: 0;
+  }
+
+  .prose blockquote {
+    padding: 12px 16px;
+    border-radius: 16px;
+    background: var(--surface-2);
+  }
+
+  .prose code {
+    padding: 1px 6px;
+    border-radius: 6px;
+    background: var(--surface-2);
+    font-family: var(--font-mono);
+    font-size: 0.9em;
+  }
+
+  .prose pre {
+    padding: 12px 14px;
+    border-radius: 16px;
+    background: var(--surface-2);
+    overflow-x: auto;
+  }
+
+  .prose pre code {
+    padding: 0;
+    background: none;
+  }
+
+  .prose table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 14px;
+  }
+
+  .prose th,
+  .prose td {
+    padding: 8px 10px;
+    border-bottom: 1px solid var(--border);
+    text-align: left;
+  }
+
+  .prose th {
+    color: var(--text-muted);
+    font-weight: 600;
+  }
+
+  .prose strong {
+    font-weight: 650;
+  }
+
+  /* Figure internals (components/Figure.tsx) */
+  .figure-render svg {
+    max-width: 100%;
+    height: auto;
+    margin: 0 auto;
+  }
+
+  .figure-render.is-svg svg {
+    width: 100%;
+    max-width: 640px;
+  }
+
+  @media (max-width: 480px) {
+    .figure-render.is-mermaid svg {
+      min-width: 520px;
+    }
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Overlay scrollbars (lib/overlayScroll.ts): thin, rounded, auto-hidden, wider while hovered. */
+.os-theme-clayfold {
+  --os-size: 12px;
+  --os-padding-perpendicular: 3px;
+  --os-padding-axis: 4px;
+  --os-track-border-radius: 999px;
+  --os-track-bg: none;
+  --os-track-bg-hover: color-mix(in srgb, var(--text) 8%, transparent);
+  --os-track-bg-active: color-mix(in srgb, var(--text) 12%, transparent);
+  --os-handle-border-radius: 999px;
+  --os-handle-bg: var(--text-muted);
+  --os-handle-bg-hover: var(--text);
+  --os-handle-bg-active: var(--text);
+  --os-handle-min-size: 36px;
+  --os-handle-perpendicular-size: 50%;
+  --os-handle-perpendicular-size-hover: 100%;
+  --os-handle-perpendicular-size-active: 100%;
+  --os-handle-interactive-area-offset: 4px;
+}
+
+/* Textareas cannot host overlay scrollbars; give their native ones the same colours. */
+textarea {
+  scrollbar-width: thin;
+  scrollbar-color: var(--text-muted) transparent;
+}

@@ -1,0 +1,17 @@
+=== src_beta_binomial
+The beta distribution is the conjugate prior for the binomial likelihood. If the prior for a success probability p is Beta(a, b) and we observe s successes and f failures, the posterior is Beta(a + s, b + f).
+
+The parameters of a beta prior can be read as pseudo-counts: a prior Beta(a, b) carries about as much information as a - 1 successes and b - 1 failures observed earlier. Beta(1, 1) is the uniform distribution on [0, 1].
+
+The mean of Beta(a, b) is a / (a + b). As more data arrive, the posterior mean moves from the prior mean toward the observed proportion s / (s + f), and the posterior becomes narrower.
+
+A 95% credible interval contains the parameter with probability 0.95 given the data and the prior. This differs from a frequentist confidence interval, whose 95% refers to the long-run share of intervals that cover the fixed true value.
+
+=== src_bayes_ab
+In a Bayesian A/B test for conversion rates, each variant gets its own beta posterior. With a uniform prior, variant A with s_A conversions out of n_A visitors has posterior Beta(1 + s_A, 1 + n_A - s_A).
+
+The probability that B is better than A is P(p_B > p_A), computed by drawing many samples from both posteriors and counting the share of draws where the sample for B exceeds the sample for A.
+
+The expected loss of choosing B is the average of max(p_A - p_B, 0) over the posterior draws. It measures how much conversion rate we expect to lose if B is actually worse. A common stopping rule ends the test when the expected loss of the leading variant falls below a threshold of caring, such as 0.1 percentage points.
+
+An informative prior based on past experiments shrinks extreme early results toward historical conversion rates, which reduces false wins from small samples.

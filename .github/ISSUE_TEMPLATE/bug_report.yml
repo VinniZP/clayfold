@@ -1,0 +1,63 @@
+name: Bug report
+description: Something in Clayfold does not work as expected.
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you saw, and what you expected instead.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Open …
+        2. Click …
+        3. See …
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Where
+      options:
+        - Onboarding interview or knowledge map
+        - Lesson generation
+        - Lesson, exercises or tutor
+        - Review and cards
+        - Memory, audit or other pages
+        - Setup, build or server start
+        - Other
+    validations:
+      required: true
+  - type: dropdown
+    id: language
+    attributes:
+      label: App language
+      options:
+        - English
+        - Russian
+  - type: input
+    id: versions
+    attributes:
+      label: Versions
+      description: Output of `bun --version` and `claude --version`, your OS, and the commit (`git rev-parse --short HEAD`).
+      placeholder: "bun 1.3.6, Claude Code 2.1.288, macOS 15.4, a1b2c3d"
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Server log and browser console
+      description: Errors from the terminal running `bun run start` and from the browser console. Remove anything private, such as your learning content.
+      render: shell
+  - type: checkboxes
+    id: ai
+    attributes:
+      label: Report origin
+      options:
+        - label: I have reproduced this myself, and a person, not an automated agent, is filing this report.
+          required: true

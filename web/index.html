@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en" data-overlayscrollbars-initialize>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <!-- Declares the global layer first so StyleX layers always win over it, in dev and in builds. -->
+    <style>@layer base;</style>
+    <title>Clayfold</title>
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Onest:wght@400..700&family=Rubik:wght@600..900&display=swap" rel="stylesheet" />
+    <script>
+      (function () {
+        var pref = null;
+        try { pref = localStorage.getItem("clayfold-theme"); } catch (e) {}
+        var dark = pref ? pref === "dark" : window.matchMedia("(prefers-color-scheme: dark)").matches;
+        document.documentElement.dataset.theme = dark ? "dark" : "light";
+        try { var lang = localStorage.getItem("clayfold-lang"); if (lang) document.documentElement.lang = lang; } catch (e) {}
+      })();
+    </script>
+  </head>
+  <body data-overlayscrollbars-initialize>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

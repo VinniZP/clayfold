@@ -1,0 +1,5 @@
+node_modules/
+data/
+web/dist/
+plugin/evals/results/
+.DS_Store
