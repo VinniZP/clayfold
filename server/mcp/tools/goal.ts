@@ -1,4 +1,6 @@
+import type { GoalPlanSetResult } from "../../../shared/tools";
 import { newId } from "../../db";
+import { checkDrawing, storeStageTrophies } from "../../game/rewards";
 import { defineTool, ToolError } from "../context";
 
 export const goalPlanSet = defineTool({
@@ -7,7 +9,8 @@ export const goalPlanSet = defineTool({
 The call replaces the whole plan; entries keep their id across calls. An entry the learner already opened as a topic must stay in every later call: the server rejects a call that drops one (isError) and names it.
 brief is the request the topic's onboarding receives when the learner opens it: the goal, why this topic serves it, what the learner already knows, and what neighbouring topics cover.
 Returns {ok, total}.`,
-  handler(ctx, { entries }) {
+  gameDescription: `Gamification is on. trophies: one meerkat trophy per stage of the plan, drawn per the system prompt (G2); the trophy of the last stage is the goal's grand prize. The result lists trophiesMissing: the stages still without one.`,
+  handler(ctx, { entries, trophies }) {
     const kind = ctx.db.query<{ kind: string }, [string]>("SELECT kind FROM topics WHERE id = ?").get(ctx.topicId)?.kind;
     if (kind !== "goal") throw new ToolError("goal_plan_set works only in a goal; this topic is not one");
     const ids = entries.map((e) => e.id);
@@ -19,6 +22,14 @@ Returns {ok, total}.`,
       .map((r) => r.id);
     const dropped = opened.filter((id) => !ids.includes(id));
     if (dropped.length > 0) throw new ToolError(`the learner already opened ${dropped.join(", ")}; keep these entries in the plan. Nothing was stored`);
+    const stages = [...new Set(entries.map((e) => e.stage))];
+    if (ctx.game && trophies) {
+      const violations = trophies.flatMap((t, i) => [
+        ...checkDrawing(t.svg, `trophies.${i}`),
+        ...(stages.includes(t.stage) ? [] : [{ rule: "S1" as const, message: `"${t.stage}" is not a stage of the plan`, path: `trophies.${i}.stage` }]),
+      ]);
+      if (violations.length > 0) throw new ToolError("a trophy is invalid; nothing was stored", violations);
+    }
 
     const upsert = ctx.db.query(
       `INSERT INTO goal_plan (goal_id, id, idx, stage, title, why, brief) VALUES (?, ?, ?, ?, ?, ?, ?)
@@ -29,7 +40,9 @@ Returns {ok, total}.`,
       entries.forEach((e, i) => upsert.run(ctx.topicId, e.id, i, e.stage, e.title, e.why, e.brief));
     })();
     ctx.publish({ type: "plan.updated" });
-    return { result: { ok: true, total: entries.length } };
+    if (!ctx.game) return { result: { ok: true, total: entries.length } satisfies GoalPlanSetResult };
+    const trophiesMissing = storeStageTrophies(ctx.db, ctx.topicId, trophies ?? [], stages);
+    return { result: { ok: true, total: entries.length, trophiesMissing } satisfies GoalPlanSetResult };
   },
 });
 

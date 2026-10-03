@@ -88,7 +88,8 @@ CREATE TABLE IF NOT EXISTS lessons (           -- B (A sets status 'failed' when
   finished_at TEXT,
   planned_sources TEXT,                         -- JSON source ids from lesson_plan (Q8)
   sources_at_plan INTEGER,                      -- ok sources of the topic when the lesson was planned
-  announced_sources TEXT                        -- JSON source ids the lesson author has been told about
+  announced_sources TEXT,                       -- JSON source ids the lesson author has been told about
+  challenge_idx INTEGER                         -- outline index of the challenge step (gamification, G1)
 );
 
 CREATE TABLE IF NOT EXISTS steps (             -- B
@@ -263,6 +264,44 @@ CREATE TABLE IF NOT EXISTS worked_answers (    -- A
   line_idx INTEGER NOT NULL,
   answer TEXT NOT NULL,
   correct INTEGER NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+);
+
+-- Meerkat (gamification, off by default): shared/game.ts.
+
+CREATE TABLE IF NOT EXISTS rewards (           -- B inserts via lesson_plan, graph_set and goal_plan_set; A sets unlocked_at and seen_at
+  id TEXT PRIMARY KEY,
+  topic_id TEXT NOT NULL REFERENCES topics(id) ON DELETE CASCADE,  -- the course or goal that designed it
+  source TEXT NOT NULL CHECK (source IN ('lesson','course','stage')),
+  ref TEXT NOT NULL,                            -- lesson id, milestone key or stage name
+  condition TEXT NOT NULL,                      -- JSON RewardCondition
+  name TEXT NOT NULL,
+  description TEXT NOT NULL,
+  slot TEXT NOT NULL,
+  svg TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+  unlocked_at TEXT,
+  seen_at TEXT,
+  UNIQUE (topic_id, source, ref)
+);
+
+CREATE TABLE IF NOT EXISTS residents (         -- B inserts via graph_set; A sets befriended_at and seen_at
+  topic_id TEXT PRIMARY KEY REFERENCES topics(id) ON DELETE CASCADE,
+  content TEXT NOT NULL,                        -- JSON Resident
+  created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+  befriended_at TEXT,
+  seen_at TEXT
+);
+
+CREATE TABLE IF NOT EXISTS unlocks (           -- A
+  id TEXT PRIMARY KEY,                          -- a HABITS id, or rank:<n>
+  unlocked_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+  seen_at TEXT
+);
+
+CREATE TABLE IF NOT EXISTS focus_runs (        -- A
+  lesson_id TEXT NOT NULL REFERENCES lessons(id) ON DELETE CASCADE,
+  longest_away_ms INTEGER NOT NULL,
   created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
 );
 

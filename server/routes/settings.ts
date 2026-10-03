@@ -6,6 +6,7 @@ import { LANGS } from "../../shared/i18n";
 import { roleSettingsView, setRoleSetting } from "../claude/roles";
 import { db } from "../db";
 import { ElevenLabsError, elevenLabs } from "../elevenlabs";
+import { gameOn, setGameOn } from "../game/state";
 import { language, setLanguage, t } from "../i18n";
 import { elevenLabsKey } from "../secrets";
 import { fail, readBody } from "./http";
@@ -34,6 +35,7 @@ const settingsView = async (): Promise<Settings> => ({
   narration: { keySet: Boolean(await elevenLabsKey.get()), ...narrationSettings() },
   video: { enabled: videoEnabled() },
   claude: roleSettingsView(),
+  gamification: gameOn(),
 });
 
 /** An ElevenLabs failure as a client error: 401 is a bad key, anything else a failed upstream call. */
@@ -49,6 +51,7 @@ settings.put("/settings", async (c) => {
   const body = await readBody(
     c,
     z.object({
+      gamification: z.boolean().optional(),
       language: z.enum(LANGS).optional(),
       voiceId: z.string().min(1).optional(),
       ttsModel: z.enum(TTS_MODELS).optional(),
@@ -56,6 +59,7 @@ settings.put("/settings", async (c) => {
       claudeRole: z.object({ role: z.enum(CLAUDE_ROLES), model: z.enum(CLAUDE_MODELS).nullable(), effort: z.enum(EFFORTS).nullable() }).optional(),
     }),
   );
+  if (body.gamification !== undefined) setGameOn(body.gamification);
   if (body.language) setLanguage(body.language);
   if (body.voiceId) writeSetting("narration_voice", body.voiceId, db());
   if (body.ttsModel) writeSetting("narration_model", body.ttsModel, db());

@@ -1,6 +1,8 @@
 import type { Subprocess } from "bun";
 import { config } from "../config";
 import { db, newId, now } from "../db";
+import { gameInstruction } from "../game/prompt";
+import { gameOn } from "../game/state";
 import { languageInstruction } from "../i18n";
 import { publish } from "../hub";
 import { createWorkspace, syncTopicTitle } from "../workspace";
@@ -152,6 +154,12 @@ export async function cancelAll(): Promise<void> {
   await Promise.allSettled(pending);
 }
 
+/** The learner's language, and the meerkat's tasks while gamification is on. */
+export function appendedPrompt(scope: Scope): string {
+  const game = gameOn() ? gameInstruction(scope) : null;
+  return game ? `${languageInstruction()}\n\n${game}` : languageInstruction();
+}
+
 function buildArgs(text: string, sessionId: string | null, scope: Scope, role: { model: string; effort: Effort | null }): string[] {
   return [
     config.claudeBin,
@@ -177,8 +185,8 @@ function buildArgs(text: string, sessionId: string | null, scope: Scope, role: {
     "--max-budget-usd",
     String(config.maxBudgetUsd),
     "--append-system-prompt",
-    languageInstruction(),
-    // Without this, a resumed conversation keeps the system prompt of its first request, and so the old language.
+    appendedPrompt(scope),
+    // Without this, a resumed conversation keeps the system prompt of its first request: the old language and gamification setting.
     "--system-prompt-snapshot",
     "off",
   ];

@@ -7,6 +7,7 @@ import { ActivityCalendar, buildCalendar, CALENDAR_WEEKS, RibbonLegend } from ".
 import { Gauge, HatchedBars, Rings, WeekDots } from "../components/Charts";
 import { readyLine } from "../components/LessonStatus";
 import { useHeader } from "../components/header";
+import { MeerkatCard } from "../components/meerkat/MeerkatCard";
 import { MoreLink, NewTopicForm, TopicCard, toneAt, topicObject } from "../components/Topics";
 import { CardHead, Clay, Empty, ErrorBox, Markdown, PageLoading } from "../components/ui";
 import { api, errorText } from "../lib/api";
@@ -375,6 +376,7 @@ export function Home() {
       </div>
 
       <div {...stylex.props(s.side)}>
+        <MeerkatCard />
         <section aria-labelledby="due-title" {...stylex.props(card.base, s.review)}>
           <h2 id="due-title" {...stylex.props(text.h2)}>
             {t("home.reviewToday")}

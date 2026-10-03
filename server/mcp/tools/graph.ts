@@ -1,4 +1,5 @@
 import { checkGraph } from "../../gates/deterministic";
+import { checkDrawing, hasResident, storeCourseRewards, storeResident } from "../../game/rewards";
 import { defineTool, ToolError } from "../context";
 
 export const graphSet = defineTool({
@@ -7,7 +8,8 @@ export const graphSet = defineTool({
 Call it during onboarding once you know what the learner needs, and again whenever the graph changes. Nodes are upserted by id: nodes you leave out stay as they are, and existing nodes keep the learner's placement and mastery.
 The server rejects the whole call (isError) when an id repeats, a prerequisite is not a node (in this call or already stored), or prerequisites form a cycle; fix the graph and call again.
 Returns {ok, total, added, updated}.`,
-  handler(ctx, { nodes }) {
+  gameDescription: `Gamification is on. rewards: 2-4 course milestones, each a meerkat wearable unlocked when its nodes reach the mastery level (G2). resident: the character who lives in this course's chamber of the burrow (G2). Both are drawn per the system prompt; pass them once the graph is first set, and again only to change them.`,
+  handler(ctx, { nodes, rewards, resident }) {
     const stored = new Map(
       ctx.db
         .query<{ id: string; prereqs: string }, [string]>("SELECT id, prereqs FROM nodes WHERE topic_id = ?")
@@ -15,6 +17,16 @@ Returns {ok, total, added, updated}.`,
         .map((r) => [r.id, JSON.parse(r.prereqs) as string[]]),
     );
     const violations = checkGraph(nodes, stored);
+    if (ctx.game) {
+      const ids = new Set([...stored.keys(), ...nodes.map((n) => n.id)]);
+      rewards?.forEach((r, i) => {
+        violations.push(...checkDrawing(r.svg, `rewards.${i}`));
+        r.nodeIds.forEach((id, j) => {
+          if (!ids.has(id)) violations.push({ rule: "S1", message: `node "${id}" is not in the graph`, path: `rewards.${i}.nodeIds.${j}` });
+        });
+      });
+      if (resident) violations.push(...checkDrawing(resident.svg, "resident"));
+    }
     if (violations.length > 0) throw new ToolError("the graph is invalid; nothing was stored", violations);
     const upsert = ctx.db.query(
       `INSERT INTO nodes (topic_id, id, title, kind, summary, prereqs) VALUES (?, ?, ?, ?, ?, ?)
@@ -22,10 +34,14 @@ Returns {ok, total, added, updated}.`,
     );
     ctx.db.transaction(() => {
       for (const n of nodes) upsert.run(ctx.topicId, n.id, n.title, n.kind, n.summary, JSON.stringify(n.prereqs));
+      if (ctx.game && rewards) storeCourseRewards(ctx.db, ctx.topicId, rewards);
+      if (ctx.game && resident) storeResident(ctx.db, ctx.topicId, resident);
     })();
     ctx.publish({ type: "graph.updated" });
     const added = nodes.filter((n) => !stored.has(n.id)).length;
-    return { result: { ok: true, total: new Set([...stored.keys(), ...nodes.map((n) => n.id)]).size, added, updated: nodes.length - added } };
+    const result = { ok: true, total: new Set([...stored.keys(), ...nodes.map((n) => n.id)]).size, added, updated: nodes.length - added };
+    const missing = ctx.game && !hasResident(ctx.db, ctx.topicId) ? ["Gamification is on and this course has no resident yet: pass resident in a graph_set call."] : [];
+    return { result, notes: missing };
   },
 });
 

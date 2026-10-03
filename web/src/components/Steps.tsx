@@ -4,6 +4,7 @@ import { useId, useRef, useState, type RefObject } from "react";
 import type { ItemState } from "@shared/api";
 import type { PublicCite, PublicItem, PublicStep } from "@shared/schemas";
 import { api, errorText } from "../lib/api";
+import { gameProgress } from "../lib/game";
 import type { MessageKey } from "@shared/i18n";
 import { t, useLang } from "../lib/i18n";
 import { FigureView } from "./Figure";
@@ -275,6 +276,7 @@ function WorkedExample({
                   prompt={line.blankPrompt ?? t("steps.finishLine")}
                   onSubmit={async (answer) => {
                     const res = await api.workedLine(step.id, line.idx, answer);
+                    gameProgress({ kind: "answer", correct: res.correct });
                     setRevealed((m) => ({ ...m, [line.idx]: { ...res, answer } }));
                   }}
                 />

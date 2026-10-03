@@ -37,6 +37,8 @@ export const RULES = {
   C2: "A concept is covered by several cards from different lenses",
   C3: "The learner accepts, edits or suspends every card and can report an error",
   C4: "A card with 8 or more lapses goes to the rewrite queue",
+  G1: "A lesson challenge is one practice step whose item is apply or higher",
+  G2: "A trophy is a self-contained drawing on a 100 x 100 canvas without text",
   S1: "Content matches its schema",
 } as const;
 

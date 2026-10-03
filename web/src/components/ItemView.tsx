@@ -4,6 +4,7 @@ import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import type { AttemptRequest, AttemptResponse, GiveUpResponse, ItemState } from "@shared/api";
 import type { Answer, PublicItem } from "@shared/schemas";
 import { api, errorText } from "../lib/api";
+import { gameProgress } from "../lib/game";
 import { t, useLang } from "../lib/i18n";
 import { bp, color, motion, radius, space } from "../theme/tokens.stylex";
 import { btn, field, layout, text } from "../theme/ui";
@@ -301,6 +302,8 @@ export function ItemView({ item, mode, context, active = true, onResult, onOffer
       setSubmitted(res.correct === false ? draft : null);
       setTouch((n) => n + 1);
       onResult?.(item.id, { response: res, gaveUp: null });
+      // The exit check reveals results only at its end, so the companion learns nothing about them before.
+      gameProgress(mode === "check" || res.correct === null ? { kind: "progress" } : { kind: "answer", correct: res.correct });
       // L10: the server flags the offer; the same threshold (two wrong attempts) applies here as a fallback.
       const wrongNow = wrongCount + (res.correct === false ? 1 : 0);
       if (mode === "practice" && (res.offerTutor || (res.correct === false && wrongNow >= 2))) onOfferTutor?.(item.id, "wrong_twice");

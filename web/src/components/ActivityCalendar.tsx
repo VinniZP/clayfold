@@ -1,11 +1,12 @@
 import * as stylex from "@stylexjs/stylex";
-import { Snowflake } from "lucide-react";
+import { Crown, Snowflake } from "lucide-react";
 import { useLayoutEffect, useRef, useState, type KeyboardEvent, type PointerEvent } from "react";
 import type { ActivityDay, TodayView } from "@shared/api";
 import { dateFormat, dayKey } from "../lib/format";
 import { t, useLang } from "../lib/i18n";
 import { bp, color, font, motion } from "../theme/tokens.stylex";
 import { layout } from "../theme/ui";
+import { useDayCrowns } from "./meerkat/Crowns";
 import { Clay } from "./ui";
 
 export type CalendarDay = {
@@ -168,6 +169,7 @@ const s = stylex.create({
   month: { fontSize: 11.5, fontWeight: 650, color: color.textMuted, whiteSpace: "nowrap", lineHeight: 1, paddingBottom: 2 },
   weekday: { fontSize: 11.5, fontWeight: 600, color: color.textMuted, paddingRight: 4, lineHeight: 1 },
   cell: { position: "relative", aspectRatio: "1", cursor: "default" },
+  dayCrown: { position: "absolute", top: -7, right: -5, zIndex: 2, display: "grid", placeItems: "center", width: 18, height: 18, borderRadius: "50%", backgroundColor: "#FFF3C9", boxShadow: "0 2px 4px rgb(50 37 63 / 0.2)", pointerEvents: "none" },
 
   // Ribbon
   halo: {
@@ -351,6 +353,8 @@ export function ActivityCalendar({ days, variant, goal, label }: { days: Calenda
   const shown = active !== null && !days[active]!.future ? active : null;
   const lastPast = days.findLastIndex((d) => !d.future);
   const months = monthLabels(days);
+  const crowned = useDayCrowns();
+  const describeDay = (d: CalendarDay) => (crowned?.has(d.key) ? `${describe(d)} · ${t("game.dayCrown")}` : describe(d));
 
   useLayoutEffect(() => {
     const wrap = wrapRef.current;
@@ -467,6 +471,11 @@ export function ActivityCalendar({ days, variant, goal, label }: { days: Calenda
             return (
               <div key={d.key} data-idx={i} {...stylex.props(s.cell)}>
                 {cell(d, i)}
+                {crowned?.has(d.key) && (
+                  <span aria-hidden="true" {...stylex.props(s.dayCrown)}>
+                    <Crown size={12} strokeWidth={2.4} color="#865000" fill="#F6C453" />
+                  </span>
+                )}
               </div>
             );
           }),
@@ -474,11 +483,11 @@ export function ActivityCalendar({ days, variant, goal, label }: { days: Calenda
       </div>
       {tip && shown !== null && (
         <div key={shown} {...stylex.props(s.tip, s.tipPos(tip.x, tip.y))}>
-          {describe(days[shown]!)}
+          {describeDay(days[shown]!)}
         </div>
       )}
       <p aria-live="polite" {...stylex.props(layout.srOnly)}>
-        {cursor !== null && hover === null && !days[cursor]!.future ? describe(days[cursor]!) : ""}
+        {cursor !== null && hover === null && !days[cursor]!.future ? describeDay(days[cursor]!) : ""}
       </p>
     </div>
   );

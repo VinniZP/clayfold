@@ -13,6 +13,8 @@ export type ToolContext = {
   critic?: CriticRunner;
   fetch?: typeof fetch;
   publicStep: (db: Database, stepId: string) => PublicStep;
+  /** Gamification is on: the tool accepts its GAME_FIELDS. */
+  game: boolean;
 };
 
 export type ToolInput<K extends ToolName> = z.infer<z.ZodObject<(typeof TOOL_INPUTS)[K]>>;
@@ -23,6 +25,8 @@ export type ToolReply = { result: unknown; notes?: string[] };
 export type ToolDef<K extends ToolName = ToolName> = {
   name: K;
   description: string;
+  /** Appended to the description while gamification is on. */
+  gameDescription?: string;
   handler: (ctx: ToolContext, input: ToolInput<K>) => ToolReply | Promise<ToolReply>;
 };
 

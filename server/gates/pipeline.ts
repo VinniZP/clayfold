@@ -5,7 +5,7 @@ import type { Violation } from "../../shared/rules";
 import { newId } from "../db";
 import { cardCites, itemCites, itemSurface, stepCites, stepItems, type ItemRole } from "./content";
 import { criticEnabled, critiqueCards, critiqueItem, critiqueStep, type CriticRunner, type CriticVerdict } from "./critic";
-import { checkCard, checkDuplicates, checkItem, checkStep, Report } from "./deterministic";
+import { checkCard, checkDuplicates, checkItem, checkStep, HIGHER_BLOOM, Report } from "./deterministic";
 import { checkLessonDiversity } from "./diversity";
 import { checkCites } from "./quotes";
 import { checkTermMarks, glossaryKeys } from "./terms";
@@ -94,7 +94,7 @@ function lessonBlooms(db: Database, lessonId: string): Bloom[] {
 
 export async function gateStep(
   deps: GateDeps,
-  input: { topicId: string; lessonId: string; level: Level; step: unknown; displayOrders: (number[] | null)[] },
+  input: { topicId: string; lessonId: string; level: Level; step: unknown; displayOrders: (number[] | null)[]; challenge?: boolean },
 ): Promise<GateRun> {
   const schema = schemaStage(Step, input.step);
   if (!schema.ok) return schema.run;
@@ -103,6 +103,10 @@ export async function gateStep(
   const run = schema.run;
 
   const det = await checkStep(step, { existingSurfaces: activeSurfaces(deps.db, input.topicId), lessonBlooms: lessonBlooms(deps.db, input.lessonId) });
+  if (input.challenge && step.kind === "practice") {
+    det.check("G1");
+    if (!HIGHER_BLOOM.has(step.item.bloom)) det.fail("G1", `the challenge item is "${step.item.bloom}"; a challenge is apply or higher`, "item.bloom");
+  }
   checkNodes(deps.db, input.topicId, stepItems(step).map(({ item, path }) => ({ nodeId: item.nodeId, path })), det);
   checkLessonDiversity(deps.db, { topicId: input.topicId, lessonId: input.lessonId, step }, det);
   checkTermMarks(schema.value, "step", glossaryKeys(deps.db, input.topicId), det);

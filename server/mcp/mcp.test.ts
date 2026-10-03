@@ -384,3 +384,52 @@ test("prerequisiteOrder puts every node after its prerequisites, stable otherwis
   ];
   expect(prerequisiteOrder(rows).map((r) => r.id)).toEqual(["basics", "branch", "merge", "log"]);
 });
+
+describe("gamification", () => {
+  const DRAWING = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect x="20" y="40" width="60" height="40" rx="10" fill="#FFC9B4"/></svg>';
+  const reward = { name: "Index antlers", description: "For staging changes with care.", slot: "head", svg: DRAWING, earnedBy: "gold" };
+  const lessonPlan = (extra: object) => ({
+    plan: { title: "The index", objective: "Understand what the index does", nodeIds: ["git-index"], level: "novice", sourceIds: [sourceId], outline: ["activate", "explain", "practice", "check"].map((kind, i) => ({ kind, title: `Step ${i + 1}` })) },
+    ...extra,
+  });
+  const schemaOf = async (name: string) => ((await rpc("tools/list", {})).result.tools as { name: string; inputSchema: { properties: object } }[]).find((t) => t.name === name)!;
+  const turnOn = () => db.query("INSERT INTO settings (key, value) VALUES ('gamification', 'true')").run();
+
+  test("while off, the game fields are absent from the tool schemas and ignored", async () => {
+    expect(Object.keys((await schemaOf("lesson_plan")).inputSchema.properties)).toEqual(["plan"]);
+    expect(Object.keys((await schemaOf("graph_set")).inputSchema.properties)).toEqual(["nodes"]);
+    await call("graph_set", { nodes: [node("git-index")] });
+    const { body } = await call("lesson_plan", lessonPlan({ challenge: 2, reward }));
+    expect(db.query("SELECT challenge_idx FROM lessons WHERE id = ?").get(body.lessonId)).toEqual({ challenge_idx: null });
+    expect(db.query("SELECT count(*) AS n FROM rewards").get()).toEqual({ n: 0 });
+  });
+
+  test("while on, lesson_plan stores the challenge and the reward, and a challenge below apply is rejected (G1)", async () => {
+    turnOn();
+    expect(Object.keys((await schemaOf("lesson_plan")).inputSchema.properties).sort()).toEqual(["challenge", "plan", "reward"]);
+    await call("graph_set", { nodes: [node("git-index")] });
+
+    const wrong = await call("lesson_plan", lessonPlan({ challenge: 1, reward }));
+    expect(wrong.body.violations.map((v: { rule: string; path: string }) => [v.rule, v.path])).toEqual([["G1", "challenge"]]);
+    const noChallenge = await call("lesson_plan", lessonPlan({ reward }));
+    expect(noChallenge.body.violations.map((v: { path: string }) => v.path)).toEqual(["reward.earnedBy"]);
+
+    const { body } = await call("lesson_plan", lessonPlan({ challenge: 2, reward }));
+    expect(db.query("SELECT challenge_idx FROM lessons WHERE id = ?").get(body.lessonId)).toEqual({ challenge_idx: 2 });
+    expect(db.query("SELECT source, ref, name FROM rewards").all()).toEqual([{ source: "lesson", ref: body.lessonId, name: "Index antlers" }]);
+
+    const easy = await call("step_submit", { lessonId: body.lessonId, index: 2, step: practiceStep(sourceId, { ...singleItem(sourceId), bloom: "understand" }) });
+    expect(easy.body.violations).toEqual([expect.objectContaining({ rule: "G1", path: "item.bloom" })]);
+  });
+
+  test("while on, graph_set asks for a resident until one is stored, and rejects a drawing with text (G2)", async () => {
+    turnOn();
+    const first = await call("graph_set", { nodes: [node("git-index")] });
+    expect(first.notes[0]).toContain("resident");
+    const resident = { name: "Octavia", species: "octopus", bio: "Archivist of the deep.", svg: DRAWING, lines: { greet: ["Hello there"], cheer: ["Well done", "Nice one"], support: ["Try again", "So close"], nudge: ["Come back"] } };
+    const bad = await call("graph_set", { nodes: [node("git-index")], resident: { ...resident, svg: DRAWING.replace("</svg>", "<text>hi</text></svg>") } });
+    expect(bad.body.violations).toEqual([expect.objectContaining({ rule: "G2", path: "resident.svg" })]);
+    const ok = await call("graph_set", { nodes: [node("git-index")], resident });
+    expect(ok.notes).toEqual([]);
+  });
+});

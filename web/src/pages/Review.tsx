@@ -10,6 +10,7 @@ import { useHeader } from "../components/header";
 import { ItemView, type ItemResult } from "../components/ItemView";
 import { CardHead, Empty, ErrorBox, Markdown, PageLoading, Progress, Spinner } from "../components/ui";
 import { api, errorText } from "../lib/api";
+import { gameProgress } from "../lib/game";
 import { t, useLang } from "../lib/i18n";
 import { useResource } from "../lib/useResource";
 import { bp, color, font, radius } from "../theme/tokens.stylex";
@@ -66,6 +67,7 @@ function CardReview({ card, onRated }: { card: ReviewCard; onRated: (r: ReviewRa
     setError(null);
     try {
       await api.reviewCard(card.id, rating, revealedAt.current ? Date.now() - revealedAt.current : undefined);
+      gameProgress({ kind: "progress" });
       onRated(rating);
     } catch (err) {
       setError(errorText(err));

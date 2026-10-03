@@ -14,6 +14,7 @@ const ADDED_COLUMNS = [
   ["topics", "kind", "TEXT NOT NULL DEFAULT 'topic' CHECK (kind IN ('topic','goal'))"],
   ["topics", "goal_id", "TEXT REFERENCES topics(id) ON DELETE SET NULL"],
   ["videos", "timeline", "TEXT"],
+  ["lessons", "challenge_idx", "INTEGER"],
 ] as const;
 
 export function openDb(file: string = paths.db): Database {

@@ -3,10 +3,13 @@ import { Check, KeyRound, Play, TriangleAlert } from "lucide-react";
 import { useId, useRef, useState } from "react";
 import { CLAUDE_MODELS, CLAUDE_ROLES, EFFORTS, TTS_MODELS, supportsEffort, type ClaudeModel, type Effort, type Settings, type SettingsUpdate } from "@shared/api";
 import { useHeader } from "../components/header";
+import { Meerkat } from "../components/meerkat/Meerkat";
 import { CardHead, ErrorBox, PageLoading, Spinner } from "../components/ui";
 import { api, errorText } from "../lib/api";
+import { setGameOn } from "../lib/game";
 import { t, useLang } from "../lib/i18n";
 import { useResource } from "../lib/useResource";
+import { color } from "../theme/tokens.stylex";
 import { card, banner, btn, chip, field, layout, text } from "../theme/ui";
 
 const s = stylex.create({
@@ -17,6 +20,9 @@ const s = stylex.create({
   voiceRow: { display: "flex", gap: 8, alignItems: "center", maxWidth: 560 },
   radios: { display: "grid", gap: 8, margin: 0, padding: 0, borderWidth: 0 },
   page: { display: "grid", gap: 24 },
+  game: { backgroundImage: `linear-gradient(135deg, ${color.butter}, ${color.peachSoft})` },
+  gameHead: { display: "flex", alignItems: "center", gap: 16 },
+  switch: { width: 22, height: 22, accentColor: color.primary, cursor: "pointer" },
   roles: { display: "grid", gridTemplateColumns: "minmax(90px, auto) minmax(0, 1fr) minmax(0, 1fr)", gap: 8, alignItems: "center", maxWidth: 700 },
 });
 
@@ -29,6 +35,7 @@ export function SettingsPage() {
   const onChange = (next: Settings) => settings.setData(() => next);
   return (
     <div {...stylex.props(s.page)}>
+      <GameSettings settings={settings.data} onChange={onChange} />
       <ClaudeSettings settings={settings.data} onChange={onChange} />
       <NarrationSettings settings={settings.data} onChange={onChange} />
       <VideoSettings settings={settings.data} onChange={onChange} />
@@ -70,6 +77,40 @@ function SaveStatus({ error, saved }: { error: string | null; saved: boolean }) 
     <p role="status" {...stylex.props(text.saved)}>
       <Check size={16} aria-hidden="true" /> {t("settings.saved")}
     </p>
+  );
+}
+
+function GameSettings({ settings, onChange }: { settings: Settings; onChange: (next: Settings) => void }) {
+  useLang();
+  const { busy, error, saved, save } = useSave((next) => {
+    onChange(next);
+    setGameOn(next.gamification);
+  });
+  const id = useId();
+  return (
+    <section aria-labelledby="settings-game" {...stylex.props(card.base, s.card, s.game)}>
+      <div {...stylex.props(s.gameHead)}>
+        <Meerkat pose={settings.gamification ? "cheer" : "idle"} size={92} />
+        <div {...stylex.props(field.stack)}>
+          <CardHead id="settings-game" title={t("settings.game")} />
+          <label htmlFor={id} {...stylex.props(field.inline, text.strong)}>
+            <input
+              id={id}
+              type="checkbox"
+              role="switch"
+              checked={settings.gamification}
+              disabled={busy}
+              onChange={(e) => void save(() => api.setSettings({ gamification: e.target.checked }))}
+              {...stylex.props(s.switch)}
+            />
+            {t(settings.gamification ? "settings.gameOn" : "settings.gameOff")}
+          </label>
+        </div>
+      </div>
+      <p {...stylex.props(text.muted, s.intro)}>{t("settings.gameIntro")}</p>
+      <p {...stylex.props(text.small, text.muted, s.intro)}>{t("settings.gameCost")}</p>
+      <SaveStatus error={error} saved={saved} />
+    </section>
   );
 }
 
