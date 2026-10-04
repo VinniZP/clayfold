@@ -60,6 +60,14 @@ export const Option = z
   .strict();
 export type Option = z.infer<typeof Option>;
 
+/** A likely wrong placement of a match or sort entry: the error behind it (L8) and what the learner reads after making it (L9). */
+export const Mistake = z
+  .object({
+    misconception: z.string().min(5).max(300),
+    feedback: z.string().min(5).max(600),
+  })
+  .strict();
+
 const ItemCommon = {
   prompt: Markdown,
   bloom: Bloom,
@@ -96,6 +104,52 @@ export const Item = z.discriminatedUnion("format", [
       ...ItemCommon,
       /** Correct order; the server shuffles for display. */
       sequence: z.array(z.string().min(1).max(200)).min(3).max(7),
+    })
+    .strict(),
+  z
+    .object({
+      format: z.literal("match"),
+      ...ItemCommon,
+      /** The key: each left entry with its right entry. The server shuffles both sides for display (Q3). */
+      pairs: z
+        .array(
+          z
+            .object({
+              left: z.string().min(1).max(200),
+              right: z.string().min(1).max(200),
+              /** Shown when the learner pairs this left entry with a wrong right entry. */
+              mistake: Mistake.optional(),
+            })
+            .strict(),
+        )
+        .min(3)
+        .max(6),
+      /** Right entries that pair with no left entry, so the last pair cannot be found by elimination. */
+      distractors: z
+        .array(z.object({ text: z.string().min(1).max(200), misconception: z.string().min(5).max(300), feedback: z.string().min(5).max(600) }).strict())
+        .max(2)
+        .optional(),
+    })
+    .strict(),
+  z
+    .object({
+      format: z.literal("sort"),
+      ...ItemCommon,
+      categories: z.array(z.string().min(1).max(80)).min(2).max(4),
+      /** The key: each entry with the index of its category. The server shuffles entries for display. */
+      entries: z
+        .array(
+          z
+            .object({
+              text: z.string().min(1).max(200),
+              category: z.number().int().min(0).max(3),
+              /** Shown when the learner puts this entry in a wrong category. */
+              mistake: Mistake.optional(),
+            })
+            .strict(),
+        )
+        .min(4)
+        .max(8),
     })
     .strict(),
   z
@@ -347,8 +401,12 @@ export type PublicItem = {
   bloom: Bloom;
   /** single/multi: options in display order. */
   options?: PublicOption[];
-  /** order: entries shuffled for display. */
+  /** order, sort: entries shuffled for display; match: left entries shuffled for display. */
   entries?: string[];
+  /** match: right entries, distractors included, shuffled for display. */
+  targets?: string[];
+  /** sort: category names as authored. */
+  categories?: string[];
   /** cloze: text with {{n}} blanks. */
   text?: string;
   blankCount?: number;
@@ -382,12 +440,15 @@ export type PublicCite = { sourceId: string; quote: string; url: string; title: 
 /**
  * Learner answer payloads, by format.
  * single: option index in display order; multi: display indices; order: entries in chosen order;
+ * match: per entry in display order, the display index of its target; sort: per entry in display order, its category index;
  * cloze: one string per blank; number: value; short: free text.
  */
 export type Answer =
   | { format: "single"; choice: number }
   | { format: "multi"; choices: number[] }
   | { format: "order"; sequence: string[] }
+  | { format: "match"; pairs: number[] }
+  | { format: "sort"; categories: number[] }
   | { format: "cloze"; blanks: string[] }
   | { format: "number"; value: number }
   | { format: "short"; text: string };

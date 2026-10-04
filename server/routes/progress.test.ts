@@ -51,6 +51,13 @@ test("an unsolved item's state carries no solution, key, unseen hint or misconce
   expect(lessonItemStates("ls1", database)[id]).toMatchObject({ gaveUp: true, lastFeedback: null, solution: "SECRET-SOL-p", correctAnswer: "key p" });
 });
 
+test("a wrong sort answer's placement feedback is restored after reload", async () => {
+  const { itemIds } = insertStep(database, 0, { kind: "practice", title: "Practice", item: items.sort() });
+  const id = itemIds[0]!;
+  const res = await submitAttempt(id, { answer: { format: "sort", categories: [0, 0, 0, 0] }, hintsUsed: 0, durationMs: 9000, context: "practice" }, { database });
+  expect(lessonItemStates("ls1", database)[id]!.lastFeedback).toBe(res.feedback);
+});
+
 test("an answered prequestion reveals its answer; an unanswered one does not", async () => {
   const { itemIds } = insertStep(database, 0, { kind: "activate", title: "Before", items: [items.single("a1"), items.single("a2")] });
   await submitAttempt(itemIds[0]!, { answer: { format: "single", choice: 0 }, hintsUsed: 0, durationMs: 1, context: "activate" }, { database });

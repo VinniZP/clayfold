@@ -9,6 +9,7 @@ import { t, useLang } from "../lib/i18n";
 import { bp, color, motion, radius, space } from "../theme/tokens.stylex";
 import { btn, field, layout, text } from "../theme/ui";
 import { ItemPrompt } from "./ItemPrompt";
+import { MatchInput, SortInput } from "./MatchSort";
 import { Markdown, Spinner } from "./ui";
 
 /**
@@ -25,6 +26,8 @@ type Draft =
   | { format: "single"; choice: number | null }
   | { format: "multi"; choices: number[] }
   | { format: "order"; sequence: string[] }
+  | { format: "match"; pairs: (number | null)[] }
+  | { format: "sort"; placed: (number | null)[] }
   | { format: "cloze"; blanks: string[] }
   | { format: "number"; value: string }
   | { format: "short"; text: string };
@@ -37,6 +40,10 @@ function initialDraft(item: PublicItem): Draft {
       return { format: "multi", choices: [] };
     case "order":
       return { format: "order", sequence: [...(item.entries ?? [])] };
+    case "match":
+      return { format: "match", pairs: (item.entries ?? []).map(() => null) };
+    case "sort":
+      return { format: "sort", placed: (item.entries ?? []).map(() => null) };
     case "cloze":
       return { format: "cloze", blanks: Array.from({ length: item.blankCount ?? countBlanks(item.text ?? "") }, () => "") };
     case "number":
@@ -58,6 +65,10 @@ function toAnswer(d: Draft): Answer | null {
       return d.choices.length ? { format: "multi", choices: [...d.choices].sort((a, b) => a - b) } : null;
     case "order":
       return { format: "order", sequence: d.sequence };
+    case "match":
+      return d.pairs.every((p) => p !== null) ? { format: "match", pairs: d.pairs as number[] } : null;
+    case "sort":
+      return d.placed.every((c) => c !== null) ? { format: "sort", categories: d.placed as number[] } : null;
     case "cloze":
       return d.blanks.every((b) => b.trim()) ? { format: "cloze", blanks: d.blanks.map((b) => b.trim()) } : null;
     case "number": {
@@ -252,7 +263,7 @@ export function ItemView({ item, mode, context, active = true, onResult, onOffer
   const started = useRef<number | null>(null);
   const idleOffered = useRef(false);
   const [touch, setTouch] = useState(0);
-  /** The draft that produced the latest wrong answer; the chosen option is marked until it changes. */
+  /** The draft of the latest answer; a wrong choice and the placement marks show until it changes. */
   const [submitted, setSubmitted] = useState<Draft | null>(null);
   const promptId = useId();
 
@@ -299,7 +310,7 @@ export function ItemView({ item, mode, context, active = true, onResult, onOffer
         context,
       });
       setResponses((r) => [...r, res]);
-      setSubmitted(res.correct === false ? draft : null);
+      setSubmitted(draft);
       setTouch((n) => n + 1);
       onResult?.(item.id, { response: res, gaveUp: null });
       // The exit check reveals results only at its end, so the companion learns nothing about them before.
@@ -344,6 +355,7 @@ export function ItemView({ item, mode, context, active = true, onResult, onOffer
 
   const showResult = mode !== "check" || revealed;
   const wrongDraft = last?.correct === false && submitted === draft ? submitted : null;
+  const marks = showResult && last?.marks && submitted === draft ? last.marks : null;
 
   return (
     <div onFocus={() => setTouch((n) => n + 1)} {...stylex.props(s.item)}>
@@ -354,7 +366,7 @@ export function ItemView({ item, mode, context, active = true, onResult, onOffer
 
       <fieldset disabled={locked} aria-describedby={promptId} {...stylex.props(s.fieldset)}>
         <legend {...stylex.props(layout.srOnly)}>{t("item.yourAnswer")}</legend>
-        <AnswerInput item={item} draft={draft} wrong={wrongDraft} locked={locked} onChange={update} />
+        <AnswerInput item={item} draft={draft} wrong={wrongDraft} marks={marks} locked={locked} done={done} onChange={update} />
       </fieldset>
 
       {error && (
@@ -544,14 +556,19 @@ function AnswerInput({
   item,
   draft,
   wrong,
+  marks,
   locked,
+  done,
   onChange,
 }: {
   item: PublicItem;
   draft: Draft;
   /** The draft of the latest wrong answer, while unchanged. */
   wrong: Draft | null;
+  /** match and sort: per entry, whether the latest answer placed it right, while the draft is unchanged. */
+  marks: boolean[] | null;
   locked: boolean;
+  done: boolean;
   onChange: (d: Draft) => void;
 }) {
   useLang();
@@ -598,6 +615,28 @@ function AnswerInput({
       );
     case "order":
       return <OrderInput sequence={draft.sequence} onChange={(sequence) => onChange({ format: "order", sequence })} />;
+    case "match":
+      return (
+        <MatchInput
+          entries={item.entries ?? []}
+          targets={item.targets ?? []}
+          pairs={draft.pairs}
+          marks={marks}
+          done={done}
+          onChange={(pairs) => onChange({ format: "match", pairs })}
+        />
+      );
+    case "sort":
+      return (
+        <SortInput
+          entries={item.entries ?? []}
+          categories={item.categories ?? []}
+          placed={draft.placed}
+          marks={marks}
+          done={done}
+          onChange={(placed) => onChange({ format: "sort", placed })}
+        />
+      );
     case "cloze":
       return <ClozeInput text={item.text ?? ""} blanks={draft.blanks} onChange={(blanks) => onChange({ format: "cloze", blanks })} />;
     case "number":

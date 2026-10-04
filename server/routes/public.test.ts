@@ -20,6 +20,8 @@ const steps: Step[] = [
   { kind: "practice", title: "Practice", item: items.multi("pr1") },
   { kind: "reflect", title: "Reflect", prompt: "Why does this work the way it does?", purpose: "why" },
   { kind: "check", title: "Check", items: [items.short("ch1"), items.single("ch2")] },
+  { kind: "practice", title: "Match", item: items.match("pr2") },
+  { kind: "practice", title: "Sort", item: items.sort("pr3") },
 ];
 
 let database: Database;
@@ -36,7 +38,7 @@ beforeEach(() => {
 describe("publicStep", () => {
   test("serialized steps contain no key, solution, misconception, hint, feedback or rubric text", () => {
     const json = JSON.stringify(steps.map((_, i) => publicStep(row(i), database)));
-    for (const secret of ["SECRET-", "9137.25", '"correct"', '"solution"', '"hints"', '"feedback"', '"misconception"', '"blanks"', '"sequence"', '"answer"', '"tolerance"']) {
+    for (const secret of ["SECRET-", "9137.25", '"correct"', '"solution"', '"hints"', '"feedback"', '"misconception"', '"blanks"', '"sequence"', '"answer"', '"tolerance"', '"pairs"', '"distractors"', '"mistake"', '"category"']) {
       expect(json).not.toContain(secret);
     }
   });
@@ -56,6 +58,14 @@ describe("publicStep", () => {
     expect(activate.items[0]!.options).toEqual([{ text: "wrong2 act1" }, { text: "wrong1 act1" }, { text: "key act1" }]);
     expect(activate.items[1]!.entries).toEqual(["fourth", "third", "second", "first"]);
     expect(activate.items[0]!.hintCount).toBe(2);
+  });
+
+  test("match shuffles both sides and sort shuffles entries by display_order; categories stay as authored", () => {
+    const match = publicStep(row(6), database);
+    const sort = publicStep(row(7), database);
+    if (match.kind !== "practice" || sort.kind !== "practice") throw new Error("kind");
+    expect(match.item).toMatchObject({ format: "match", entries: ["left2", "left1", "left0"], targets: ["extra", "right2", "right1", "right0"] });
+    expect(sort.item).toMatchObject({ format: "sort", entries: ["e3", "e2", "e1", "e0"], categories: ["catA", "catB"] });
   });
 
   test("cloze, number, worked lines and cites", () => {

@@ -1,6 +1,7 @@
 import type { Database } from "bun:sqlite";
 import type { Answer, Item, Step } from "../../shared/schemas";
 import { db } from "../db";
+import { displayLength, matchOrders, matchTargets } from "../gates/content";
 import { displayOrder, type ItemRow, type StepRow } from "./public";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -15,6 +16,15 @@ function describeItem(item: Item): string {
     });
   } else if (item.format === "order") {
     lines.push(`Correct order: ${item.sequence.join(" → ")}`);
+  } else if (item.format === "match") {
+    lines.push("Correct pairs:");
+    for (const p of item.pairs) lines.push(`  ${p.left} → ${p.right}${p.mistake ? ` (if paired wrongly, misconception: ${p.mistake.misconception}; feedback: ${p.mistake.feedback})` : ""}`);
+    for (const d of item.distractors ?? []) lines.push(`  Distractor, pairs with nothing: ${d.text} (misconception: ${d.misconception}; feedback: ${d.feedback})`);
+  } else if (item.format === "sort") {
+    lines.push(`Categories: ${item.categories.join(" | ")}`, "Correct placement:");
+    for (const e of item.entries) {
+      lines.push(`  ${e.text} → ${item.categories[e.category]}${e.mistake ? ` (if misplaced, misconception: ${e.mistake.misconception}; feedback: ${e.mistake.feedback})` : ""}`);
+    }
   } else if (item.format === "cloze") {
     lines.push(`Text: ${item.text}`, `Accepted answers: ${item.blanks.map((b, i) => `{{${i + 1}}} = ${b.join(" | ")}`).join("; ")}`);
   } else if (item.format === "number") {
@@ -39,6 +49,27 @@ function describeAnswer(raw: string, item: Item, row: ItemRow): string {
     }
     case "order":
       return answer.sequence.join(" → ");
+    case "match": {
+      if (item.format !== "match") return JSON.stringify(answer);
+      const { left, right } = matchOrders(item, displayOrder(row, displayLength(item)));
+      const targets = matchTargets(item);
+      return left
+        .map((pair, d) => {
+          const target = right[answer.pairs[d] ?? -1];
+          return `${item.pairs[pair]!.left} → ${target === undefined ? "?" : targets[target]} (${target === pair ? "right" : "wrong"})`;
+        })
+        .join("; ");
+    }
+    case "sort": {
+      if (item.format !== "sort") return JSON.stringify(answer);
+      return displayOrder(row, item.entries.length)
+        .map((i, d) => {
+          const entry = item.entries[i]!;
+          const pick = answer.categories[d];
+          return `${entry.text} → ${item.categories[pick ?? -1] ?? "?"} (${pick === entry.category ? "right" : "wrong"})`;
+        })
+        .join("; ");
+    }
     case "cloze":
       return answer.blanks.join(" | ");
     case "number":

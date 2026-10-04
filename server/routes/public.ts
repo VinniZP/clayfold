@@ -1,6 +1,7 @@
 import type { Database } from "bun:sqlite";
 import { isOpenBlank, type Cite, type Item, type PublicCite, type PublicItem, type PublicStep, type Step } from "../../shared/schemas";
 import { db } from "../db";
+import { displayLength, matchOrders, matchTargets } from "../gates/content";
 
 export type ItemRow = {
   id: string;
@@ -35,6 +36,17 @@ export function publicItem(row: ItemRow): PublicItem {
       break;
     case "order":
       out.entries = displayOrder(row, item.sequence.length).map((i) => item.sequence[i]!);
+      break;
+    case "match": {
+      const { left, right } = matchOrders(item, displayOrder(row, displayLength(item)));
+      const targets = matchTargets(item);
+      out.entries = left.map((i) => item.pairs[i]!.left);
+      out.targets = right.map((i) => targets[i]!);
+      break;
+    }
+    case "sort":
+      out.entries = displayOrder(row, item.entries.length).map((i) => item.entries[i]!.text);
+      out.categories = item.categories;
       break;
     case "cloze":
       out.text = item.text;

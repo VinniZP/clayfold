@@ -55,6 +55,39 @@ export function orderItem(sourceId = "src_top_1"): Item {
   };
 }
 
+export function matchItem(sourceId = "src_top_1"): Extract<Item, { format: "match" }> {
+  return {
+    format: "match",
+    prompt: "Match each command to what it does.",
+    pairs: [
+      {
+        left: "git add",
+        right: "Puts a change into the index",
+        mistake: { misconception: "Confuses staging a change with recording it", feedback: "This command prepares the next snapshot; nothing is recorded yet." },
+      },
+      { left: "git commit", right: "Records the index as a snapshot" },
+      { left: "git status", right: "Lists staged and unstaged changes" },
+    ],
+    distractors: [{ text: "Sends commits to the remote", misconception: "Thinks a commit leaves the machine", feedback: "None of these commands talks to a server." }],
+    ...common(sourceId),
+  };
+}
+
+export function sortItem(sourceId = "src_top_1"): Extract<Item, { format: "sort" }> {
+  return {
+    format: "sort",
+    prompt: "Where is each change right now?",
+    categories: ["Working tree", "Index"],
+    entries: [
+      { text: "A file you just edited", category: 0, mistake: { misconception: "Thinks saving a file stages it", feedback: "Saving writes the file to disk; nothing has been added yet." } },
+      { text: "A change after git add", category: 1 },
+      { text: "A new file nobody added", category: 0 },
+      { text: "A change ready for the next commit", category: 1 },
+    ],
+    ...common(sourceId),
+  };
+}
+
 export function clozeItem(sourceId = "src_top_1"): Item {
   return {
     format: "cloze",

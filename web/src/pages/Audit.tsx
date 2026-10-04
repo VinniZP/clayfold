@@ -50,6 +50,7 @@ const s = stylex.create({
 });
 
 type AuthoredOption = { text?: string; feedback?: string; misconception?: string };
+type AuthoredMistake = { misconception?: string; feedback?: string };
 type AuthoredItem = {
   format?: string;
   prompt?: string;
@@ -57,6 +58,10 @@ type AuthoredItem = {
   options?: AuthoredOption[];
   correct?: number | number[];
   sequence?: string[];
+  pairs?: { left?: string; right?: string; mistake?: AuthoredMistake }[];
+  distractors?: AuthoredOption[];
+  categories?: string[];
+  entries?: { text?: string; category?: number; mistake?: AuthoredMistake }[];
   text?: string;
   blanks?: string[][];
   answer?: number;
@@ -70,6 +75,16 @@ type AuthoredItem = {
 
 function isCorrect(item: AuthoredItem, i: number) {
   return Array.isArray(item.correct) ? item.correct.includes(i) : item.correct === i;
+}
+
+function MistakeNotes({ mistake }: { mistake?: AuthoredMistake }) {
+  useLang();
+  return (
+    <>
+      {mistake?.misconception && <p {...stylex.props(text.small, text.muted)}>{t("audit.misconception", { text: mistake.misconception })}</p>}
+      {mistake?.feedback && <p {...stylex.props(text.small)}>{t("audit.feedback", { text: mistake.feedback })}</p>}
+    </>
+  );
 }
 
 function AuthoredView({ raw }: { raw: unknown }) {
@@ -101,6 +116,44 @@ function AuthoredView({ raw }: { raw: unknown }) {
         <p>
           {t("audit.correctOrder")} <strong>{item.sequence.join(" → ")}</strong>
         </p>
+      )}
+      {item.pairs && (
+        <>
+          <p>{t("audit.pairs")}</p>
+          <ol {...stylex.props(s.options)}>
+            {item.pairs.map((p, i) => (
+              <li key={i} {...stylex.props(s.option)}>
+                <p>
+                  {p.left} → <strong>{p.right}</strong>
+                </p>
+                <MistakeNotes mistake={p.mistake} />
+              </li>
+            ))}
+            {item.distractors?.map((d, i) => (
+              <li key={`d${i}`} {...stylex.props(s.option)}>
+                <p>
+                  <span {...stylex.props(chip.base, chip.xs)}>{t("audit.distractor")}</span> {d.text}
+                </p>
+                <MistakeNotes mistake={d} />
+              </li>
+            ))}
+          </ol>
+        </>
+      )}
+      {item.categories && item.entries && (
+        <>
+          <p>{t("audit.categories")}</p>
+          <ol {...stylex.props(s.options)}>
+            {item.entries.map((e, i) => (
+              <li key={i} {...stylex.props(s.option)}>
+                <p>
+                  {e.text} → <strong>{item.categories?.[e.category ?? -1] ?? "?"}</strong>
+                </p>
+                <MistakeNotes mistake={e.mistake} />
+              </li>
+            ))}
+          </ol>
+        </>
       )}
       {item.text && <p>{t("audit.text", { text: item.text })}</p>}
       {item.blanks && <p>{t("audit.blanks", { answers: item.blanks.map((b) => b.join(" / ")).join("; ") })}</p>}

@@ -51,7 +51,7 @@ The result decides the next move:
 - `dropped` (third rejection) → move on to the next index.
 - `MCP error -32602` → the step broke the schema; fix the field it names and resubmit.
 
-Mark each glossary term at its first use in a step as `[[surface|Term]]`: the word as it stands in the sentence, then the glossary term (`[[commits|Commit]]`; `[[Commit]]` when they match). The learner points at a mark to read its definition. Marks go in `body`, `problem`, item `prompt`, `solution`, `hints`, `feedback`, option and worked-line `text`, and card `front` and `back`; titles, answer keys, cloze text and blanks, order entries and quotes stay unmarked. The gate rejects a mark whose term the glossary lacks (L19).
+Mark each glossary term at its first use in a step as `[[surface|Term]]`: the word as it stands in the sentence, then the glossary term (`[[commits|Commit]]`; `[[Commit]]` when they match). The learner points at a mark to read its definition. Marks go in `body`, `problem`, item `prompt`, `solution`, `hints`, `feedback`, option and worked-line `text`, and card `front` and `back`; titles, answer keys, cloze text and blanks, order, match and sort entries, sort categories and quotes stay unmarked. The gate rejects a mark whose term the glossary lacks (L19).
 
 A result can also announce sources added after planning; cite the relevant ones in the remaining steps.
 

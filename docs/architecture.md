@@ -89,7 +89,7 @@ While an update runs, the UI polls `/api/update` every 2 seconds and reloads the
 2. For each step, `step_submit` runs schema → deterministic checks → quote verification → critic. A pass publishes the step (`step.published`); a fail returns violations to Claude. The third failed attempt drops the step.
 3. `lesson_finish` closes the lesson; `cards_propose` sends cards through the same gates and on to the learner for acceptance.
 
-Published items are copied to `items` with a shuffled `display_order`. The browser receives only `PublicStep`/`PublicItem`; grading runs in `server/routes`.
+Published items are copied to `items` with a shuffled `display_order`; a match item's holds the permutation of its left entries followed by that of its right entries. The browser receives only `PublicStep`/`PublicItem`; grading runs in `server/routes`. A match or sort answer is correct only when every entry is placed right, which is what mastery and first-try statistics count; the response marks each entry (`AttemptResponse.marks`) and its feedback counts the right ones and adds the feedback of each wrong placement the author anticipated.
 
 ## Meerkat
 
