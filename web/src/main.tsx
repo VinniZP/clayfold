@@ -8,6 +8,7 @@ import { Layout } from "./components/Layout";
 import { Empty, ErrorBox } from "./components/ui";
 import { btn, card } from "./theme/ui";
 import { AuditPage } from "./pages/Audit";
+import { BookPage } from "./pages/Book";
 import { GlossaryPage } from "./pages/Glossary";
 import { Home } from "./pages/Home";
 import { LessonPage } from "./pages/Lesson";
@@ -73,6 +74,7 @@ const router = createBrowserRouter([
       { path: "/", element: <Home /> },
       { path: "/topics", element: <TopicsPage /> },
       { path: "/topics/:topicId", element: <TopicPage /> },
+      { path: "/topics/:topicId/book", element: <BookPage /> },
       { path: "/lessons/:lessonId", element: <LessonPage /> },
       { path: "/review", element: <ReviewPage /> },
       { path: "/mistakes", element: <MistakesPage /> },

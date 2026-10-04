@@ -1,5 +1,5 @@
 import * as stylex from "@stylexjs/stylex";
-import { ArrowRight, BookOpen, ExternalLink, Sparkles, TriangleAlert } from "lucide-react";
+import { ArrowRight, BookOpen, BookText, Download, ExternalLink, Sparkles, TriangleAlert } from "lucide-react";
 import { useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router";
 import type { ConversationKind, LessonSummary, TopicDetail } from "@shared/api";
@@ -24,6 +24,7 @@ import { t, useLang } from "../lib/i18n";
 import { useStreamStatus, useTopicStream } from "../lib/stream";
 import { useGlossaryScope } from "../lib/glossary";
 import { useRecentVisit } from "../lib/recent";
+import { useDownload } from "../lib/useDownload";
 import { useResource } from "../lib/useResource";
 import { bp, color, radius } from "../theme/tokens.stylex";
 import { banner, btn, card, chip, field, layout, text } from "../theme/ui";
@@ -156,6 +157,7 @@ export function TopicPage() {
   const [starting, setStarting] = useState<{ nodeId?: string; waiting: boolean } | null>(null);
   const [startError, setStartError] = useState<string | null>(null);
   const streamStatus = useStreamStatus(topicId);
+  const download = useDownload();
 
   useTopicStream(
     topicId,
@@ -287,7 +289,19 @@ export function TopicPage() {
         </section>
 
         <section aria-labelledby="lessons-title" {...stylex.props(card.base)}>
-          <CardHead title={t("topic.lessons")} id="lessons-title" />
+          <CardHead title={t("topic.lessons")} id="lessons-title">
+            <Link to={`/topics/${topicId}/book`} {...stylex.props(btn.base, btn.ghost, btn.sm)}>
+              <BookText size={14} aria-hidden="true" /> {t("book.title")}
+            </Link>
+            <button type="button" disabled={download.busy !== null} onClick={() => download.run("book", () => api.courseBook(topicId))} {...stylex.props(btn.base, btn.ghost, btn.sm)}>
+              {download.busy ? <Spinner /> : <Download size={14} aria-hidden="true" />} {t("book.download")}
+            </button>
+          </CardHead>
+          {download.error && (
+            <p role="alert" {...stylex.props(text.error, s.errorGap)}>
+              <TriangleAlert size={14} aria-hidden="true" /> {download.error}
+            </p>
+          )}
           {lessons.length === 0 ? (
             <Empty title={t("topic.noLessonsTitle")}>{t("topic.noLessonsBody")}</Empty>
           ) : (

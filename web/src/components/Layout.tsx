@@ -343,7 +343,7 @@ function Rail({ due }: { due: number }) {
   const theme = useTheme();
   const { on: game } = useGame();
   return (
-    <aside {...stylex.props(s.railCol)}>
+    <aside data-print="hide" {...stylex.props(s.railCol)}>
       <div {...stylex.props(s.rail)}>
       <Link to="/" aria-label={t("nav.homeLink")}>
         <LogoMark />
@@ -782,14 +782,14 @@ export function Layout() {
 
   return (
     <AppRoot>
-      <a href="#main" {...stylex.props(s.skip)}>
+      <a href="#main" data-print="hide" {...stylex.props(s.skip)}>
         {t("nav.skipToContent")}
       </a>
-      <div {...stylex.props(s.frame, focus && s.frameFocus)}>
+      <div data-print="flow" {...stylex.props(s.frame, focus && s.frameFocus)}>
         {!focus && <Rail due={due} />}
 
         {!focus && (
-          <div {...stylex.props(s.mobileBar)}>
+          <div data-print="hide" {...stylex.props(s.mobileBar)}>
             <Link to="/" {...stylex.props(s.mobileWord)}>
               Clayfold
             </Link>
@@ -844,7 +844,7 @@ export function Layout() {
             <h1 {...stylex.props(layout.srOnly)}>{header.title}</h1>
           ) : (
             <>
-              <div {...stylex.props(s.top)}>
+              <div data-print="hide" {...stylex.props(s.top)}>
                 <Link to="/" {...stylex.props(s.wordmark)}>
                   Clayfold
                 </Link>
@@ -877,7 +877,11 @@ export function Layout() {
           </HeaderProvider>
         </main>
       </div>
-      {claudeMode && <ClaudePanel />}
+      {claudeMode && (
+        <div data-print="hide">
+          <ClaudePanel />
+        </div>
+      )}
       <Intro />
       <Celebrations />
       <ShortcutSheet />

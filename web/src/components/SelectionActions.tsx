@@ -383,6 +383,7 @@ export function SelectionActions({ roots, tutorBlocked, noteTarget, onAsk, onDef
       ref={barRef}
       role={mode === "actions" ? "toolbar" : "group"}
       aria-label={t("selection.toolbar")}
+      data-print="hide"
       aria-describedby={hintId}
       title={t("selection.hint", { shortcut: SHORTCUT })}
       style={{ top: 0, left: 0, visibility: "hidden" }}

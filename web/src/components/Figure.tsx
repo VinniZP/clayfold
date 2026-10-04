@@ -5,6 +5,7 @@ import type { PublicFigure } from "@shared/schemas";
 import { FIG_TOKENS, tokens } from "../lib/color";
 import { t, useLang } from "../lib/i18n";
 import { sanitizeSvg } from "../lib/markdown";
+import { trackRender } from "../lib/print";
 import { useOverlayScroll } from "../lib/overlayScroll";
 import { useTheme, type Theme } from "../lib/theme";
 import { color, radius } from "../theme/tokens.stylex";
@@ -117,6 +118,7 @@ function MermaidFigure({ code, theme }: { code: string; theme: Theme }) {
         document.querySelectorAll(`[id^="dmmd-"]`).forEach((n) => n.remove());
       }
     });
+    trackRender(mermaidQueue);
     return () => {
       cancelled = true;
     };
@@ -134,7 +136,7 @@ function ChartFigure({ spec, theme }: { spec: Record<string, unknown>; theme: Th
   useEffect(() => {
     let cancelled = false;
     let finalize: (() => void) | undefined;
-    (async () => {
+    trackRender((async () => {
       try {
         const { default: embed } = await import("vega-embed");
         const t = tokens(["text", "text-muted", "border", "border-strong", ...FIG_TOKENS], ref.current);
@@ -171,7 +173,7 @@ function ChartFigure({ spec, theme }: { spec: Record<string, unknown>; theme: Th
       } catch (err) {
         if (!cancelled) setError(err instanceof Error ? err.message : String(err));
       }
-    })();
+    })());
     return () => {
       cancelled = true;
       finalize?.();

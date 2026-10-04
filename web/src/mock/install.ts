@@ -676,6 +676,50 @@ function narration(stepId: string): NarrationView | null {
   };
 }
 
+// ---------- Take-away files ----------
+
+const attachment = (body: string, type: string, name: string) =>
+  new Response(body, { headers: { "content-type": type, "content-disposition": `attachment; filename*=UTF-8''${encodeURIComponent(name)}` } });
+
+/** A text-import sample; the mock has no package writer, so both formats download it. */
+function sampleAnki(topicId: string | null): Response {
+  const title = (id: string) => fx.topicDetails[id]?.topic.title ?? id;
+  const rows = fx.cards
+    .filter((c) => c.status === "active" && (!topicId || c.topicId === topicId))
+    .map((c) => {
+      const fields = c.kind === "cloze" ? [c.front.replace("____", `{{c1::${c.back}}}`), ""] : [c.front, c.back];
+      return [`clayfold-${c.id}`, c.kind === "cloze" ? "Cloze" : "Basic", title(c.topicId), `clayfold node::${c.nodeId}`, ...fields].join("\t");
+    });
+  if (rows.length === 0) return json({ error: t("export.noCards") }, 404);
+  const header = ["#separator:tab", "#html:true", "#guid column:1", "#notetype column:2", "#deck column:3", "#tags column:4"];
+  return attachment(`${[...header, ...rows].join("\n")}\n`, "text/plain", `${topicId ? title(topicId) : t("export.allCourses")}.txt`);
+}
+
+function stepMarkdown(st: PublicStep): string[] {
+  const out = [`#### ${st.title}`];
+  const figure = "figure" in st ? st.figure : undefined;
+  if (st.kind === "explain") out.push(st.body);
+  if (st.kind === "worked_example") out.push(st.problem, st.lines.map((l, i) => `${i + 1}. ${l.text ?? `_${t("book.yourTurn", { prompt: l.blankPrompt ?? "" })}_`}`).join("\n"));
+  if (figure?.kind === "mermaid") out.push(`\`\`\`mermaid\n${figure.code}\n\`\`\``);
+  if (figure?.kind === "svg") out.push(figure.svg.replace(/\n\s*\n/g, "\n"));
+  if (st.kind === "practice") out.push(st.item.prompt, `_${t("book.answerHidden")}_`);
+  return out;
+}
+
+function sampleBook(topicId: string): Response {
+  const d = fx.topicDetails[topicId];
+  if (!d) return json({ error: "Topic not found" }, 404);
+  const out = [`# ${d.topic.title}`];
+  if (d.nodes.length) out.push(`## ${t("book.map")}`, d.nodes.map((n) => `- **${n.title}**\n  ${n.summary}`).join("\n"));
+  out.push(`## ${t("book.lessons")}`);
+  for (const l of d.lessons.filter((x) => x.status === "finished")) out.push(`### ${l.title}`, `_${l.objective}_`, ...(l.id === "l-cond" ? fx.condSteps.flatMap(stepMarkdown) : []));
+  const terms = fx.glossary.filter((g) => g.topicId === topicId);
+  if (terms.length) out.push(`## ${t("book.glossary")}`, terms.map((g) => `- **${g.term}**: ${g.definition}`).join("\n"));
+  const notes = fx.notes.filter((n) => n.topicId === topicId);
+  if (notes.length) out.push(`## ${t("book.notes")}`, notes.map((n) => `${n.quote ? `> ${n.quote}\n\n` : ""}${n.text}`).join("\n\n---\n\n"));
+  return attachment(`${out.join("\n\n")}\n`, "text/markdown", `${d.topic.title}.md`);
+}
+
 async function route(method: string, path: string, body: Record<string, unknown>, form: FormData | null): Promise<Response> {
   const url = new URL(path, location.origin);
   const p = url.pathname;
@@ -815,6 +859,8 @@ async function route(method: string, path: string, body: Record<string, unknown>
     return d ? json(d) : json({ error: "Topic not found" }, 404);
   }
   if ((m = p.match(/^\/api\/topics\/([^/]+)\/memory$/))) return json(fx.memoryFiles[m[1]!] ?? []);
+  if ((m = p.match(/^\/api\/topics\/([^/]+)\/book$/))) return sampleBook(m[1]!);
+  if (p === "/api/export/anki") return sampleAnki(url.searchParams.get("topicId"));
   if ((m = p.match(/^\/api\/topics\/([^/]+)\/notes$/))) return json(fx.notes.filter((n) => n.topicId === m![1]));
   if ((m = p.match(/^\/api\/topics\/([^/]+)\/cards$/))) {
     const status = url.searchParams.get("status");

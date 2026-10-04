@@ -485,7 +485,7 @@ export function ItemView({ item, mode, context, active = true, onResult, onOffer
       )}
 
       {!done && (
-        <div {...stylex.props(layout.actions)}>
+        <div data-print="hide" {...stylex.props(layout.actions)}>
           {allowHints && (
             <button
               type="button"

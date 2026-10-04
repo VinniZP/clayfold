@@ -1,5 +1,6 @@
 import * as stylex from "@stylexjs/stylex";
-import { useLayoutEffect, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, type ReactNode } from "react";
+import { watchPrinting } from "../lib/print";
 import { useTheme } from "../lib/theme";
 import { TermPopover } from "./TermPopover";
 import { bridge, darkTheme, lightTheme } from "../theme/themes";
@@ -25,6 +26,7 @@ export function AppRoot({ children }: { children: ReactNode }) {
     html.classList.add(...classes);
     return () => html.classList.remove(...classes);
   }, [theme]);
+  useEffect(watchPrinting, []);
   return (
     <div data-app-root="" {...stylex.props(s.root)}>
       {children}

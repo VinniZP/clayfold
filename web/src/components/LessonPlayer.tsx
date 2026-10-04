@@ -483,6 +483,7 @@ export function LessonPlayer({ tracks, titles, steps, pos, settled, go, lessonTi
     <section
       ref={playerRef}
       data-lesson-player=""
+      data-print="hide"
       aria-label={t("narration.player")}
       onKeyDown={(e) => {
         const el = e.target as Element;
