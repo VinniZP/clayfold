@@ -11,8 +11,8 @@ import { formatDateTime } from "../lib/format";
 import { t, useLang } from "../lib/i18n";
 import { useTopicStream } from "../lib/stream";
 import { useResource } from "../lib/useResource";
-import { bp, color, radius } from "../theme/tokens.stylex";
-import { card, field, text } from "../theme/ui";
+import { bp, color, radius, reading } from "../theme/tokens.stylex";
+import { card, field, readable, text } from "../theme/ui";
 
 const s = stylex.create({
   page: { display: "grid", gridTemplateColumns: "repeat(12, minmax(0, 1fr))", gap: 24, alignItems: "start" },
@@ -41,7 +41,7 @@ const s = stylex.create({
   note: { display: "grid", gap: 6, paddingBlock: 14, paddingInline: 18, borderRadius: radius.inner, backgroundColor: color.surface2 },
   quote: { paddingBlock: 8, paddingInline: 12, borderRadius: 12, backgroundColor: color.surface, fontStyle: "italic", color: color.textMuted, fontSize: 14 },
   meta: { marginBottom: 16 },
-  doc: { fontSize: 16 },
+  doc: { fontSize: `calc(16px * ${reading.scale})` },
   select: { height: 44, paddingBlock: 0 },
 });
 
@@ -177,7 +177,7 @@ export function MemoryPage() {
             ) : notes.data!.length === 0 ? (
               <Empty title={t("memory.noNotesTitle")}>{t("memory.noNotesBody")}</Empty>
             ) : (
-              <ul {...stylex.props(s.notes)}>
+              <ul {...stylex.props(s.notes, readable.surface)}>
                 {[...notes.data!]
                   .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
                   .map((n) => (
@@ -195,7 +195,7 @@ export function MemoryPage() {
             <p {...stylex.props(s.meta, text.small, text.muted)}>
               <code>{active.path}</code> · {t("memory.updated", { date: formatDateTime(active.updatedAt) })}
             </p>
-            <Markdown src={active.content || t("memory.emptyFile")} xstyle={s.doc} />
+            <Markdown src={active.content || t("memory.emptyFile")} xstyle={[readable.surface, s.doc]} />
           </>
         ) : files.data && sorted.length === 0 ? (
           <Empty title={t("memory.noFilesTitle")}>{t("memory.noFilesBody")}</Empty>

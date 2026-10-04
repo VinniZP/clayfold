@@ -48,6 +48,7 @@ const s = stylex.create({
     backgroundColor: color.frame,
     boxShadow: `0 30px 80px -40px ${color.shadowStrong}`,
   },
+  frameFocus: { gridTemplateColumns: "minmax(0, 1fr)" },
   railCol: {
     display: { default: "block", [bp.mobile]: "none" },
     borderRightWidth: 1,
@@ -859,6 +860,7 @@ export function Layout() {
   const [update, setUpdate] = useUpdate();
   const claudeMode = useClaudeMode();
   const { on: game } = useGame();
+  const focus = header.focus === true;
   useOverlayScroll(drawer);
 
   useEffect(() => {
@@ -882,19 +884,21 @@ export function Layout() {
       <a href="#main" {...stylex.props(s.skip)}>
         {t("nav.skipToContent")}
       </a>
-      <div {...stylex.props(s.frame)}>
-        <Rail due={due} />
+      <div {...stylex.props(s.frame, focus && s.frameFocus)}>
+        {!focus && <Rail due={due} />}
 
-        <div {...stylex.props(s.mobileBar)}>
-          <Link to="/" {...stylex.props(s.mobileWord)}>
-            Clayfold
-          </Link>
-          <WorkingPill topics={running} compact />
-          <UpdatePill view={update} onChange={setUpdate} compact />
-          <button type="button" aria-label={t("nav.openMenu")} onClick={() => drawer.current?.showModal()} {...stylex.props(btn.base, btn.icon)}>
-            <Menu size={20} aria-hidden="true" />
-          </button>
-        </div>
+        {!focus && (
+          <div {...stylex.props(s.mobileBar)}>
+            <Link to="/" {...stylex.props(s.mobileWord)}>
+              Clayfold
+            </Link>
+            <WorkingPill topics={running} compact />
+            <UpdatePill view={update} onChange={setUpdate} compact />
+            <button type="button" aria-label={t("nav.openMenu")} onClick={() => drawer.current?.showModal()} {...stylex.props(btn.base, btn.icon)}>
+              <Menu size={20} aria-hidden="true" />
+            </button>
+          </div>
+        )}
         <dialog ref={drawer} aria-label={t("nav.menu")} onClick={(e) => e.target === e.currentTarget && e.currentTarget.close()} {...stylex.props(s.drawer)}>
           <div {...stylex.props(s.drawerInner)}>
             <div {...stylex.props(s.drawerHead)}>
@@ -935,31 +939,37 @@ export function Layout() {
         </dialog>
 
         <main id="main" tabIndex={-1} {...stylex.props(s.main)}>
-          <div {...stylex.props(s.top)}>
-            <Link to="/" {...stylex.props(s.wordmark)}>
-              Clayfold
-            </Link>
-            <div {...stylex.props(s.topTools)}>
-              <SearchBox />
-              <UpdatePill view={update} onChange={setUpdate} />
-              <WorkingPill topics={running} />
-              <StreakPill streak={streak} />
-              <Notifications due={due} />
-            </div>
-          </div>
-
-          <header {...stylex.props(s.head)}>
-            <div {...stylex.props(s.headText)}>
-              {header.back && (
-                <Link to={header.back.to} {...stylex.props(s.back)}>
-                  <ArrowLeft size={20} aria-hidden="true" /> {header.back.label}
+          {focus ? (
+            <h1 {...stylex.props(layout.srOnly)}>{header.title}</h1>
+          ) : (
+            <>
+              <div {...stylex.props(s.top)}>
+                <Link to="/" {...stylex.props(s.wordmark)}>
+                  Clayfold
                 </Link>
-              )}
-              <h1 {...stylex.props(text.display, s.h1)}>{header.title}</h1>
-              {header.sub && <p {...stylex.props(s.sub)}>{header.sub}</p>}
-            </div>
-            {header.art && <Clay name={header.art} size={168} xstyle={s.headArt} eager />}
-          </header>
+                <div {...stylex.props(s.topTools)}>
+                  <SearchBox />
+                  <UpdatePill view={update} onChange={setUpdate} />
+                  <WorkingPill topics={running} />
+                  <StreakPill streak={streak} />
+                  <Notifications due={due} />
+                </div>
+              </div>
+
+              <header {...stylex.props(s.head)}>
+                <div {...stylex.props(s.headText)}>
+                  {header.back && (
+                    <Link to={header.back.to} {...stylex.props(s.back)}>
+                      <ArrowLeft size={20} aria-hidden="true" /> {header.back.label}
+                    </Link>
+                  )}
+                  <h1 {...stylex.props(text.display, s.h1)}>{header.title}</h1>
+                  {header.sub && <p {...stylex.props(s.sub)}>{header.sub}</p>}
+                </div>
+                {header.art && <Clay name={header.art} size={168} xstyle={s.headArt} eager />}
+              </header>
+            </>
+          )}
 
           <HeaderProvider onChange={onHeader}>
             <Outlet />

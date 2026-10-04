@@ -11,7 +11,7 @@ import { t, useLang } from "../lib/i18n";
 import { useTopicStream } from "../lib/stream";
 import { useResource } from "../lib/useResource";
 import { color, motion, radius } from "../theme/tokens.stylex";
-import { btn, field, layout, text } from "../theme/ui";
+import { btn, field, layout, readable, text } from "../theme/ui";
 import { Clay, ErrorBox, Markdown, Skeleton, type ClayName } from "./ui";
 
 type Msg = ChatMessage;
@@ -532,7 +532,7 @@ export function Chat({ conversationId, topicId, lessonId = null, onSend, placeho
           const el = e.currentTarget;
           stick.current = el.scrollHeight - el.scrollTop - el.clientHeight < 48;
         }}
-        {...stylex.props(s.log)}
+        {...stylex.props(s.log, readable.surface)}
       >
         {conv.loading && !conv.data && convId ? (
           <Skeleton lines={4} />

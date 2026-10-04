@@ -55,6 +55,7 @@ const s = stylex.create({
     transitionProperty: "background-color, box-shadow",
     transitionDuration: motion.fast,
   },
+  segmentCompact: { minWidth: 44, justifyItems: "center", alignContent: "center", minHeight: 38, paddingBlock: 6, textAlign: "center" },
   segmentOn: { backgroundColor: { default: color.surface, ":hover": color.surface }, boxShadow: `0 1px 3px ${color.shadowStrong}` },
   segmentLabel: { fontSize: 14, fontWeight: 650 },
   segmentHint: { fontSize: 12, color: color.textMuted },
@@ -146,7 +147,8 @@ export function Switch({
   );
 }
 
-export type Choice<T extends string> = { value: T; label: string; hint?: string };
+/** `content` is drawn in place of the label, which then names the segment for assistive technology. */
+export type Choice<T extends string> = { value: T; label: string; hint?: string; content?: ReactNode };
 
 /** One choice out of a few, all visible: a radio group drawn as segments; arrow keys move the choice. */
 export function Segmented<T extends string>({
@@ -155,12 +157,15 @@ export function Segmented<T extends string>({
   onChange,
   label,
   disabled,
+  compact,
 }: {
   value: T;
   options: Choice<T>[];
   onChange: (next: T) => void;
   label: string;
   disabled?: boolean;
+  /** Narrow, centred segments for short labels. */
+  compact?: boolean;
 }) {
   const refs = useRef<(HTMLButtonElement | null)[]>([]);
   const onKey = (e: KeyboardEvent, i: number) => {
@@ -184,9 +189,11 @@ export function Segmented<T extends string>({
           disabled={disabled}
           onClick={() => onChange(o.value)}
           onKeyDown={(e) => onKey(e, i)}
-          {...stylex.props(s.segment, o.value === value && s.segmentOn)}
+          aria-label={o.content ? o.label : undefined}
+          title={o.content ? o.label : undefined}
+          {...stylex.props(s.segment, compact && s.segmentCompact, o.value === value && s.segmentOn)}
         >
-          <span {...stylex.props(s.segmentLabel)}>{o.label}</span>
+          <span {...stylex.props(s.segmentLabel)}>{o.content ?? o.label}</span>
           {o.hint && <span {...stylex.props(s.segmentHint)}>{o.hint}</span>}
         </button>
       ))}
