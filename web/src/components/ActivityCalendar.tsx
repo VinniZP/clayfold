@@ -183,8 +183,9 @@ const s = stylex.create({
     animationFillMode: "backwards",
     animationDelay: "450ms",
   },
-  haloCurrent: { backgroundColor: `color-mix(in oklab, ${color.chart2} 62%, transparent)` },
-  haloPast: { backgroundColor: `color-mix(in oklab, ${color.chart1} 24%, transparent)` },
+  // Opaque, so the overlapping pieces of one run (a halo per day, a bridge between days) show no seams.
+  haloCurrent: { backgroundColor: `color-mix(in oklab, ${color.chart2} 26%, ${color.surface})` },
+  haloPast: { backgroundColor: `color-mix(in oklab, ${color.chart1} 16%, ${color.surface})` },
   bridgeDown: { inset: "auto", left: -4, right: -4, top: "50%", height: `calc(100% + ${GAP}px)`, borderRadius: 0 },
   bridgeRight: { inset: "auto", top: -4, bottom: -4, left: "50%", width: `calc(100% + ${GAP}px)`, borderRadius: 0 },
   tile: {
@@ -210,7 +211,7 @@ const s = stylex.create({
   hot1: { backgroundColor: `color-mix(in oklab, ${color.chart2} 38%, ${color.chartTrack})` },
   hot2: { backgroundColor: `color-mix(in oklab, ${color.chart2} 62%, ${color.chartTrack})` },
   hot3: { backgroundColor: `color-mix(in oklab, ${color.chart2} 86%, ${color.chartTrack})` },
-  hot4: { backgroundColor: color.chart2, boxShadow: `inset 0 0 0 2px color-mix(in oklab, ${color.chart2} 60%, ${color.text})` },
+  hot4: { backgroundColor: color.chart2, boxShadow: `inset 0 0 0 2px color-mix(in oklab, ${color.chart2} 55%, white)` },
   tileFrozen: { backgroundColor: `color-mix(in oklab, ${color.fig4} 26%, ${color.surface})`, color: color.fig4 },
   tileFuture: { backgroundColor: "transparent", borderWidth: 1.5, borderStyle: "dashed", borderColor: color.border },
   tileToday: {
