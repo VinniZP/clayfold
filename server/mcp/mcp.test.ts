@@ -167,6 +167,20 @@ describe("tools", () => {
     expect(events).toContainEqual({ type: "worked.answered", lessonId: "ls_w", stepId: "st_w", idx: 1, correct: true, text: "Call the model again" });
   });
 
+  test("teachback_finish accepts only a teach-back of the topic in which the learner has said something", async () => {
+    db.query("INSERT INTO lessons (id, topic_id, title, objective, level, node_ids, outline) VALUES ('ls_t', ?, 'L', 'Objective here', 'novice', '[]', '[]')").run(topicId);
+    db.query("INSERT INTO conversations (id, topic_id, kind, lesson_id) VALUES ('cv_t', ?, 'teachback', 'ls_t')").run(topicId);
+    db.query("INSERT INTO teachbacks (id, topic_id, node_id, lesson_id, conversation_id) VALUES ('tb_t', ?, 'git-index', 'ls_t', 'cv_t')").run(topicId);
+
+    const unknown = await call("teachback_finish", { teachbackId: "tb_other" });
+    expect(unknown.isError).toBe(true);
+    expect(unknown.body.error).toContain("not a teach-back of this topic");
+    const silent = await call("teachback_finish", { teachbackId: "tb_t" });
+    expect(silent.isError).toBe(true);
+    expect(silent.body.error).toContain("Explain something first");
+    expect(db.query("SELECT status FROM teachbacks WHERE id = 'tb_t'").get()).toEqual({ status: "talking" });
+  });
+
   test("source_add and source_search", async () => {
     const added = await call("source_add", { url: "https://example.org/git-book", kind: "docs", note: "Git book chapter on the index" });
     expect(added.body).toEqual(expect.objectContaining({ ok: true, title: "Git", headings: expect.arrayContaining(["More"]) }));

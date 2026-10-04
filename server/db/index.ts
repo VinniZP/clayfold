@@ -17,6 +17,42 @@ const ADDED_COLUMNS = [
   ["lessons", "challenge_idx", "INTEGER"],
 ] as const;
 
+// SQLite cannot alter a CHECK constraint: these tables are rebuilt when an older database has other CHECKs than schema.sql.
+const CHECKED_TABLES = ["conversations"] as const;
+
+const checks = (sql: string) => (sql.match(/CHECK \([^()]*\([^()]*\)\)/g) ?? []).join("\n");
+
+function createStatement(table: string): string {
+  const statement = schema.match(new RegExp(`CREATE TABLE IF NOT EXISTS ${table} \\([\\s\\S]*?\\n\\);`))?.[0];
+  if (!statement) throw new Error(`schema.sql defines no table ${table}`);
+  return statement;
+}
+
+function rebuildChangedChecks(db: Database): void {
+  for (const table of CHECKED_TABLES) {
+    const stored = db.query<{ sql: string }, [string]>("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = ?").get(table)!.sql;
+    const wanted = createStatement(table);
+    if (checks(stored) === checks(wanted)) continue;
+    const columns = db
+      .query<{ name: string }, []>(`SELECT name FROM pragma_table_info('${table}')`)
+      .all()
+      .map((c) => c.name)
+      .join(", ");
+    // With foreign keys on, DROP TABLE would delete the rows that reference this table.
+    db.exec("PRAGMA foreign_keys = OFF");
+    try {
+      db.transaction(() => {
+        db.exec(wanted.replace(`CREATE TABLE IF NOT EXISTS ${table} (`, `CREATE TABLE ${table}_rebuilt (`));
+        db.exec(`INSERT INTO ${table}_rebuilt (${columns}) SELECT ${columns} FROM ${table}`);
+        db.exec(`DROP TABLE ${table}`);
+        db.exec(`ALTER TABLE ${table}_rebuilt RENAME TO ${table}`);
+      })();
+    } finally {
+      db.exec("PRAGMA foreign_keys = ON");
+    }
+  }
+}
+
 export function openDb(file: string = paths.db): Database {
   if (file !== ":memory:") mkdirSync(dirname(file), { recursive: true });
   const db = new Database(file, { create: true, strict: true });
@@ -26,6 +62,7 @@ export function openDb(file: string = paths.db): Database {
       db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${type}`);
     }
   }
+  rebuildChangedChecks(db);
   return db;
 }
 

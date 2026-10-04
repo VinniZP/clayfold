@@ -12,7 +12,7 @@ Browser (React, web/) ──HTTP + SSE──▶ Bun + Hono (server/), 127.0.0.1:
                                         ├─ /mcp                   MCP Streamable HTTP, tools in shared/tools.ts
                                         └─ SQLite data/clayfold.sqlite schema in server/db/schema.sql
           spawn per turn ──▶ claude -p … --plugin-dir plugin   (cwd data/workspaces/<slug>)
-          spawn per check ─▶ claude -p … --json-schema (critic, grading, narration and video scripts; no plugin, no tools)
+          spawn per check ─▶ claude -p … --json-schema (critic, grading, teach-back debriefs, narration and video scripts; no plugin, no tools)
           HTTPS ───────────▶ api.elevenlabs.io (narration and video audio, key from the OS credential store)
 ```
 
@@ -60,7 +60,7 @@ claude -p "<text>" --output-format stream-json --verbose --include-partial-messa
 cwd: data/workspaces/<slug>     stdin: /dev/null     env: childEnv({ CLAYFOLD_MCP_URL, CLAYFOLD_TOPIC_ID })
 ```
 
-- The first turn of a conversation starts with the skill command: `/clayfold:onboard <request>`, `/clayfold:goal-plan <request>` for a goal, `/clayfold:lesson-author <nodeId|next>`, `/clayfold:review-session`.
+- The first turn of a conversation starts with the skill command: `/clayfold:onboard <request>`, `/clayfold:goal-plan <request>` for a goal, `/clayfold:lesson-author <nodeId|next>`, `/clayfold:review-session`, `/clayfold:teach-back <context>`.
 - A goal (`topics.kind = 'goal'`) holds no lessons: its onboarding conversation runs with the `goal` tool scope and stores a plan of topics with `goal_plan_set`. Opening a plan entry creates a topic with `goal_id` set and starts its onboarding with the entry's brief. Conversations of such a topic record facts for the goal with `goal_note`; the goal page sends the unseen ones to the goal conversation when the learner asks.
 - Term marks `[[surface|Term]]` in model-written text resolve against `glossary_terms`, filled with `glossary_set`; the step gate rejects a mark whose term the topic glossary lacks (L19), the web Markdown renderer turns marks into terms, and one popover (`web/src/components/TermPopover.tsx`) shows their definitions.
 - A worked-example blank whose answer is in plain words (an open blank with `criteria`, or an older blank with a phrase among its `answers`) is answered through the tutor: the tutor turn carries the line and its criteria, and the tutor records the verdict with `worked_line_record`, which publishes `worked.answered`. Closed blanks keep exact checking in `server/routes/grading.ts`. Tutor turns carry no skill command; the server prepends the tutor context (L17).
@@ -99,6 +99,14 @@ Optional gamification, off by default (`settings.gamification`). Catalogs and co
 - Content built before the meerkat was on gets its rewards from `POST /api/game/backfill` (`server/game/backfill.ts`): one `runJsonPrompt` call (purpose `game`) per course, goal and lesson that lacks them; a lesson's challenge becomes its last practice step with an apply-or-higher item.
 - Rewards go to `rewards`, residents to `residents`. `GET /api/game` (`server/game/view.ts`) works out every condition from learning data, stamps first unlocks, and records habit and rank unlocks in `unlocks`; turning the meerkat on rewards earlier learning at once.
 - The web app keeps the state in `web/src/lib/game.ts` and fetches it only while the meerkat is on. Unlocks show one at a time in `Celebrations`, held back while a lesson page is open until its end.
+
+## Teach-back
+
+- After completing a lesson (every exit-check item attempted), the learner explains one of its nodes to a novice persona (L20): from the lesson's end screen, or per node on the topic page, which also lists the node's earlier teach-backs. `server/routes/teachback.ts` holds the flow; `teachbacks` stores each session with its debrief.
+- `POST /api/topics/:topicId/teachbacks` creates a `teachback` conversation and starts it with `/clayfold:teach-back <context>`. The context holds the key ideas, the misconceptions of the lesson's items on the node, and the glossary terms the steps mark. A key idea is a published explain step whose checks target the node, or a worked_example step; when no explain step targets the node, every explain and worked_example step of the lesson counts. The persona runs with no built-in tools and only `teachback_finish`, so it works from that context alone. The topic page's conversation list leaves teach-back conversations out.
+- The debrief starts when the learner presses Finish (`POST /api/teachbacks/:id/finish`) or the persona calls `teachback_finish` after its follow-ups. A `runJsonPrompt` call with the `grading` role answers two yes/no questions per key idea (mentioned, correct) with the learner's words as evidence and the lesson's statement for every gap. A debrief that names a step outside the key ideas, leaves an idea out, quotes words the learner did not write, or lacks a correction goes back once with the list of problems; a second failure marks the teach-back failed, and Finish retries it. Next steps come from the verdicts: re-read each step with a gap, then the lesson's practice step on the node.
+- The conversation takes no more messages once the debrief starts. A `debriefing` row with no debrief running in this process reads as failed after a restart.
+- `get_learner_state.teachbackGaps` lists the gaps of the latest debriefed teach-back per node; the lesson author turns them into retrieval checks. Teach-backs change no mastery.
 
 ## Narration
 

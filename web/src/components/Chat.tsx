@@ -10,7 +10,7 @@ import { formatUsd } from "../lib/format";
 import { t, useLang } from "../lib/i18n";
 import { useTopicStream } from "../lib/stream";
 import { useResource } from "../lib/useResource";
-import { color, motion, radius } from "../theme/tokens.stylex";
+import { color, font, motion, radius } from "../theme/tokens.stylex";
 import { btn, field, layout, text } from "../theme/ui";
 import { Clay, ErrorBox, Markdown, Skeleton, type ClayName } from "./ui";
 
@@ -147,6 +147,8 @@ const s = stylex.create({
   },
   assistantRow: { display: "flex", alignItems: "flex-start", gap: 10 },
   avatar: { flexShrink: 0, borderRadius: "50%", backgroundColor: color.surface2 },
+  monogram: { display: "grid", placeItems: "center", width: 40, height: 40, backgroundColor: color.butter, color: color.onButter, fontFamily: font.display, fontSize: 18, fontWeight: 800 },
+  closed: { paddingBlock: 12, paddingInline: 16, borderRadius: radius.inner, backgroundColor: color.surface2, color: color.textMuted, fontSize: 14 },
   bubble: { minWidth: 0, paddingBlock: 12, paddingInline: 16, borderRadius: "6px 20px 20px 20px", backgroundColor: color.surface2 },
   plain: { minWidth: 0 },
   ask: { display: "grid", gap: 10, padding: 14, borderRadius: radius.inner, backgroundColor: color.surface2 },
@@ -429,13 +431,16 @@ type Props = {
   placeholder?: string;
   empty?: ReactNode;
   label: string;
-  /** Tutor presentation: avatar next to replies, an illustration while the chat is short. */
-  persona?: { avatar: ClayName; illustration?: ClayName };
+  /** Persona presentation: an avatar next to replies (a clay figure or a letter), an illustration while the chat is short. */
+  persona?: { avatar: ClayName; illustration?: ClayName } | { initial: string };
   /** Sends `text` once each time `nonce` changes, as if the learner typed it. */
   autoSend?: { text: string; nonce: number } | null;
+  /** Shown in place of the composer when the conversation takes no more messages. */
+  closed?: string | null;
+  onStatus?: (status: { running: boolean; userMessages: number }) => void;
 };
 
-export function Chat({ conversationId, topicId, lessonId = null, onSend, placeholder = t("chat.placeholder"), empty, label, persona, autoSend }: Props) {
+export function Chat({ conversationId, topicId, lessonId = null, onSend, placeholder = t("chat.placeholder"), empty, label, persona, autoSend, closed, onStatus }: Props) {
   useLang();
   const [state, dispatch] = useReducer(reducer, { messages: [], running: false, runningSince: null, currentActivity: null, cost: null, retry: null });
   const [draft, setDraft] = useState("");
@@ -512,6 +517,12 @@ export function Chat({ conversationId, topicId, lessonId = null, onSend, placeho
   const freeTextAllowed = !pendingAsk || pendingAsk.allowFree !== false;
   const last = state.messages[state.messages.length - 1];
   const spoken = state.messages.filter((m) => m.role === "user" || m.role === "assistant").length;
+  const userMessages = state.messages.filter((m) => m.role === "user").length;
+  const illustration = persona && "illustration" in persona ? persona.illustration : undefined;
+
+  const statusRef = useRef(onStatus);
+  statusRef.current = onStatus;
+  useEffect(() => statusRef.current?.({ running: state.running, userMessages }), [state.running, userMessages]);
 
   // Group consecutive activity lines into one compact list.
   const blocks: (Msg | Msg[])[] = [];
@@ -539,9 +550,9 @@ export function Chat({ conversationId, topicId, lessonId = null, onSend, placeho
         ) : conv.error ? (
           <ErrorBox error={conv.error} onRetry={conv.reload} title={t("chat.loadFailed")} />
         ) : state.messages.length === 0 && !state.running ? (
-          <div {...stylex.props(s.empty, persona?.illustration && s.emptyGroup)}>
+          <div {...stylex.props(s.empty, illustration && s.emptyGroup)}>
             {empty}
-            {persona?.illustration && <Clay name={persona.illustration} size={200} xstyle={s.illustration} />}
+            {illustration && <Clay name={illustration} size={200} xstyle={s.illustration} />}
           </div>
         ) : (
           blocks.map((b, i) =>
@@ -554,7 +565,13 @@ export function Chat({ conversationId, topicId, lessonId = null, onSend, placeho
             ) : b.role === "assistant" ? (
               persona ? (
                 <div key={b.id} {...stylex.props(s.assistantRow)}>
-                  <Clay name={persona.avatar} size={40} xstyle={s.avatar} />
+                  {"initial" in persona ? (
+                    <span aria-hidden="true" {...stylex.props(s.avatar, s.monogram)}>
+                      {persona.initial}
+                    </span>
+                  ) : (
+                    <Clay name={persona.avatar} size={40} xstyle={s.avatar} />
+                  )}
                   <div {...stylex.props(s.bubble)}>
                     <Markdown src={b.text} />
                   </div>
@@ -578,7 +595,7 @@ export function Chat({ conversationId, topicId, lessonId = null, onSend, placeho
             <Check size={14} aria-hidden="true" /> {t("chat.doneCost", { cost: formatUsd(state.cost) })}
           </p>
         )}
-        {persona?.illustration && spoken > 0 && spoken < 3 && <Clay name={persona.illustration} size={180} xstyle={s.illustration} />}
+        {illustration && spoken > 0 && spoken < 3 && <Clay name={illustration} size={180} xstyle={s.illustration} />}
       </div>
 
       {state.running && (
@@ -596,39 +613,45 @@ export function Chat({ conversationId, topicId, lessonId = null, onSend, placeho
         </p>
       )}
 
-      <form
-        onSubmit={(e) => {
-          e.preventDefault();
-          if (state.running || !freeTextAllowed) return;
-          void send(draft);
-          setDraft("");
-        }}
-        onFocus={() => setComposerFocus(true)}
-        onBlur={() => setComposerFocus(false)}
-        {...stylex.props(s.composer, composerFocus && s.composerFocus)}
-      >
-        <label htmlFor={inputId} {...stylex.props(layout.srOnly)}>
-          {t("chat.message")}
-        </label>
-        <textarea
-          id={inputId}
-          rows={1}
-          value={draft}
-          disabled={!freeTextAllowed}
-          placeholder={freeTextAllowed ? placeholder : t("chat.pickOption")}
-          onChange={(e) => setDraft(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
-              e.preventDefault();
-              e.currentTarget.form?.requestSubmit();
-            }
+      {closed ? (
+        <p role="status" {...stylex.props(s.closed)}>
+          {closed}
+        </p>
+      ) : (
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (state.running || !freeTextAllowed) return;
+            void send(draft);
+            setDraft("");
           }}
-          {...stylex.props(s.textarea)}
-        />
-        <button type="submit" aria-label={t("chat.send")} disabled={!draft.trim() || !freeTextAllowed || state.running} {...stylex.props(btn.base, btn.icon, btn.iconSolid)}>
-          <SendHorizontal size={17} aria-hidden="true" />
-        </button>
-      </form>
+          onFocus={() => setComposerFocus(true)}
+          onBlur={() => setComposerFocus(false)}
+          {...stylex.props(s.composer, composerFocus && s.composerFocus)}
+        >
+          <label htmlFor={inputId} {...stylex.props(layout.srOnly)}>
+            {t("chat.message")}
+          </label>
+          <textarea
+            id={inputId}
+            rows={1}
+            value={draft}
+            disabled={!freeTextAllowed}
+            placeholder={freeTextAllowed ? placeholder : t("chat.pickOption")}
+            onChange={(e) => setDraft(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
+                e.preventDefault();
+                e.currentTarget.form?.requestSubmit();
+              }
+            }}
+            {...stylex.props(s.textarea)}
+          />
+          <button type="submit" aria-label={t("chat.send")} disabled={!draft.trim() || !freeTextAllowed || state.running} {...stylex.props(btn.base, btn.icon, btn.iconSolid)}>
+            <SendHorizontal size={17} aria-hidden="true" />
+          </button>
+        </form>
+      )}
       {pendingAsk?.options && pendingAsk.options.length > 0 && (
         <p {...stylex.props(layout.srOnly)}>{t("chat.optionsAbove", { count: pendingAsk.options.length })}</p>
       )}

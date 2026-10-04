@@ -17,6 +17,7 @@ import { askLearner, getLearnerState } from "./tools/learner";
 import { lessonFinish, lessonPlan, stepSubmit } from "./tools/lessons";
 import { itemReplace } from "./tools/replace";
 import { sourceAdd, sourceSearch } from "./tools/sources";
+import { teachbackFinish } from "./tools/teachback";
 
 export const TOOLS: ToolDef<any>[] = [
   askLearner,
@@ -32,6 +33,7 @@ export const TOOLS: ToolDef<any>[] = [
   goalNote,
   glossarySet,
   workedLineRecord,
+  teachbackFinish,
   getLearnerState,
   itemReplace,
 ];

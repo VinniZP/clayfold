@@ -15,6 +15,7 @@ import { MeerkatPage } from "./pages/Meerkat";
 import { MemoryIndex, MemoryPage } from "./pages/Memory";
 import { ReviewPage } from "./pages/Review";
 import { SettingsPage } from "./pages/Settings";
+import { TeachBackPage } from "./pages/TeachBack";
 import { TopicPage, TopicsPage } from "./pages/Topic";
 import "overlayscrollbars/overlayscrollbars.css";
 import "./styles/global.css";
@@ -65,6 +66,7 @@ const router = createBrowserRouter([
       { path: "/topics", element: <TopicsPage /> },
       { path: "/topics/:topicId", element: <TopicPage /> },
       { path: "/lessons/:lessonId", element: <LessonPage /> },
+      { path: "/teach-back/:teachbackId", element: <TeachBackPage /> },
       { path: "/review", element: <ReviewPage /> },
       { path: "/memory", element: <MemoryIndex /> },
       { path: "/memory/:topicId", element: <MemoryPage /> },
