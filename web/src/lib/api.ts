@@ -1,5 +1,6 @@
 import type {
   ActivityDay,
+  AnkiFormat,
   AttemptRequest,
   AttemptResponse,
   AuditEntry,
@@ -50,10 +51,9 @@ export class ApiFailure extends Error {
   }
 }
 
-async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
-  let res: Response;
+async function send(method: string, path: string, body?: unknown): Promise<Response> {
   try {
-    res = await fetch(path, {
+    return await fetch(path, {
       method,
       headers: body === undefined ? undefined : { "content-type": "application/json" },
       body: body === undefined ? undefined : JSON.stringify(body),
@@ -61,23 +61,68 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
   } catch {
     throw new ApiFailure(t("error.offline"), 0);
   }
-  const text = await res.text();
-  let data: unknown = undefined;
-  if (text) {
+}
+
+function parseJson(text: string): unknown {
+  if (!text) return undefined;
+  try {
+    return JSON.parse(text);
+  } catch {
+    return undefined;
+  }
+}
+
+function failure(res: Response, data: unknown): ApiFailure {
+  const message =
+    data && typeof data === "object" && "error" in data && typeof data.error === "string"
+      ? data.error
+      : t("error.server", { status: res.status });
+  return new ApiFailure(message, res.status);
+}
+
+async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
+  const res = await send(method, path, body);
+  const data = parseJson(await res.text());
+  if (!res.ok) throw failure(res, data);
+  return data as T;
+}
+
+export type DownloadedFile = { blob: Blob; name: string };
+
+/** The file name from Content-Disposition, preferring the UTF-8 `filename*`. */
+function fileName(res: Response, path: string): string {
+  const header = res.headers.get("content-disposition") ?? "";
+  const utf8 = /filename\*=UTF-8''([^;]+)/i.exec(header)?.[1];
+  if (utf8) {
     try {
-      data = JSON.parse(text);
+      return decodeURIComponent(utf8);
     } catch {
-      data = undefined;
+      // A malformed encoding falls back to the ASCII name.
     }
   }
-  if (!res.ok) {
-    const message =
-      data && typeof data === "object" && "error" in data && typeof data.error === "string"
-        ? data.error
-        : t("error.server", { status: res.status });
-    throw new ApiFailure(message, res.status);
-  }
-  return data as T;
+  return /filename="([^"]+)"/i.exec(header)?.[1] ?? path.split("?")[0]!.split("/").pop()!;
+}
+
+/** GET of an attachment route; a failure arrives as ApiFailure, as from the JSON routes. */
+async function file(path: string): Promise<DownloadedFile> {
+  const res = await send("GET", path);
+  if (!res.ok) throw failure(res, parseJson(await res.text()));
+  return { blob: await res.blob(), name: fileName(res, path) };
+}
+
+// Revoking the object URL right after the click can cancel the download in some browsers.
+const REVOKE_AFTER_MS = 40_000;
+
+/** Hands the file to the browser's download. */
+export function saveFile({ blob, name }: DownloadedFile) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = name;
+  document.body.append(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), REVOKE_AFTER_MS);
 }
 
 const get = <T>(path: string) => request<T>("GET", path);
@@ -138,6 +183,10 @@ export const api = {
   videoExport: (lessonId: string) => get<VideoExportView>(`/api/lessons/${e(lessonId)}/video/export`),
   startVideoExport: (lessonId: string) => post<VideoExportView>(`/api/lessons/${e(lessonId)}/video/export`),
   narrate: (stepId: string) => post<NarrationView>(`/api/steps/${e(stepId)}/narration`),
+
+  /** Accepted cards of the topic, or of every topic when topicId is null. */
+  ankiExport: (topicId: string | null, format: AnkiFormat) => file(`/api/export/anki?format=${format}${topicId ? `&topicId=${e(topicId)}` : ""}`),
+  courseBook: (topicId: string) => file(`/api/topics/${e(topicId)}/book`),
 
   auditSample: (n = 10) => get<AuditEntry[]>(`/api/audit/sample?n=${n}`),
   audit: (itemId: string, body: AuditVerdict) => post<unknown>(`/api/audit/${e(itemId)}`, body),

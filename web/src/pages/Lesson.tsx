@@ -1,5 +1,5 @@
 import * as stylex from "@stylexjs/stylex";
-import { ArrowLeft, ArrowRight, BookOpen, Check, CircleSlash, Clapperboard, Copy, MessageCircle, NotebookText, PanelRightClose, RotateCcw, ShieldCheck, TriangleAlert } from "lucide-react";
+import { ArrowLeft, ArrowRight, BookOpen, Check, CircleSlash, Clapperboard, Copy, MessageCircle, NotebookText, PanelRightClose, Printer, RotateCcw, ShieldCheck, TriangleAlert } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { Link, useParams, useSearchParams } from "react-router";
 import type { LessonView } from "@shared/api";
@@ -22,6 +22,7 @@ import { formatDateTime, kindLabel, levelLabel } from "../lib/format";
 import { useCelebrationHold } from "../lib/game";
 import { t, useLang } from "../lib/i18n";
 import { useOverlayScroll } from "../lib/overlayScroll";
+import { printPage } from "../lib/print";
 import { useStreamStatus, useTopicStream } from "../lib/stream";
 import { useGlossaryScope } from "../lib/glossary";
 import { useResource } from "../lib/useResource";
@@ -64,7 +65,8 @@ const STATUS_TEXT: Record<StepState, MessageKey> = {
 };
 
 const s = stylex.create({
-  tabs: { display: "flex", flexWrap: "wrap", gap: 10, marginBottom: 4 },
+  tabsRow: { display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: 4 },
+  tabs: { display: "flex", flexWrap: "wrap", gap: 10 },
   tab: {
     display: "inline-flex",
     alignItems: "center",
@@ -479,30 +481,37 @@ export function LessonPage() {
   );
 
   const tabs = (
-    <div role="tablist" aria-label={t("lesson.sections")} {...stylex.props(s.tabs)}>
-      {(
-        [
-          ["lesson", "lesson.title", <BookOpen key="i" size={20} aria-hidden="true" />],
-          ["video", "lesson.tab.video", <Clapperboard key="i" size={20} aria-hidden="true" />],
-          ["cards", "lesson.tab.cards", <Copy key="i" size={20} aria-hidden="true" />],
-          ["notes", "lesson.tab.notes", <NotebookText key="i" size={20} aria-hidden="true" />],
-        ] as const
-      )
-        .filter(([key]) => key !== "video" || videoOn)
-        .map(([key, label, icon]) => (
-        <button
-          key={key}
-          type="button"
-          role="tab"
-          id={`tab-${key}`}
-          aria-selected={tab === key}
-          aria-controls={`panel-${key}`}
-          onClick={() => setTab(key)}
-          {...stylex.props(s.tab, tab === key && s.tabOn)}
-        >
-          {icon} {t(label)}
+    <div data-print="hide" {...stylex.props(s.tabsRow)}>
+      <div role="tablist" aria-label={t("lesson.sections")} {...stylex.props(s.tabs)}>
+        {(
+          [
+            ["lesson", "lesson.title", <BookOpen key="i" size={20} aria-hidden="true" />],
+            ["video", "lesson.tab.video", <Clapperboard key="i" size={20} aria-hidden="true" />],
+            ["cards", "lesson.tab.cards", <Copy key="i" size={20} aria-hidden="true" />],
+            ["notes", "lesson.tab.notes", <NotebookText key="i" size={20} aria-hidden="true" />],
+          ] as const
+        )
+          .filter(([key]) => key !== "video" || videoOn)
+          .map(([key, label, icon]) => (
+          <button
+            key={key}
+            type="button"
+            role="tab"
+            id={`tab-${key}`}
+            aria-selected={tab === key}
+            aria-controls={`panel-${key}`}
+            onClick={() => setTab(key)}
+            {...stylex.props(s.tab, tab === key && s.tabOn)}
+          >
+            {icon} {t(label)}
+          </button>
+        ))}
+      </div>
+      {tab === "lesson" && (
+        <button type="button" onClick={() => void printPage()} {...stylex.props(btn.base, btn.ghost)}>
+          <Printer size={18} aria-hidden="true" /> {t("lesson.print")}
         </button>
-      ))}
+      )}
     </div>
   );
 
@@ -551,8 +560,8 @@ export function LessonPage() {
     <>
       {tabs}
       {stale}
-      <div role="tabpanel" id="panel-lesson" aria-labelledby="tab-lesson" {...stylex.props(s.grid, showTutor && docked && s.gridDocked)}>
-        <aside ref={outlineRef} aria-label={t("lesson.outline")} {...stylex.props(card.base, s.outline)}>
+      <div role="tabpanel" id="panel-lesson" data-print="flow" aria-labelledby="tab-lesson" {...stylex.props(s.grid, showTutor && docked && s.gridDocked)}>
+        <aside ref={outlineRef} data-print="hide" aria-label={t("lesson.outline")} {...stylex.props(card.base, s.outline)}>
           <p {...stylex.props(s.outlineTitle)}>{topicTitle ?? t("lesson.plan")}</p>
           <p {...stylex.props(s.outlineMeta, text.small, text.muted, text.tnum)}>
             {t("lesson.outlineMeta", { level: levelLabel(v.lesson.level), ready: published, total })}
@@ -570,9 +579,9 @@ export function LessonPage() {
           </nav>
         </aside>
 
-        <section aria-label={t("lesson.step")} {...stylex.props(card.base, s.main)}>
+        <section aria-label={t("lesson.step")} data-print="sheet" {...stylex.props(card.base, s.main)}>
           {v.lesson.status === "failed" && (
-            <div role="alert" {...stylex.props(banner.base, banner.danger, s.interrupted)}>
+            <div role="alert" data-print="hide" {...stylex.props(banner.base, banner.danger, s.interrupted)}>
               <TriangleAlert size={16} aria-hidden="true" />
               <span {...stylex.props(s.interruptedText)}>{resumeError ? t("lesson.resumeFailed", { error: resumeError }) : t("lesson.interrupted")}</span>
               <button type="button" disabled={resuming} onClick={resume} {...stylex.props(btn.base, btn.danger, btn.sm)}>
@@ -588,9 +597,11 @@ export function LessonPage() {
           ) : (
             <>
               {v.lesson.status !== "failed" && status.some((st) => st === "pending" || st === "checking") && (
-                <GenProgress outline={outline} status={status} checkingSince={checkingSince} rejection={rejection} />
+                <div data-print="hide">
+                  <GenProgress outline={outline} status={status} checkingSince={checkingSince} rejection={rejection} />
+                </div>
               )}
-              <div {...stylex.props(s.progressRow)}>
+              <div data-print="hide" {...stylex.props(s.progressRow)}>
                 <span {...stylex.props(text.small, text.muted, text.tnum)}>{isEnd ? t("lesson.summaryShort") : t("lesson.stepOf", { n: pos + 1, total })}</span>
                 <div {...stylex.props(s.progressBar)}>
                   <Progress value={done} max={total} label={t("lesson.stepsDone")} />
@@ -608,9 +619,17 @@ export function LessonPage() {
               </div>
 
               {Object.values(steps).map((st) => (
-                <div key={st.id} hidden={st.idx !== pos || isEnd}>
-                  {st.idx === v.challengeIdx && <ChallengeBanner />}
-                  {st.idx === 0 && <LessonReward lessonId={lessonId} />}
+                <div key={st.id} data-print-step="" hidden={st.idx !== pos || isEnd}>
+                  {st.idx === v.challengeIdx && (
+                    <div data-print="hide">
+                      <ChallengeBanner />
+                    </div>
+                  )}
+                  {st.idx === 0 && (
+                    <div data-print="hide">
+                      <LessonReward lessonId={lessonId} />
+                    </div>
+                  )}
                   <StepView
                     step={st}
                     topicId={topicId}
@@ -626,7 +645,7 @@ export function LessonPage() {
               ))}
 
               {!isEnd && !current && (
-                <div id="step-placeholder" tabIndex={-1} role="status" {...stylex.props(s.wait)}>
+                <div id="step-placeholder" tabIndex={-1} role="status" data-print="hide" {...stylex.props(s.wait)}>
                   {status[pos] === "dropped" ? (
                     <>
                       <CircleSlash size={24} aria-hidden="true" />
@@ -648,7 +667,7 @@ export function LessonPage() {
                 <LessonEnd summary={summary} generating={v.lesson.status === "generating" && !summary} checkResults={checkResults} topicId={topicId} lessonId={lessonId} />
               )}
 
-              <nav aria-label={t("lesson.stepNav")} {...stylex.props(s.nav)}>
+              <nav aria-label={t("lesson.stepNav")} data-print="hide" {...stylex.props(s.nav)}>
                 <button type="button" disabled={prevPos < 0} onClick={() => go(prevPos)} {...stylex.props(btn.base, btn.ghost, s.navBtn)}>
                   <ArrowLeft size={17} aria-hidden="true" /> {t("lesson.back")}
                 </button>
@@ -663,7 +682,7 @@ export function LessonPage() {
         </section>
 
         {docked && inCheck && (
-          <aside aria-label={t("lesson.tutor")} {...stylex.props(card.base, s.checkNote)}>
+          <aside aria-label={t("lesson.tutor")} data-print="hide" {...stylex.props(card.base, s.checkNote)}>
             <Clay name="tutor-reading" size={160} />
             <p {...stylex.props(text.h3)}>{t("lesson.checkNoTutor")}</p>
             <p {...stylex.props(text.small, text.muted)}>{t("lesson.checkNoTutorBody")}</p>
@@ -671,7 +690,7 @@ export function LessonPage() {
         )}
 
         {showTutor && topicId && (
-          <aside aria-label={t("lesson.aiTutor")} {...stylex.props(card.base, s.tutor, !docked && s.tutorFloating, !docked && shadow.pop)}>
+          <aside aria-label={t("lesson.aiTutor")} data-print="hide" {...stylex.props(card.base, s.tutor, !docked && s.tutorFloating, !docked && shadow.pop)}>
             <div {...stylex.props(s.tutorHead)}>
               <Clay name="tutor-avatar" size={56} xstyle={s.tutorAvatar} />
               <h2 {...stylex.props(s.tutorName)}>{t("lesson.aiTutor")}</h2>
@@ -731,7 +750,9 @@ export function LessonPage() {
           </aside>
         )}
       </div>
-      <LessonCompanion topicId={topicId} step={pos} total={total} />
+      <div data-print="hide">
+        <LessonCompanion topicId={topicId} step={pos} total={total} />
+      </div>
     </>
   );
 }

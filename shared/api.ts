@@ -470,6 +470,18 @@ export type VideoExportView =
   | { status: "ready"; url: string; sizeBytes: number }
   | { status: "failed"; error: string };
 
+// Take-away files: attachments with a Content-Disposition filename; errors are ApiError JSON.
+// GET /api/export/anki?format=apkg|txt&topicId= -> the accepted (active) cards of the topic, or of every topic
+// without topicId (404 when there are none). One deck per topic, tags `clayfold node::<nodeId> lens::<lens>`, the
+// card id as note GUID, so importing a newer export updates the notes. apkg carries its own note types and imports
+// into Anki in any language; txt is Anki's text import (2.1.54+) and needs the stock note types named Basic and Cloze.
+// GET /api/topics/:topicId/book -> text/markdown: the course book of the topic's finished lessons. It holds what the
+// lesson pages show (L7): an item's answer and solution only once ItemState carries them, a faded worked-example
+// line only once answered.
+
+export const ANKI_FORMATS = ["apkg", "txt"] as const;
+export type AnkiFormat = (typeof ANKI_FORMATS)[number];
+
 // Claude Code mode: GET /api/system -> SystemView
 // The running server and every `claude` process it controls.
 

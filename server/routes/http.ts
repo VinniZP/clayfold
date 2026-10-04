@@ -19,4 +19,15 @@ export async function readBody<S extends z.ZodType>(c: Context, schema: S): Prom
   return parsed.data;
 }
 
+/**
+ * Content-Disposition for a download named `name.ext`: `filename` carries an ASCII fallback built from
+ * `asciiName`, and `filename*` the UTF-8 name, percent-encoded as RFC 5987 attr-chars.
+ */
+export function attachment(name: string, asciiName: string, ext: string): string {
+  const utf8 = `${name.replace(/[\\/:*?"<>|\p{Cc}]+/gu, " ").replace(/\s+/g, " ").trim() || asciiName}.${ext}`;
+  const ascii = `${asciiName.replace(/[^\w.-]+/g, "-") || "download"}.${ext}`;
+  const encoded = encodeURIComponent(utf8).replace(/['()*]/g, (c) => `%${c.charCodeAt(0).toString(16).toUpperCase()}`);
+  return `attachment; filename="${ascii}"; filename*=UTF-8''${encoded}`;
+}
+
 export const parseJson = <T>(text: string | null): T | null => (text === null ? null : (JSON.parse(text) as T));

@@ -159,6 +159,34 @@
     background: none;
   }
 
+  /* The course book (pages/Book.tsx): one document, so its headings step down in size */
+  .book .prose h1 {
+    font-size: 2em;
+  }
+
+  .book .prose h2 {
+    font-size: 1.5em;
+  }
+
+  .book .prose h3 {
+    font-size: 1.25em;
+  }
+
+  .book .prose h4 {
+    font-family: var(--font-display);
+    font-size: 1.05em;
+    font-weight: 700;
+  }
+
+  .book .prose :is(h2, h3, h4):not(:first-child) {
+    margin-top: 1.6em;
+  }
+
+  .book .prose svg {
+    max-width: min(100%, 640px);
+    height: auto;
+  }
+
   /* A glossary term mark (lib/markdown.ts); components/TermPopover.tsx shows its definition */
   .term {
     border-radius: 4px;
@@ -374,4 +402,96 @@
 textarea {
   scrollbar-width: thin;
   scrollbar-color: var(--text-muted) transparent;
+}
+
+/*
+ * Print (lib/print.ts switches to the light palette first). Unlayered, so it wins over StyleX and the base layer;
+ * !important where it has to beat the unlayered overlayscrollbars rules that fix the page height.
+ * data-print="hide" drops app chrome, "flow" turns a layout grid into plain flow, "sheet" takes the card
+ * look off the printed document, and every lesson step (data-print-step) starts a new page.
+ */
+@media print {
+  @page {
+    margin: 16mm 14mm;
+  }
+
+  html,
+  body {
+    height: auto !important;
+    overflow: visible !important;
+    background: #fff;
+    color-scheme: light;
+  }
+
+  [data-overlayscrollbars],
+  [data-overlayscrollbars-viewport],
+  [data-overlayscrollbars-padding] {
+    height: auto !important;
+    max-height: none !important;
+    overflow: visible !important;
+  }
+
+  .os-scrollbar,
+  [data-print="hide"],
+  #main button,
+  #main [aria-live]:empty,
+  img[src^="/clay-web/"] {
+    display: none !important;
+  }
+
+  [data-app-root] {
+    min-height: 0;
+    padding: 0;
+    background: none;
+  }
+
+  [data-print="flow"] {
+    display: block;
+    max-width: none;
+    min-height: 0;
+    border-radius: 0;
+    background: none;
+  }
+
+  [data-print="sheet"] {
+    min-height: 0;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: none;
+  }
+
+  #main {
+    padding: 0;
+  }
+
+  *,
+  *::before,
+  *::after {
+    box-shadow: none;
+    text-shadow: none;
+  }
+
+  [data-print-step][hidden] {
+    display: block;
+  }
+
+  [data-print-step] ~ [data-print-step] {
+    break-before: page;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4 {
+    break-after: avoid;
+  }
+
+  figure,
+  pre,
+  tr,
+  li,
+  blockquote {
+    break-inside: avoid;
+  }
 }

@@ -10,7 +10,8 @@ import { t } from "../i18n";
 import { elevenLabsKey, type SecretStore } from "../secrets";
 import { config } from "../config";
 import { ExportBusyError, exportFile, exportView, removeExports, startExport } from "../video-export";
-import { fail } from "./http";
+import { slugify } from "../workspace";
+import { attachment, fail } from "./http";
 import { bodyBlocks, MARKUP } from "./narration";
 import { narrationSettings, videoEnabled } from "./settings";
 
@@ -590,8 +591,6 @@ function readyVideo(lessonId: string, database: Database = db()): { version: str
   return row ? { version: row.created_at, title: row.title } : null;
 }
 
-const attachment = (title: string, ext: string) => `attachment; filename*=UTF-8''${encodeURIComponent(`${title.replace(/[\\/:*?"<>|]+/g, " ").trim() || "video"}.${ext}`)}`;
-
 video.get("/lessons/:lessonId/video/export", (c) => {
   const lessonId = c.req.param("lessonId");
   return c.json(exportView(lessonId, readyVideo(lessonId)?.version ?? null));
@@ -615,5 +614,5 @@ video.get("/lessons/:lessonId/video/export/file", (c) => {
   const ready = readyVideo(lessonId);
   const file = ready && exportFile(lessonId, ready.version);
   if (!ready || !file) fail(404, "no rendered video for this lesson");
-  return new Response(Bun.file(file), { headers: { "content-type": "video/mp4", "content-disposition": attachment(ready.title, "mp4") } });
+  return new Response(Bun.file(file), { headers: { "content-type": "video/mp4", "content-disposition": attachment(ready.title, slugify(ready.title), "mp4") } });
 });

@@ -564,7 +564,7 @@ function StepTools({
   };
 
   return (
-    <footer {...stylex.props(s.tools)}>
+    <footer data-print="hide" {...stylex.props(s.tools)}>
       <div {...stylex.props(layout.row)}>
         <button
           type="button"
