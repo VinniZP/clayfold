@@ -16,6 +16,9 @@ export default defineConfig({
   define: { __MOCK__: JSON.stringify(mock) },
   server: {
     port: 5173,
+    // StyleX resolves breakpoint constants only once tokens.stylex.ts is compiled; without a warm-up the first
+    // CSS request of a cold dev server can come earlier and fail with "Invalid empty selector".
+    warmup: { clientFiles: ["./src/theme/tokens.stylex.ts", "./src/main.tsx"] },
     proxy: mock ? undefined : { "/api": { target: server }, "/mcp": { target: server } },
   },
   build: { outDir, emptyOutDir: true, chunkSizeWarningLimit: 1500 },
