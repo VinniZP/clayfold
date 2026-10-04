@@ -1,6 +1,6 @@
 import type { Database } from "bun:sqlite";
 import { Hono } from "hono";
-import type { ActivityDay, WeakSpot } from "../../shared/api";
+import { CONFIDENCE_LEVELS, type ActivityDay, type CalibrationLevel, type CalibrationView, type Confidence, type WeakSpot } from "../../shared/api";
 import type { Card, Item } from "../../shared/schemas";
 import { db } from "../db";
 import { LEECH_LAPSES } from "../review/signals";
@@ -100,9 +100,34 @@ export function weakSpots(topicId: string | null, limit: number, at: Date = new 
     .map((r) => r.spot);
 }
 
+/** Rated, graded answers per confidence level, overall and per topic (L20); prequestions and give-ups are left out. */
+export function calibration(database: Database = db()): CalibrationView {
+  const rows = database
+    .query<{ topic_id: string; title: string; confidence: Confidence; attempts: number; correct: number }, []>(
+      `SELECT i.topic_id, t.title, a.confidence, count(*) AS attempts, sum(a.correct) AS correct
+       FROM attempts a JOIN items i ON i.id = a.item_id JOIN topics t ON t.id = i.topic_id
+       WHERE a.confidence IS NOT NULL AND a.correct IS NOT NULL AND a.gave_up = 0 AND i.role != 'activate'
+       GROUP BY i.topic_id, a.confidence`,
+    )
+    .all();
+  const levels = (of: typeof rows): CalibrationLevel[] =>
+    CONFIDENCE_LEVELS.map((confidence) => {
+      const at = of.filter((r) => r.confidence === confidence);
+      return { confidence, attempts: at.reduce((n, r) => n + r.attempts, 0), correct: at.reduce((n, r) => n + r.correct, 0) };
+    });
+  const total = (of: typeof rows) => of.reduce((n, r) => n + r.attempts, 0);
+  const byTopic = new Map<string, typeof rows>();
+  for (const r of rows) byTopic.set(r.topic_id, [...(byTopic.get(r.topic_id) ?? []), r]);
+  const topics = [...byTopic.values()]
+    .sort((a, b) => total(b) - total(a))
+    .map((of) => ({ topicId: of[0]!.topic_id, title: of[0]!.title, levels: levels(of) }));
+  return { overall: levels(rows), topics };
+}
+
 const clampInt = (raw: string | undefined, fallback: number, max: number) => Math.min(Math.max(Math.trunc(Number(raw ?? fallback)) || fallback, 1), max);
 
 export const stats = new Hono();
 
 stats.get("/stats/activity", (c) => c.json(activity(clampInt(c.req.query("days"), 7, 366), c.req.query("topicId") || null)));
+stats.get("/stats/calibration", (c) => c.json(calibration()));
 stats.get("/weak", (c) => c.json(weakSpots(c.req.query("topicId") || null, clampInt(c.req.query("limit"), 10, 100))));

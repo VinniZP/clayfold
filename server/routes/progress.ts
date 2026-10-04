@@ -1,11 +1,11 @@
 import type { Database } from "bun:sqlite";
-import type { ItemState, LessonView } from "../../shared/api";
+import type { Confidence, ItemState, LessonView } from "../../shared/api";
 import type { Item } from "../../shared/schemas";
 import { db } from "../db";
 import { correctAnswerText, genericFeedback } from "./grading";
 import type { ItemRow } from "./public";
 
-type AttemptRow = { item_id: string; correct: number | null; chosen_option: number | null; gave_up: number };
+type AttemptRow = { item_id: string; correct: number | null; chosen_option: number | null; gave_up: number; confidence: Confidence | null };
 
 /** Progress on every item of the lesson's published steps; keys leave the server only per L7. */
 export function lessonItemStates(lessonId: string, database: Database = db()): Record<string, ItemState> {
@@ -16,7 +16,7 @@ export function lessonItemStates(lessonId: string, database: Database = db()): R
     )
     .all(lessonId);
   const attemptsOf = database.query<AttemptRow, [string]>(
-    "SELECT item_id, correct, chosen_option, gave_up FROM attempts WHERE item_id = ? ORDER BY created_at, rowid",
+    "SELECT item_id, correct, chosen_option, gave_up, confidence FROM attempts WHERE item_id = ? ORDER BY created_at, rowid",
   );
   const maxHint = database.query<{ level: number }, [string]>("SELECT coalesce(max(level), 0) AS level FROM hint_views WHERE item_id = ?");
 
@@ -41,6 +41,7 @@ export function lessonItemStates(lessonId: string, database: Database = db()): R
       gaveUp,
       hints: item.hints.slice(0, maxHint.get(row.id)!.level),
       lastFeedback,
+      lastConfidence: last && last.gave_up === 0 ? last.confidence : null,
       ...(reveal ? { solution: item.solution, correctAnswer: correctAnswerText(item) } : {}),
     };
   }

@@ -162,11 +162,12 @@ export async function submitAttempt(
   }
 
   const hintsUsed = Math.max(Math.trunc(req.hintsUsed) || 0, openHintLevel(itemId, database));
+  const confidence = row.role === "activate" ? null : (req.confidence ?? null);
   const attemptId = newId("at");
   database
     .query(
-      `INSERT INTO attempts (id, item_id, answer, correct, chosen_option, misconception, hints_used, gave_up, duration_ms, context, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?)`,
+      `INSERT INTO attempts (id, item_id, answer, correct, chosen_option, misconception, hints_used, gave_up, duration_ms, context, confidence, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?)`,
     )
     .run(
       attemptId,
@@ -178,6 +179,7 @@ export async function submitAttempt(
       hintsUsed,
       Number.isFinite(req.durationMs) ? Math.round(req.durationMs) : null,
       req.context,
+      confidence,
       at.toISOString(),
     );
   updateMasteryAfterAttempt(attemptId, database);
@@ -188,7 +190,7 @@ export async function submitAttempt(
 
   // L2: prequestions are ungraded for the learner and show the answer at once.
   if (row.role === "activate") {
-    return { attemptId, correct: null, feedback, solution: item.solution, correctAnswer: correctAnswerText(item), attemptNo, offerTutor: false };
+    return { attemptId, correct: null, confidence, feedback, solution: item.solution, correctAnswer: correctAnswerText(item), attemptNo, offerTutor: false };
   }
   let offerTutor = false;
   if (!grade.correct && (row.role === "practice" || row.role === "explain_check") && req.context !== "review") {
@@ -202,6 +204,7 @@ export async function submitAttempt(
   return {
     attemptId,
     correct: grade.correct,
+    confidence,
     feedback,
     ...(grade.correct ? { solution: item.solution, correctAnswer: correctAnswerText(item) } : {}),
     attemptNo,

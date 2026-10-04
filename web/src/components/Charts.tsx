@@ -1,7 +1,7 @@
 import * as stylex from "@stylexjs/stylex";
 import { useId } from "react";
 import { bp, color, font, radius } from "../theme/tokens.stylex";
-import { text } from "../theme/ui";
+import { layout, text } from "../theme/ui";
 
 const s = stylex.create({
   bars: { display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: { default: 10, [bp.phone]: 6 }, alignItems: "end" },
@@ -47,7 +47,47 @@ const s = stylex.create({
   weekDay: { display: "grid", justifyItems: "center", gap: 6, fontSize: 12.5, color: color.textMuted },
   weekDot: { width: 22, height: 22, borderRadius: radius.pill, borderWidth: 1.5, borderStyle: "solid", borderColor: color.borderStrong },
   weekDotOn: { backgroundColor: color.chart2, borderColor: color.chart2 },
+  shares: { display: "grid", gap: 12, margin: 0, padding: 0, listStyle: "none" },
+  sharesDense: { gap: 6 },
+  share: { display: "grid", gridTemplateColumns: "minmax(84px, 7.5em) minmax(0, 1fr) 3.4em", columnGap: 12, alignItems: "center" },
+  shareLabel: { fontSize: 14, fontWeight: 650 },
+  shareLabelDense: { fontSize: 12.5, fontWeight: 600, color: color.textMuted },
+  shareTrack: { position: "relative", height: 14, borderRadius: radius.pill, backgroundColor: color.chartTrack, overflow: "hidden" },
+  shareTrackDense: { height: 8 },
+  shareFill: { position: "absolute", left: 0, top: 0, bottom: 0, borderRadius: radius.pill, backgroundColor: color.chart1 },
+  shareFew: {
+    backgroundColor: "transparent",
+    boxShadow: `inset 0 0 0 1.5px ${color.chart1}`,
+    backgroundImage: `repeating-linear-gradient(135deg, ${color.chart1} 0 2px, transparent 2px 6px)`,
+  },
+  shareWidth: (pct: number) => ({ width: `${pct}%` }),
+  shareValue: { textAlign: "right", fontSize: 14, fontWeight: 750, fontVariantNumeric: "tabular-nums" },
+  shareValueDense: { fontSize: 12.5, fontWeight: 700 },
+  shareDetail: { gridColumn: "2 / -1", marginTop: 4, fontSize: 12.5, color: color.textMuted },
 });
+
+export type ShareRow = { label: string; /** 0–1; null without data. */ share: number | null; detail: string; /** Too little data to read; drawn hatched. */ few: boolean };
+
+/** Shares on a 0–100% track, one row each, values written beside the bars; `dense` drops the detail line. */
+export function ShareBars({ rows, dense = false, label }: { rows: ShareRow[]; dense?: boolean; label: string }) {
+  return (
+    <ul aria-label={label} {...stylex.props(s.shares, dense && s.sharesDense)}>
+      {rows.map((r) => {
+        const pct = r.share === null ? null : Math.round(r.share * 100);
+        return (
+          <li key={r.label} {...stylex.props(s.share)}>
+            <span {...stylex.props(dense ? s.shareLabelDense : s.shareLabel)}>{r.label}</span>
+            <span aria-hidden="true" {...stylex.props(s.shareTrack, dense && s.shareTrackDense)}>
+              {pct !== null && pct > 0 && <span {...stylex.props(s.shareFill, r.few && s.shareFew, s.shareWidth(pct))} />}
+            </span>
+            <span {...stylex.props(s.shareValue, dense && s.shareValueDense, r.few && text.muted)}>{pct === null ? "—" : `${pct}%`}</span>
+            <span {...stylex.props(dense ? layout.srOnly : s.shareDetail)}>{r.detail}</span>
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
 
 /** Weekly bars: hatched fill over a light full-height track; `highlight` gets a solid fill. */
 export function HatchedBars({ data, highlight, unit }: { data: { label: string; value: number }[]; highlight?: number; unit: (n: number) => string }) {

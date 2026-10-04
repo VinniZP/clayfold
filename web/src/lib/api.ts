@@ -4,6 +4,7 @@ import type {
   AttemptResponse,
   AuditEntry,
   AuditVerdict,
+  CalibrationView,
   CardView,
   ConversationView,
   CreateTopicResponse,
@@ -124,6 +125,7 @@ export const api = {
 
   activity: (days: number, topicId?: string) =>
     get<ActivityDay[]>(`/api/stats/activity?days=${days}${topicId ? `&topicId=${e(topicId)}` : ""}`),
+  calibration: () => get<CalibrationView>("/api/stats/calibration"),
   today: () => get<TodayView>("/api/today"),
   setGoal: (minutes: GoalMinutes) => request<TodayView>("PUT", "/api/goal", { minutes }),
   weak: (limit = 10, topicId?: string) => get<WeakSpot[]>(`/api/weak?limit=${limit}${topicId ? `&topicId=${e(topicId)}` : ""}`),

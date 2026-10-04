@@ -22,6 +22,21 @@ test("tutor context carries the key, misconceptions, attempts and unmastered pre
   expect(buildTutorContext({ lessonId: "ls1", itemId: id }, database)).not.toContain("Node A");
 });
 
+test("tutor context carries the confidence of each attempt and flags a confident error (L20)", async () => {
+  const database = openDb(":memory:");
+  seed(database);
+  const id = insertItem(database, items.single("b1", "b"), { role: "practice", lessonId: "ls1" });
+  const answer = (choice: number, confidence?: "guess" | "sure") =>
+    submitAttempt(id, { answer: { format: "single", choice }, hintsUsed: 0, durationMs: 9000, context: "practice", confidence }, { database });
+  await answer(1, "guess");
+  expect(buildTutorContext({ lessonId: "ls1", itemId: id }, database)).toContain("wrong (confidence before checking: guessing; misconception");
+  expect(buildTutorContext({ lessonId: "ls1", itemId: id }, database)).not.toContain("was sure of a wrong answer");
+  await answer(0, "sure");
+  const context = buildTutorContext({ lessonId: "ls1", itemId: id }, database);
+  expect(context).toContain("2. [2] wrong2 b1 — wrong (confidence before checking: sure;");
+  expect(context).toContain("The learner was sure of a wrong answer on this item (L20)");
+});
+
 test("tutor context for an open worked line carries its question, hidden line, criteria and earlier answers", () => {
   const database = openDb(":memory:");
   seed(database);

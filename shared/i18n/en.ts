@@ -251,6 +251,13 @@ export const en = {
   "item.orderHelp": "Drag the lines into the right order or use the arrow buttons (Alt + ↑/↓ on the selected line).",
   "item.moveUp": "Move “{entry}” up",
   "item.moveDown": "Move “{entry}” down",
+  "item.confidentErrorTitle": "You were sure",
+  "item.confidentError": "Compare what made this answer feel right with the feedback: a confident mistake is one of the easiest to correct once you see why. This question comes back in review in a day.",
+  "item.guessedRight": "A lucky guess. Open the solution so that next time you know it.",
+  "confidence.question": "How sure are you?",
+  "confidence.guess": "Guessing",
+  "confidence.unsure": "Unsure",
+  "confidence.sure": "Sure",
 
   // Web: navigation, search, notifications
   "nav.home": "Home",
@@ -526,6 +533,23 @@ export const en = {
   "home.weakCard": "card",
   "home.lapses": { one: "{count} lapse", other: "{count} lapses" },
   "home.rewrite": "needs rewriting",
+  "calibration.title": "Confidence and accuracy",
+  "calibration.allCourses": "All courses",
+  "calibration.byTopic": "By course",
+  "calibration.ofAnswers": { one: "of {count} answer", other: "of {count} answers" },
+  "calibration.noAnswers": "no answers yet",
+  "calibration.few": "too few to judge",
+  "calibration.fewLegend": "Striped bars rest on fewer than {n} answers: too few to judge.",
+  "calibration.sureGuess": "When you feel sure you are right {sure}% of the time; when you guess, {guess}%.",
+  "calibration.sureUnsure": "When you feel sure you are right {sure}% of the time; when you are unsure, {unsure}%.",
+  "calibration.unsureGuess": "When you are unsure you are right {unsure}% of the time; when you guess, {guess}%.",
+  "calibration.onlySure": "When you feel sure you are right {pct}% of the time.",
+  "calibration.onlyUnsure": "When you are unsure you are right {pct}% of the time.",
+  "calibration.onlyGuess": "When you guess you are right {pct}% of the time.",
+  "calibration.lowData": "Rate a few more answers to see how your confidence matches your results.",
+  "calibration.emptyTitle": "No rated answers yet",
+  "calibration.emptyBody": "Before an answer is checked, tap how sure you are. This chart then compares your confidence with how often you are right.",
+  "calibration.emptyOff": "Confidence ratings are off. Turn them on in Settings to see this chart.",
 
   // Web: lesson page
   "lesson.step.pending": "still being written",
@@ -638,6 +662,8 @@ export const en = {
   "review.delayedExplain": "Delayed exercises check that knowledge holds for at least a day: only then does a node count as mastered.",
   "review.ratings": { one: "Cards: {count} rating", other: "Cards: {count} ratings" },
   "review.delayedCorrect": "Delayed exercises correct:",
+  "review.retest": "You were sure last time",
+  "review.retestExplain": "A question you answered wrong while sure comes back a day later, until you get it right here.",
   "review.checkNew": "Check for anything new",
 
   // Web: topic page
@@ -974,6 +1000,9 @@ export const en = {
   "game.backfillStart": "Draw the rewards",
   "game.backfillRunning": "Claude is drawing: {done} of {total} done.",
   "game.backfillFailed": "Could not draw the rewards for: {items}. Try again.",
+  "settings.confidence": "Confidence ratings",
+  "settings.confidenceIntro": "Before an answer is checked, you tap how sure you are: Guessing, Unsure or Sure. A wrong answer you were sure of gets a closer look, reaches the tutor, and comes back in review a day later; Home compares your confidence with your results. The rating never changes a grade or mastery.",
+  "settings.confidenceToggle": "Ask how sure I am before checking an answer",
 } as const satisfies Record<string, string | { one: string; other: string }>;
 
 export type MessageKey = keyof typeof en;

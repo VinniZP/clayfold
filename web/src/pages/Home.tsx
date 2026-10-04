@@ -2,8 +2,9 @@ import * as stylex from "@stylexjs/stylex";
 import { ArrowRight, Play } from "lucide-react";
 import { useState } from "react";
 import { Link } from "react-router";
-import type { ActivityDay, GoalMinutes, ReviewSession, TodayView, TopicDetail, TopicSummary, WeakSpot } from "@shared/api";
+import type { ActivityDay, CalibrationView, GoalMinutes, ReviewSession, TodayView, TopicDetail, TopicSummary, WeakSpot } from "@shared/api";
 import { ActivityCalendar, buildCalendar, CALENDAR_WEEKS, RibbonLegend } from "../components/ActivityCalendar";
+import { Calibration } from "../components/Calibration";
 import { Gauge, HatchedBars, Rings, WeekDots } from "../components/Charts";
 import { readyLine } from "../components/LessonStatus";
 import { useHeader } from "../components/header";
@@ -76,6 +77,7 @@ const s = stylex.create({
   calendars: { gridColumn: "1 / -1", display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 340px), 1fr))", gap: 24 },
   calendar: { display: "grid", gap: 4, alignContent: "start" },
   calendarFoot: { display: "grid", gap: 8, marginTop: 14 },
+  wide: { gridColumn: "1 / -1" },
   goalPick: { display: "flex", alignItems: "center", justifyContent: "center", flexWrap: "wrap", gap: 6, marginTop: 16 },
   goalBtn: { height: 32, paddingInline: 12, borderWidth: 0, borderRadius: radius.pill, backgroundColor: color.surface2, color: color.textMuted, fontSize: 13.5, fontWeight: 600 },
   goalOn: { backgroundColor: color.primary, color: color.onPrimary },
@@ -90,20 +92,22 @@ type Dashboard = {
   activity: ActivityDay[] | null;
   weak: WeakSpot[] | null;
   today: TodayView | null;
+  calibration: CalibrationView | null;
 };
 
 const ACTIVITY_DAYS = 70;
 
 async function loadDashboard(): Promise<Dashboard> {
-  const [topics, activity, weak, review, today] = await Promise.all([
+  const [topics, activity, weak, review, today, calibration] = await Promise.all([
     api.topics(),
     api.activity(ACTIVITY_DAYS).catch(() => null),
     api.weak(5).catch(() => null),
     api.review().catch(() => null),
     api.today().catch(() => null),
+    api.calibration().catch(() => null),
   ]);
   const details = await Promise.all(topics.map((t) => api.topic(t.id).catch(() => null)));
-  return { topics, details: details.filter((d): d is TopicDetail => d !== null), review, activity, weak, today };
+  return { topics, details: details.filter((d): d is TopicDetail => d !== null), review, activity, weak, today, calibration };
 }
 
 const WEEK = [0, 1, 2, 3, 4, 5, 6];
@@ -186,7 +190,7 @@ export function Home() {
       </div>
     );
 
-  const { topics, details, review, weak, activity, today } = res.data!;
+  const { topics, details, review, weak, activity, today, calibration } = res.data!;
   const setGoal = async (minutes: GoalMinutes) => {
     setGoalError(null);
     try {
@@ -372,6 +376,15 @@ export function Home() {
               </section>
             ))}
           </div>
+
+          <section aria-labelledby="calibration-title" {...stylex.props(card.base, s.wide)}>
+            <CardHead title={t("calibration.title")} id="calibration-title" />
+            {calibration ? (
+              <Calibration view={calibration} />
+            ) : (
+              <ErrorBox error={new Error(t("home.statsUnavailable"))} onRetry={res.reload} title={t("home.loadFailed")} />
+            )}
+          </section>
         </div>
       </div>
 

@@ -108,6 +108,17 @@ describe("submitAttempt", () => {
     expect(database.query<{ correct: number }, []>("SELECT correct FROM attempts").get()!.correct).toBe(0);
   });
 
+  test("confidence is stored with the attempt and echoed; prequestions and unrated answers store none (L20)", async () => {
+    const practice = insertItem(database, items.single(), { role: "practice", lessonId: "ls1" });
+    const pre = insertItem(database, items.single("a"), { role: "activate", lessonId: "ls1" });
+    const sure = await submitAttempt(practice, { ...req({ format: "single", choice: 0 }), confidence: "sure" }, { database });
+    expect(sure).toMatchObject({ correct: false, confidence: "sure" });
+    expect((await submitAttempt(practice, req({ format: "single", choice: 2 }), { database })).confidence).toBeNull();
+    expect((await submitAttempt(pre, { ...req({ format: "single", choice: 0 }, "activate"), confidence: "guess" }, { database })).confidence).toBeNull();
+    const stored = database.query<{ confidence: string | null }, []>("SELECT confidence FROM attempts ORDER BY rowid").all();
+    expect(stored.map((r) => r.confidence)).toEqual(["sure", null, null]);
+  });
+
   test("short answers are graded synchronously through the runner", async () => {
     const id = insertItem(database, items.short(), { role: "practice", lessonId: "ls1" });
     const res = await submitAttempt(id, req({ format: "short", text: "my answer" }), { database, runPrompt: fakeRunner([true, true]) });

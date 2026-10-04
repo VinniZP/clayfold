@@ -19,6 +19,7 @@ import { TopicPage, TopicsPage } from "./pages/Topic";
 import "overlayscrollbars/overlayscrollbars.css";
 import "./styles/global.css";
 import { initGame } from "./lib/game";
+import { initConfidence } from "./lib/confidence";
 import { initLang, t, useLang } from "./lib/i18n";
 import { initPageScrollbars } from "./lib/overlayScroll";
 
@@ -82,7 +83,7 @@ async function start() {
     const { installMock } = await import("./mock/install");
     installMock();
   }
-  await Promise.all([initLang(), initGame()]);
+  await Promise.all([initLang(), initGame(), initConfidence()]);
   initPageScrollbars();
   createRoot(document.getElementById("root")!).render(
     <StrictMode>

@@ -35,10 +35,13 @@ const introSeen = (database: Database = db()): IntroFeature[] => {
 
 export const videoEnabled =(database: Database = db()): boolean => readSetting("video_enabled", database) === true;
 
+export const confidenceEnabled = (database: Database = db()): boolean => readSetting("confidence_enabled", database) !== false;
+
 const settingsView = async (): Promise<Settings> => ({
   language: language(),
   narration: { keySet: Boolean(await elevenLabsKey.get()), ...narrationSettings() },
   video: { enabled: videoEnabled() },
+  confidence: { enabled: confidenceEnabled() },
   claude: roleSettingsView(),
   gamification: gameOn(),
   introSeen: introSeen(),
@@ -63,6 +66,7 @@ settings.put("/settings", async (c) => {
       voiceId: z.string().min(1).optional(),
       ttsModel: z.enum(TTS_MODELS).optional(),
       videoEnabled: z.boolean().optional(),
+      confidenceEnabled: z.boolean().optional(),
       claudeRole: z.object({ role: z.enum(CLAUDE_ROLES), model: z.enum(CLAUDE_MODELS).nullable(), effort: z.enum(EFFORTS).nullable() }).optional(),
     }),
   );
@@ -72,6 +76,7 @@ settings.put("/settings", async (c) => {
   if (body.voiceId) writeSetting("narration_voice", body.voiceId, db());
   if (body.ttsModel) writeSetting("narration_model", body.ttsModel, db());
   if (body.videoEnabled !== undefined) writeSetting("video_enabled", body.videoEnabled, db());
+  if (body.confidenceEnabled !== undefined) writeSetting("confidence_enabled", body.confidenceEnabled, db());
   if (body.claudeRole) {
     const { role, ...setting } = body.claudeRole;
     setRoleSetting(role, setting);

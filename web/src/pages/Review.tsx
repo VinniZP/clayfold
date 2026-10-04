@@ -221,7 +221,11 @@ export function ReviewPage() {
               />
             ) : entry?.kind === "item" ? (
               <div {...stylex.props(st.item)}>
-                <p {...stylex.props(chip.base, chip.lilac)}>{t("review.delayedRecall")}</p>
+                {s.retests.includes(entry.item.id) ? (
+                  <p {...stylex.props(chip.base, chip.butter)}>{t("review.retest")}</p>
+                ) : (
+                  <p {...stylex.props(chip.base, chip.lilac)}>{t("review.delayedRecall")}</p>
+                )}
                 <ItemView
                   key={entry.item.id}
                   item={entry.item}
@@ -248,6 +252,7 @@ export function ReviewPage() {
         <p {...stylex.props(text.small, text.muted)}>
           {t("review.delayedExplain")}
         </p>
+        {s.retests.length > 0 && <p {...stylex.props(text.small, text.muted)}>{t("review.retestExplain")}</p>}
         <ul {...stylex.props(st.stats)}>
           <li {...stylex.props(st.stat)}>
             <span {...stylex.props(st.statNum)}>{s.cards.length}</span>

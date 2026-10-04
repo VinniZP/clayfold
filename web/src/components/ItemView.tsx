@@ -1,10 +1,11 @@
 import * as stylex from "@stylexjs/stylex";
-import { ArrowDown, ArrowRight, ArrowUp, CircleCheck, CircleX, GripVertical, Info, Lightbulb, MessageCircle, X } from "lucide-react";
+import { ArrowDown, ArrowRight, ArrowUp, CircleCheck, CircleX, Compass, GripVertical, Info, Lightbulb, MessageCircle, X } from "lucide-react";
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
-import type { AttemptRequest, AttemptResponse, GiveUpResponse, ItemState } from "@shared/api";
+import { CONFIDENCE_LEVELS, type AttemptRequest, type AttemptResponse, type Confidence, type GiveUpResponse, type ItemState } from "@shared/api";
 import type { Answer, PublicItem } from "@shared/schemas";
 import { api, errorText } from "../lib/api";
 import { gameProgress } from "../lib/game";
+import { useConfidenceEnabled } from "../lib/confidence";
 import { t, useLang } from "../lib/i18n";
 import { bp, color, motion, radius, space } from "../theme/tokens.stylex";
 import { btn, field, layout, text } from "../theme/ui";
@@ -204,6 +205,10 @@ const s = stylex.create({
   fbTitleSuccess: { color: color.success },
   fbTitleDanger: { color: color.danger },
   solutionSummary: { cursor: "pointer", fontWeight: 650, color: color.accentText },
+  fbCalm: { backgroundColor: color.lilacSoft },
+  fbIconCalm: { backgroundColor: color.surface, color: color.accentText },
+  confidence: { display: "flex", flexWrap: "wrap", alignItems: "center", gap: 8 },
+  confidenceLabel: { fontSize: 13.5, fontWeight: 600, color: color.textMuted, flexBasis: { default: "auto", [bp.phone]: "100%" } },
 });
 
 const IDLE_MS = 90_000;
@@ -219,6 +224,7 @@ export function restoredResponse(state: ItemState | undefined, mode: ItemMode): 
     correctAnswer: state.correctAnswer,
     attemptNo: state.attempts,
     offerTutor: false,
+    confidence: state.lastConfidence,
   };
 }
 
@@ -248,6 +254,8 @@ export function ItemView({ item, mode, context, active = true, onResult, onOffer
     initial?.gaveUp ? { solution: initial.solution ?? "", correctAnswer: initial.correctAnswer ?? "" } : null,
   );
   const [busy, setBusy] = useState<"submit" | "hint" | "giveup" | null>(null);
+  const [rating, setRating] = useState<Confidence | null>(null);
+  const confidenceOn = useConfidenceEnabled();
   const [error, setError] = useState<string | null>(null);
   const started = useRef<number | null>(null);
   const idleOffered = useRef(false);
@@ -264,6 +272,9 @@ export function ItemView({ item, mode, context, active = true, onResult, onOffer
   // Wrong attempts before the restored one are known only as a count.
   const earlierWrong = initial ? initial.wrongAttempts - (restored?.correct === false ? 1 : 0) : 0;
   const wrongCount = earlierWrong + responses.filter((r) => r.correct === false).length;
+  // L20: only the first answer is rated; a retry comes after the learner has seen feedback.
+  const askConfidence = confidenceOn && mode !== "activate" && wrongCount === 0;
+  const confidentError = responses.some((r) => r.correct === false && r.confidence === "sure");
 
   useEffect(() => {
     if (active && started.current === null) started.current = Date.now();
@@ -287,9 +298,10 @@ export function ItemView({ item, mode, context, active = true, onResult, onOffer
   const answer = toAnswer(draft);
   const locked = done || busy === "submit";
 
-  const submit = async () => {
+  const submit = async (confidence?: Confidence) => {
     if (!answer) return;
     setBusy("submit");
+    setRating(confidence ?? null);
     setError(null);
     try {
       const res = await api.attempt(item.id, {
@@ -297,6 +309,7 @@ export function ItemView({ item, mode, context, active = true, onResult, onOffer
         hintsUsed: hints.length,
         durationMs: Date.now() - (started.current ?? Date.now()),
         context,
+        confidence,
       });
       setResponses((r) => [...r, res]);
       setSubmitted(res.correct === false ? draft : null);
@@ -387,11 +400,25 @@ export function ItemView({ item, mode, context, active = true, onResult, onOffer
               <MessageCircle size={16} aria-hidden="true" /> {t("item.askTutor")}
             </button>
           )}
-          <button type="button" disabled={!answer || busy !== null} onClick={submit} {...stylex.props(btn.base, btn.primary)}>
-            {busy === "submit" && <Spinner />}
-            {t(mode === "activate" ? "item.answer" : mode === "check" ? "item.acceptAnswer" : wrongCount > 0 ? "item.tryAgain" : "item.check")}
-            {mode !== "check" && mode !== "activate" && <ArrowRight size={17} aria-hidden="true" />}
-          </button>
+          {askConfidence ? (
+            <div role="group" aria-labelledby={`${promptId}-sure`} {...stylex.props(s.confidence)}>
+              <span id={`${promptId}-sure`} {...stylex.props(s.confidenceLabel)}>
+                {t("confidence.question")}
+              </span>
+              {CONFIDENCE_LEVELS.map((level) => (
+                <button key={level} type="button" disabled={!answer || busy !== null} onClick={() => void submit(level)} {...stylex.props(btn.base, btn.outline)}>
+                  {busy === "submit" && rating === level && <Spinner />}
+                  {t(`confidence.${level}`)}
+                </button>
+              ))}
+            </div>
+          ) : (
+            <button type="button" disabled={!answer || busy !== null} onClick={() => void submit()} {...stylex.props(btn.base, btn.primary)}>
+              {busy === "submit" && <Spinner />}
+              {t(mode === "activate" ? "item.answer" : mode === "check" ? "item.acceptAnswer" : wrongCount > 0 ? "item.tryAgain" : "item.check")}
+              {mode !== "check" && mode !== "activate" && <ArrowRight size={17} aria-hidden="true" />}
+            </button>
+          )}
         </div>
       )}
 
@@ -413,6 +440,11 @@ export function ItemView({ item, mode, context, active = true, onResult, onOffer
           </FeedbackBox>
         )}
         {last && showResult && <Feedback mode={mode} response={last} attempts={responses.length} />}
+        {confidentError && showResult && (
+          <FeedbackBox tone="calm" icon={<Compass size={18} aria-hidden="true" />} title={t("item.confidentErrorTitle")}>
+            <p>{t("item.confidentError")}</p>
+          </FeedbackBox>
+        )}
         {gaveUp && (
           <FeedbackBox tone="neutral" icon={<Info size={18} aria-hidden="true" />} title={t("item.walkthrough")}>
             <p>
@@ -426,10 +458,18 @@ export function ItemView({ item, mode, context, active = true, onResult, onOffer
   );
 }
 
-function FeedbackBox({ tone, icon, title, children }: { tone: "success" | "danger" | "neutral"; icon: ReactNode; title: ReactNode; children?: ReactNode }) {
+const FB_TONE = {
+  success: [s.fbSuccess, s.fbIconSuccess],
+  danger: [s.fbDanger, s.fbIconDanger],
+  neutral: [s.fbNeutral, s.fbIconNeutral],
+  calm: [s.fbCalm, s.fbIconCalm],
+} as const;
+
+function FeedbackBox({ tone, icon, title, children }: { tone: keyof typeof FB_TONE; icon: ReactNode; title: ReactNode; children?: ReactNode }) {
+  const [box, iconStyle] = FB_TONE[tone];
   return (
-    <div {...stylex.props(s.feedback, tone === "success" ? s.fbSuccess : tone === "danger" ? s.fbDanger : s.fbNeutral)}>
-      <span {...stylex.props(s.fbIcon, tone === "success" ? s.fbIconSuccess : tone === "danger" ? s.fbIconDanger : s.fbIconNeutral)}>{icon}</span>
+    <div {...stylex.props(s.feedback, box)}>
+      <span {...stylex.props(s.fbIcon, iconStyle)}>{icon}</span>
       <div {...stylex.props(s.fbBody)}>
         <p {...stylex.props(s.fbTitle, tone === "success" && s.fbTitleSuccess, tone === "danger" && s.fbTitleDanger)}>{title}</p>
         {children}
@@ -469,6 +509,7 @@ function Feedback({ mode, response, attempts }: { mode: ItemMode; response: Atte
           <Markdown src={response.solution} />
         </details>
       )}
+      {response.correct === true && response.confidence === "guess" && <p {...stylex.props(text.muted)}>{t("item.guessedRight")}</p>}
       {response.correct === false && mode !== "check" && <p {...stylex.props(text.muted)}>{t("item.fixAndRetry")}</p>}
     </FeedbackBox>
   );
