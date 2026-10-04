@@ -13,6 +13,7 @@ import { Home } from "./pages/Home";
 import { LessonPage } from "./pages/Lesson";
 import { MeerkatPage } from "./pages/Meerkat";
 import { MemoryIndex, MemoryPage } from "./pages/Memory";
+import { MistakesPage } from "./pages/Mistakes";
 import { ReviewPage } from "./pages/Review";
 import { SettingsPage } from "./pages/Settings";
 import { TopicPage, TopicsPage } from "./pages/Topic";
@@ -67,6 +68,7 @@ const router = createBrowserRouter([
       { path: "/topics/:topicId", element: <TopicPage /> },
       { path: "/lessons/:lessonId", element: <LessonPage /> },
       { path: "/review", element: <ReviewPage /> },
+      { path: "/mistakes", element: <MistakesPage /> },
       { path: "/memory", element: <MemoryIndex /> },
       { path: "/memory/:topicId", element: <MemoryPage /> },
       { path: "/audit", element: <AuditPage /> },

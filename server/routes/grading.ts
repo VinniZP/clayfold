@@ -202,6 +202,15 @@ export function takeHint(itemId: string, requested: number, database: Database =
   return { level, hint: item.hints[level - 1]!, hintCount: item.hints.length };
 }
 
+/** Grades an answer in display order; `short` answers go to the model. */
+export async function gradeAnswer(row: ItemRow, item: Item, answer: Answer, runPrompt?: JsonPromptRunner): Promise<Grade> {
+  if (item.format === "short") {
+    if (answer.format !== "short") throw new GradingError(`answer format ${answer.format} does not match item format short`);
+    return gradeShort(item, answer.text, runPrompt);
+  }
+  return gradeClosed(item, displayOrder(row, displayLength(item)), answer);
+}
+
 export const genericFeedback = (correct: boolean) => t(correct ? "grading.right" : "grading.wrong");
 
 export async function submitAttempt(
@@ -212,13 +221,7 @@ export async function submitAttempt(
   const database = opts.database ?? db();
   const at = opts.at ?? new Date();
   const { row, item } = loadItem(itemId, database);
-  let grade: Grade;
-  if (item.format === "short") {
-    if (req.answer.format !== "short") throw new GradingError(`answer format ${req.answer.format} does not match item format short`);
-    grade = await gradeShort(item, req.answer.text, opts.runPrompt);
-  } else {
-    grade = gradeClosed(item, displayOrder(row, displayLength(item)), req.answer);
-  }
+  const grade = await gradeAnswer(row, item, req.answer, opts.runPrompt);
 
   const hintsUsed = Math.max(Math.trunc(req.hintsUsed) || 0, openHintLevel(itemId, database));
   const confidence = row.role === "activate" ? null : (req.confidence ?? null);

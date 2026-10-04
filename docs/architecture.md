@@ -115,6 +115,15 @@ Optional gamification, off by default (`settings.gamification`). Catalogs and co
 - An item with a wrong answer rated `sure` and no correct review answer since comes back in `GET /api/review` once a day has passed since its latest attempt, whatever its node's mastery: `ReviewSession.retests` lists it, and it comes before the delayed-retrieval items (`retestItems` in `server/review/session.ts`). The tutor context gives the rating of each attempt and marks such an item.
 - `GET /api/stats/calibration` counts rated answers and correct ones per level, overall and per topic; Home shows the shares and one sentence comparing the levels that have at least five answers.
 
+## Mistakes notebook
+
+- `server/routes/mistakes.ts` derives the notebook from stored attempts; it keeps no entry table. An entry is an item of role `practice`, `explain_check`, `check` or `review`, not retired, whose first attempt was wrong or that has a give-up. It shows the first wrong answer in the item's own words (choices are mapped back through `display_order`) and that attempt's misconception.
+- `GET /api/mistakes/:itemId/solution` and `POST /api/mistakes/:itemId/retry` answer 404 for an item outside the notebook, so neither opens a solution before an attempt (L7, L9).
+- Retries go to the `retries` table, never to `attempts`: first-try states, the exit check, mastery, learner signals, the tutor offer and the tutor context read only `attempts`. Activity days (`/api/stats/activity`, streak, daily goal) count retries too.
+- An entry's `readyAt` is a day after its latest wrong attempt, give-up or wrong retry; the first correct retry at or after it resolves the entry (L20). A later wrong attempt moves `readyAt` past that retry and reopens the entry. `TodayView.mistakes` counts open entries and those past `readyAt` for the home page.
+- Patterns are distractors of open single-choice entries chosen at least twice (`CONFIRMED_MISCONCEPTION_TIMES` of `server/review/signals.ts`), counting attempts and retries.
+- The page (`web/src/pages/Mistakes.tsx`) lists entries by topic and node with topic and open/resolved filters. A retry and the "Retry all open" session use `ItemView` in `retry` mode: one answer, no hints, give-up or tutor. The session goes round-robin across nodes.
+
 ## Narration
 
 - `POST /api/steps/:stepId/narration` voices an `explain` step when the learner presses Listen. A `runJsonPrompt` call (purpose `narration`) rewrites the body for speech as parts, each tied to a top-level markdown block. ElevenLabs `/v1/text-to-speech/{voice}/with-timestamps` speaks the joined parts, and its per-character timing gives each block a start and an end. The web app highlights the block being read.

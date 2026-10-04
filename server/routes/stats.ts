@@ -25,9 +25,12 @@ export function activity(days: number, topicId: string | null, at: Date = new Da
   const attempts = database
     .query<{ created_at: string; correct: number | null; duration_ms: number | null }, string[]>(
       `SELECT a.created_at, a.correct, a.duration_ms FROM attempts a JOIN items i ON i.id = a.item_id
-       WHERE a.created_at >= ? AND a.gave_up = 0 ${topicFilter}`,
+       WHERE a.created_at >= ? AND a.gave_up = 0 ${topicFilter}
+       UNION ALL
+       SELECT a.created_at, a.correct, a.duration_ms FROM retries a JOIN items i ON i.id = a.item_id
+       WHERE a.created_at >= ? ${topicFilter}`,
     )
-    .all(...args);
+    .all(...args, ...args);
   const reviews = database
     .query<{ reviewed_at: string; duration_ms: number | null }, string[]>(
       `SELECT r.reviewed_at, r.duration_ms FROM reviews r JOIN cards i ON i.id = r.card_id

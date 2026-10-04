@@ -315,7 +315,8 @@ export type AuditEntry = {
 export type AuditVerdict = { verdict: "ok" | "missed_defect"; note?: string };
 
 // Stats: GET /api/stats/activity?days=7&topicId= -> ActivityDay[] (oldest first, one entry per local day,
-// days without activity included with zeros). Minutes are the sum of attempt durations and review time.
+// days without activity included with zeros). Attempts include notebook retries. Minutes are the sum of attempt and
+// retry durations and review time.
 export type ActivityDay = { date: string; attempts: number; correct: number; reviews: number; minutes: number };
 
 // Calibration: GET /api/stats/calibration -> CalibrationView
@@ -333,6 +334,51 @@ export type CalibrationView = {
 export type WeakSpot =
   | { kind: "item"; itemId: string; topicId: string; lessonId: string | null; nodeId: string; prompt: string; wrongAttempts: number; lastMisconception: string | null }
   | { kind: "card"; cardId: string; topicId: string; nodeId: string; front: string; lapses: number };
+
+// Mistakes notebook (L20): GET /api/mistakes -> MistakesView
+// GET /api/mistakes/:itemId/solution -> MistakeSolution ; POST /api/mistakes/:itemId/retry RetryRequest -> RetryResponse
+// Both 404 for an item that is not in the notebook, so a solution never leaves the server before an attempt (L7, L9).
+// A graded item (not a prequestion) is in the notebook when its first attempt was wrong or the learner gave up on it.
+// Retries are stored apart from attempts: first-try results, the exit check, mastery and learner signals ignore them.
+export type MistakeEntry = {
+  itemId: string;
+  topicId: string;
+  topicTitle: string;
+  nodeId: string;
+  nodeTitle: string;
+  lessonId: string | null;
+  lessonTitle: string | null;
+  /** Position of the item's step in its lesson, from 0. */
+  stepIdx: number | null;
+  item: PublicItem;
+  /** The learner's first wrong answer as text; null when they gave up without answering. */
+  answer: string | null;
+  /** Named misconception of the distractor in `answer`. */
+  misconception: string | null;
+  gaveUp: boolean;
+  /** When the first wrong answer or give-up happened. */
+  at: string;
+  retries: number;
+  /** A day after the latest wrong answer, give-up or wrong retry: from then on a correct retry resolves the entry. */
+  readyAt: string;
+  resolvedAt: string | null;
+};
+
+/** A distractor of an open entry chosen at least twice, in attempts and retries: a confirmed misconception. */
+export type MistakePattern = {
+  itemId: string;
+  topicId: string;
+  nodeTitle: string;
+  option: string;
+  misconception: string | null;
+  times: number;
+};
+
+/** Entries newest first; patterns most frequent first. */
+export type MistakesView = { entries: MistakeEntry[]; patterns: MistakePattern[] };
+export type MistakeSolution = { solution: string; correctAnswer: string };
+export type RetryRequest = { answer: Answer; durationMs: number };
+export type RetryResponse = MistakeSolution & { correct: boolean; feedback: string; entry: MistakeEntry };
 
 // Today: GET /api/today -> TodayView ; PUT /api/goal { minutes } -> TodayView
 // A day with an answered item or a reviewed card extends the streak; the daily goal does not affect it.
@@ -356,6 +402,8 @@ export type TodayView = {
   advanced: { topicId: string; nodeId: string; title: string; mastery: "exit_passed" | "mastered" }[];
   /** Earliest local day with cards that are not due yet, and how many come due by its end. */
   nextReview: { date: string; cards: number } | null;
+  /** Open entries of the mistakes notebook, and how many of them a correct retry would resolve now. */
+  mistakes: { open: number; ready: number };
 };
 
 // Settings: GET /api/settings -> Settings ; PUT /api/settings SettingsUpdate -> Settings

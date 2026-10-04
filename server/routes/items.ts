@@ -7,7 +7,7 @@ import { fail, readBody } from "./http";
 import { answerWorkedLine, giveUp, GradingError, revealWorkedLine, submitAttempt, takeHint } from "./grading";
 import type { StepRow } from "./public";
 
-const AnswerSchema = z.discriminatedUnion("format", [
+export const AnswerSchema = z.discriminatedUnion("format", [
   z.object({ format: z.literal("single"), choice: z.number().int().min(0) }),
   z.object({ format: z.literal("multi"), choices: z.array(z.number().int().min(0)).max(5) }),
   z.object({ format: z.literal("order"), sequence: z.array(z.string()).max(7) }),

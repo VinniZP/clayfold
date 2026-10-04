@@ -1,8 +1,8 @@
 import { CLAUDE_ROLES, type Effort, type ExplainLens, lensesFor, MATERIAL_EXTENSIONS } from "@shared/api";
-import type { AttemptRequest, AttemptResponse, ChatMessage, ItemState, LessonView, MaterialView, NarrationView, NoteRequest, PastedMaterial, ReviewSession, Settings, SettingsUpdate, TodayView, TopicDetail, TopicSummary, VideoExportView, VideoView, VoiceView } from "@shared/api";
+import type { AttemptRequest, AttemptResponse, ChatMessage, ItemState, LessonView, MaterialView, MistakesView, NarrationView, NoteRequest, PastedMaterial, RetryRequest, RetryResponse, ReviewSession, Settings, SettingsUpdate, TodayView, TopicDetail, TopicSummary, VideoExportView, VideoView, VoiceView } from "@shared/api";
 import type { TopicEvent } from "@shared/events";
 import type { OutfitRef, OutfitSlot } from "@shared/game";
-import type { PublicStep } from "@shared/schemas";
+import type { Answer, PublicStep } from "@shared/schemas";
 import { marked } from "marked";
 import { lang, t } from "../lib/i18n";
 import * as fx from "./fixtures";
@@ -55,13 +55,7 @@ function stateOf(itemId: string): ItemState {
   return (fx.itemStates[itemId] ??= { attempts: 0, wrongAttempts: 0, solved: false, gaveUp: false, hints: [], lastFeedback: null, lastConfidence: null });
 }
 
-function grade(itemId: string, body: AttemptRequest): AttemptResponse {
-  const key = fx.keys[itemId];
-  const st = stateOf(itemId);
-  st.attempts++;
-  const attemptNo = st.attempts;
-  if (!key) return { correct: null, confidence: null, feedback: "No answer key in the mock data.", attemptNo, offerTutor: false };
-  const a = body.answer;
+function check(key: fx.Key, a: Answer): { correct: boolean; feedback: string; marks?: boolean[] } {
   let correct = false;
   let feedback = key.feedback ?? "";
   let marks: boolean[] | undefined;
@@ -99,6 +93,17 @@ function grade(itemId: string, body: AttemptRequest): AttemptResponse {
       feedback = correct ? "The answer covers the reference criteria." : "The key point is missing: which group the share is computed in.";
       break;
   }
+  return { correct, feedback, marks };
+}
+
+function grade(itemId: string, body: AttemptRequest): AttemptResponse {
+  const key = fx.keys[itemId];
+  const st = stateOf(itemId);
+  st.attempts++;
+  const attemptNo = st.attempts;
+  if (!key) return { correct: null, confidence: null, feedback: "No answer key in the mock data.", attemptNo, offerTutor: false };
+  const { correct, feedback: given, marks } = check(key, body.answer);
+  let feedback = given;
   st.lastFeedback = feedback;
   if (body.context === "activate") {
     st.solution = key.solution;
@@ -133,6 +138,34 @@ function grade(itemId: string, body: AttemptRequest): AttemptResponse {
     attemptNo,
     offerTutor: !correct && !st.solved && st.wrongAttempts >= 2 && (body.context === "practice" || body.context === "explain"),
   };
+}
+
+// ---------- Mistakes notebook ----------
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+function mistakesView(): MistakesView {
+  const open = new Set(fx.mistakes.filter((e) => !e.resolvedAt).map((e) => e.itemId));
+  return { entries: fx.mistakes, patterns: fx.mistakePatterns.filter((p) => open.has(p.itemId)) };
+}
+
+function mistakeCounts(): TodayView["mistakes"] {
+  const open = fx.mistakes.filter((e) => !e.resolvedAt);
+  return { open: open.length, ready: open.filter((e) => Date.parse(e.readyAt) <= Date.now()).length };
+}
+
+/** The server's rule (L20): a correct retry resolves the entry from a day after its latest error; a wrong one restarts the day. */
+function retry(itemId: string, body: RetryRequest): RetryResponse | null {
+  const entry = fx.mistakes.find((e) => e.itemId === itemId);
+  const key = fx.keys[itemId];
+  if (!entry || !key) return null;
+  const { correct, feedback } = check(key, body.answer);
+  const now = new Date();
+  const next = { ...entry, retries: entry.retries + 1 };
+  if (!correct) Object.assign(next, { readyAt: new Date(now.getTime() + DAY_MS).toISOString(), resolvedAt: null });
+  else if (!entry.resolvedAt && Date.parse(entry.readyAt) <= now.getTime()) next.resolvedAt = now.toISOString();
+  fx.mistakes.splice(fx.mistakes.indexOf(entry), 1, next);
+  return { correct, feedback: feedback || t(correct ? "grading.right" : "grading.retryWrong"), solution: key.solution, correctAnswer: key.correctAnswer, entry: next };
 }
 
 // ---------- Routes ----------
@@ -591,7 +624,16 @@ async function route(method: string, path: string, body: Record<string, unknown>
   if (p === "/api/reports") return json(undefined, 202);
   if (p === "/api/stats/activity") return json(fx.activity(Number(url.searchParams.get("days") ?? 7)));
   if (p === "/api/stats/calibration") return json(fx.calibration);
-  if (p === "/api/today") return json(fx.today);
+  if (p === "/api/today") return json({ ...fx.today, mistakes: mistakeCounts() });
+  if (p === "/api/mistakes") return json(mistakesView());
+  if ((m = p.match(/^\/api\/mistakes\/([^/]+)\/solution$/))) {
+    const key = fx.mistakes.some((e) => e.itemId === m![1]) ? fx.keys[m[1]!] : undefined;
+    return key ? json({ solution: key.solution, correctAnswer: key.correctAnswer }) : json({ error: "this item is not in the mistakes notebook" }, 404);
+  }
+  if ((m = p.match(/^\/api\/mistakes\/([^/]+)\/retry$/))) {
+    const res = retry(m[1]!, body as unknown as RetryRequest);
+    return res ? json(res) : json({ error: "this item is not in the mistakes notebook" }, 404);
+  }
   if (p === "/api/settings") {
     if (method === "PUT") {
       const { language, voiceId, ttsModel, videoEnabled, claudeRole, confidenceEnabled, gamification, introSeen } = body as SettingsUpdate;

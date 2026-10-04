@@ -14,7 +14,7 @@ const LEAK_SESSIONS = 2;
 /** Attempts on one item more than this far apart belong to different sessions. */
 const SESSION_GAP_MS = 30 * 60 * 1000;
 const DEAD_DISTRACTOR_ATTEMPTS = 6;
-const CONFIRMED_MISCONCEPTION_TIMES = 2;
+export const CONFIRMED_MISCONCEPTION_TIMES = 2;
 export const LEECH_LAPSES = 8;
 const APPLY_PLUS = new Set(["apply", "analyze", "evaluate", "create"]);
 

@@ -1,4 +1,4 @@
-import type { ActivityDay, AlternativeView, AuditEntry, CalibrationView, CardView, ChatMessage, ExplainLens, GlossaryEntry, ItemState, LessonSummary, MaterialView, MemoryFile, NodeView, NoteView, SourceView, SystemView, TodayView, TopicDetail, UpdateView, VideoTimeline, WeakSpot } from "@shared/api";
+import type { ActivityDay, AlternativeView, AuditEntry, CalibrationView, CardView, ChatMessage, ExplainLens, GlossaryEntry, ItemState, LessonSummary, MaterialView, MemoryFile, MistakeEntry, MistakePattern, NodeView, NoteView, SourceView, SystemView, TodayView, TopicDetail, UpdateView, VideoTimeline, WeakSpot } from "@shared/api";
 import type { PublicCite, PublicFigure, PublicItem, PublicStep } from "@shared/schemas";
 
 // Development fixtures for VITE_MOCK=1. Content is illustrative.
@@ -949,6 +949,7 @@ export const today: TodayView = {
   goal: { minutes: 10, done: 7 },
   advanced: [{ topicId: "t-bayes", nodeId: "cond-prob", title: "Conditional probability", mastery: "exit_passed" }],
   nextReview: { date: localDay(-1), cards: 6 },
+  mistakes: { open: 4, ready: 3 },
 };
 
 const level = (confidence: "guess" | "unsure" | "sure", correct: number, attempts: number) => ({ confidence, correct, attempts });
@@ -974,6 +975,77 @@ export const weak: WeakSpot[] = [
     lastMisconception: "only the positives among the sick in the denominator",
   },
   { kind: "card", cardId: "cd4", topicId: "t-git", nodeId: "merge", front: "What does git merge --no-ff do?", lapses: 4 },
+];
+
+// ---------- Mistakes notebook ----------
+
+function bayesItem(id: string): PublicItem {
+  for (const st of bayesSteps) {
+    const list = !st ? [] : st.kind === "explain" ? st.checks : st.kind === "practice" ? [st.item] : st.kind === "activate" || st.kind === "check" ? st.items : [];
+    const found = list.find((i) => i.id === id);
+    if (found) return found;
+  }
+  throw new Error(`no mock item ${id}`);
+}
+
+const gitMergeItem = item(
+  "gm1",
+  {
+    format: "single",
+    prompt: "You run `git merge feature` and get a conflict in `app.js`. What state is the repository in?",
+    bloom: "understand",
+    options: [{ text: "The merge is paused until you resolve the conflict and commit" }, { text: "Git has already made the merge commit, with conflict markers in it" }, { text: "The merge was cancelled and nothing changed" }],
+  },
+  {
+    correct: 0,
+    optionFeedback: ["Right: Git waits for you to resolve the conflict and finish with a commit.", "Git makes no merge commit while a conflict is unresolved.", "The merge is not cancelled: the files with conflicts wait for you."],
+    solution: "A conflict pauses the merge: the conflicting files carry markers, `git status` lists them, and the merge ends with your commit (or `git merge --abort`).",
+    correctAnswer: "The merge is paused until you resolve the conflict and commit",
+    hints: [],
+  },
+);
+
+const bayesEntry = (itemId: string, nodeId: string, nodeTitle: string, stepIdx: number) => ({
+  itemId,
+  topicId: "t-bayes",
+  topicTitle: "Bayesian statistics",
+  nodeId,
+  nodeTitle,
+  lessonId: "l-bayes",
+  lessonTitle: "Bayes' theorem through a medical test",
+  stepIdx,
+  item: bayesItem(itemId),
+});
+
+/** Newest first, as the server sends them. */
+export const mistakes: MistakeEntry[] = [
+  { ...bayesEntry("p2", "bayes-theorem", "Bayes' theorem", 6), answer: "95 %", misconception: null, gaveUp: false, at: iso(0, 9), retries: 0, readyAt: iso(-1, 9), resolvedAt: null },
+  { ...bayesEntry("k1", "bayes-theorem", "Bayes' theorem", 9), answer: "99%", misconception: "Takes the test's sensitivity for the probability of disease", gaveUp: false, at: iso(2), retries: 0, readyAt: iso(1), resolvedAt: null },
+  { ...bayesEntry("c1", "cond-prob", "Conditional probability", 1), answer: "P(sick | test+)", misconception: "Confuses forward and inverse probability", gaveUp: false, at: iso(3), retries: 1, readyAt: iso(1, 9), resolvedAt: null },
+  {
+    itemId: "gm1",
+    topicId: "t-git",
+    topicTitle: "Git basics",
+    nodeId: "merge",
+    nodeTitle: "Merging and conflicts",
+    lessonId: "l-git",
+    lessonTitle: "Branching and merging",
+    stepIdx: null,
+    item: gitMergeItem,
+    answer: "Git has already made the merge commit, with conflict markers in it",
+    misconception: "Thinks Git commits a merge before its conflicts are resolved",
+    gaveUp: false,
+    at: iso(4),
+    retries: 0,
+    readyAt: iso(3),
+    resolvedAt: null,
+  },
+  { ...bayesEntry("p1", "base-rate", "Base rate fallacy", 4), answer: null, misconception: null, gaveUp: true, at: iso(6), retries: 2, readyAt: iso(4), resolvedAt: iso(4, 12) },
+];
+
+/** Confirmed misconceptions; the mock shows those whose entry is still open. */
+export const mistakePatterns: MistakePattern[] = [
+  { itemId: "c1", topicId: "t-bayes", nodeTitle: "Conditional probability", option: "P(sick | test+)", misconception: "Confuses forward and inverse probability", times: 2 },
 ];
 
 const secondsAgo = (s: number) => new Date(Date.now() - s * 1000).toISOString();
