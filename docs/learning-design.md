@@ -42,6 +42,7 @@ Hence: lessons are structured sequences; every item carries a verified solution;
 | L17 | Tutor context: the item with its solution and misconceptions, recent attempts, unmastered prerequisites, the conversation. | Khan Academy tests [P] | tutor route |
 | L18 | The tutor steers "do it for me" toward explanation and asks for confidence at the end of a step. | Explanation use kept gains, text generation lost them (Contractor & Reyes 2026, https://arxiv.org/abs/2607.08849) [S]; metacognitive laziness (Fan et al. 2024, https://arxiv.org/abs/2412.09315) [S] | tutor style, evals |
 | L19 | Concepts carry the terms practitioners of the field use in the learner's language (the English term where they use it), with the original beside a translated term; every term is defined once in the topic glossary and marked where it is used, so the learner can read its definition anywhere. | [D] | `glossary_set`, deterministic gate (marks), critic, skill |
+| L20 | Graded items answered wrong on the first try or given up land in a mistakes notebook with the learner's answer, the named misconception and, on request, the solution. A retry is unaided (no hints, no tutor); a correct retry at least 1 day after the item's latest error resolves the entry, and a later error reopens it. Retries are kept apart from attempts, so first-try results, exit checks, mastery (L12) and the signals below never see them. | Failed retrieval helps when the answer follows (Kornell, Hays & Bjork 2009) [P]; testing beats restudy at 2 days, not at 5 min (Roediger & Karpicke 2006) [P]; 1 day [D] | API (`server/routes/mistakes.ts`), UI |
 
 ## Figures (V)
 
@@ -95,7 +96,7 @@ The meerkat is optional and off by default (Settings). While it is on:
 |---|---|
 | Apply+ item answered right on first sight in < 8 s, twice | `possible_leak` → regenerate harder |
 | A distractor never chosen after ≥ 6 attempts | `dead_distractor` → regenerate distractors |
-| The same distractor chosen ≥ 2 times | misconception confirmed → keep the item |
+| The same distractor chosen ≥ 2 times | misconception confirmed → keep the item; the mistakes notebook shows it as a pattern while the entry is open, counting retries too |
 | Learner report | re-run blind solve and quote check, fix or retire |
 | Card with ≥ 8 lapses | `leech` → split or rewrite |
 

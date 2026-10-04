@@ -1,5 +1,5 @@
 import * as stylex from "@stylexjs/stylex";
-import { ArrowLeft, Bell, BookA, Brain, CircleArrowUp, House, Layers, Menu, Moon, PawPrint, Repeat2, Search, Settings, ShieldCheck, Snowflake, SquareTerminal, Sun, X } from "lucide-react";
+import { ArrowLeft, Bell, BookA, Brain, CircleArrowUp, House, Layers, Menu, Moon, NotebookPen, PawPrint, Repeat2, Search, Settings, ShieldCheck, Snowflake, SquareTerminal, Sun, X } from "lucide-react";
 import { useCallback, useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { Link, NavLink, Outlet, useLocation, useNavigate } from "react-router";
 import type { TodayView, TopicSummary, UpdateMode, UpdateView } from "@shared/api";
@@ -342,6 +342,7 @@ const NAV: { to: string; label: MessageKey; icon: ReactNode; end?: boolean; due?
   { to: "/", label: "nav.home", icon: <House size={22} />, end: true },
   { to: "/topics", label: "nav.topics", icon: <Layers size={22} /> },
   { to: "/review", label: "nav.review", icon: <Repeat2 size={22} />, due: true },
+  { to: "/mistakes", label: "nav.mistakes", icon: <NotebookPen size={22} /> },
   { to: "/memory", label: "nav.memory", icon: <Brain size={22} /> },
   { to: "/glossary", label: "nav.glossary", icon: <BookA size={22} /> },
   { to: "/meerkat", label: "nav.meerkat", icon: <PawPrint size={22} />, game: true },

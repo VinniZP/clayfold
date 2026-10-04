@@ -305,9 +305,20 @@ CREATE TABLE IF NOT EXISTS focus_runs (        -- A
   created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
 );
 
+CREATE TABLE IF NOT EXISTS retries (           -- A; mistakes-notebook retries, kept out of attempts (L20)
+  id TEXT PRIMARY KEY,
+  item_id TEXT NOT NULL REFERENCES items(id) ON DELETE CASCADE,
+  answer TEXT NOT NULL,                         -- JSON Answer
+  correct INTEGER NOT NULL,
+  chosen_option INTEGER,                        -- authoring index for single choice
+  duration_ms INTEGER,
+  created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+);
+
 CREATE INDEX IF NOT EXISTS idx_messages_conv ON messages(conversation_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_attempts_item ON attempts(item_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_cards_due ON cards(status, due);
 CREATE INDEX IF NOT EXISTS idx_items_topic ON items(topic_id, status);
 CREATE INDEX IF NOT EXISTS idx_hint_views_item ON hint_views(item_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_worked_answers_step ON worked_answers(step_id);
+CREATE INDEX IF NOT EXISTS idx_retries_item ON retries(item_id, created_at);

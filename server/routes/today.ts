@@ -4,6 +4,7 @@ import { z } from "zod";
 import type { GoalMinutes, TodayView } from "../../shared/api";
 import { db } from "../db";
 import { readBody } from "./http";
+import { mistakeCounts } from "./mistakes";
 import { activity, localDate } from "./stats";
 
 export const FREEZE_EVERY = 7;
@@ -92,6 +93,7 @@ export function today(at: Date = new Date(), database: Database = db()): TodayVi
     goal: { minutes, done: activity(1, null, at, database)[0]!.minutes },
     advanced,
     nextReview,
+    mistakes: mistakeCounts(at, database),
   };
 }
 

@@ -19,6 +19,7 @@ export const RULES = {
   L17: "Tutor context includes recent attempts, unmastered prerequisites and the last 24 h",
   L18: "Tutor steers from 'do it for me' to explanation and asks for confidence",
   L19: "Lessons use the field's established terms, each marked and defined in the topic glossary",
+  L20: "Mistakes come back as unaided retries; a correct retry a day or more after the last error resolves one",
   V1: "No decorative visuals; each figure states what it teaches",
   V2: "Labels sit inside the figure next to the parts they name; no legend",
   V3: "A caption does not repeat the body text",

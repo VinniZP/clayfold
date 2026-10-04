@@ -1,5 +1,5 @@
 import * as stylex from "@stylexjs/stylex";
-import { ArrowRight, Play } from "lucide-react";
+import { ArrowRight, NotebookPen, Play } from "lucide-react";
 import { useState } from "react";
 import { Link } from "react-router";
 import type { ActivityDay, GoalMinutes, ReviewSession, TodayView, TopicDetail, TopicSummary, WeakSpot } from "@shared/api";
@@ -79,6 +79,7 @@ const s = stylex.create({
   goalPick: { display: "flex", alignItems: "center", justifyContent: "center", flexWrap: "wrap", gap: 6, marginTop: 16 },
   goalBtn: { height: 32, paddingInline: 12, borderWidth: 0, borderRadius: radius.pill, backgroundColor: color.surface2, color: color.textMuted, fontSize: 13.5, fontWeight: 600 },
   goalOn: { backgroundColor: color.primary, color: color.onPrimary },
+  mistakes: { display: "grid", gap: 14 },
 });
 
 const GOALS: GoalMinutes[] = [5, 10, 20];
@@ -414,6 +415,22 @@ export function Home() {
           )}
           {act && <WeekDots days={act.weekActiveDays} label={t("home.weekStudied", { days: t("count.days", { count: act.weekActive }) })} />}
         </section>
+
+        {today && today.mistakes.open > 0 && (
+          <section aria-labelledby="mistakes-title" {...stylex.props(card.base, card.peach, s.mistakes)}>
+            <h2 id="mistakes-title" {...stylex.props(text.h2)}>
+              {t("home.mistakesTitle")}
+            </h2>
+            <p>
+              {today.mistakes.ready > 0
+                ? t("home.mistakesReady", { count: today.mistakes.ready })
+                : t("home.mistakesWaiting", { count: today.mistakes.open })}
+            </p>
+            <Link to="/mistakes" {...stylex.props(btn.base, today.mistakes.ready > 0 ? btn.primary : btn.ghost, btn.block)}>
+              <NotebookPen size={17} aria-hidden="true" /> {t("home.mistakesGo")}
+            </Link>
+          </section>
+        )}
 
         <section aria-labelledby="weak-title" {...stylex.props(card.base)}>
           <CardHead title={t("home.weakSpots")} id="weak-title" />

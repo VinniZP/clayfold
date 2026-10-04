@@ -16,8 +16,9 @@ import { Markdown, Spinner } from "./ui";
  * activate: one ungraded answer, then the solution (L2).
  * check:    one answer, no hints, no tutor; results shown by the parent at the end (L11).
  * review:   delayed retrieval; retries and give-up, no hints or tutor.
+ * retry:    one unaided answer to a mistake, then the solution (L20); `send` records it.
  */
-export type ItemMode = "practice" | "activate" | "check" | "review";
+export type ItemMode = "practice" | "activate" | "check" | "review" | "retry";
 
 export type ItemResult = { response: AttemptResponse; gaveUp: GiveUpResponse | null };
 
@@ -225,7 +226,6 @@ export function restoredResponse(state: ItemState | undefined, mode: ItemMode): 
 type Props = {
   item: PublicItem;
   mode: ItemMode;
-  context: AttemptRequest["context"];
   /** Visible on screen; the idle timer runs only then. */
   active?: boolean;
   onResult?: (itemId: string, result: ItemResult) => void;
@@ -236,9 +236,13 @@ type Props = {
   number?: number;
   /** Progress recorded on the server (LessonView.itemStates). */
   initial?: ItemState;
-};
+} & (
+  | { context: AttemptRequest["context"]; send?: undefined }
+  /** Records the answer somewhere other than POST /api/items/:id/attempt. */
+  | { context?: undefined; send: (answer: Answer, durationMs: number) => Promise<AttemptResponse> }
+);
 
-export function ItemView({ item, mode, context, active = true, onResult, onOfferTutor, onAskTutor, revealed, number, initial }: Props) {
+export function ItemView({ item, mode, context, active = true, onResult, onOfferTutor, onAskTutor, revealed, number, initial, send }: Props) {
   useLang();
   const [draft, setDraft] = useState<Draft>(() => initialDraft(item));
   const [restored] = useState(() => restoredResponse(initial, mode));
@@ -257,7 +261,7 @@ export function ItemView({ item, mode, context, active = true, onResult, onOffer
   const promptId = useId();
 
   const last = responses[responses.length - 1];
-  const oneShot = mode === "activate" || mode === "check";
+  const oneShot = mode === "activate" || mode === "check" || mode === "retry";
   const done = !!gaveUp || last?.correct === true || (oneShot && !!last) || (last?.correct === null && !!last);
   const allowHints = mode === "practice" && item.hintCount > 0;
   const allowTutor = mode === "practice" && !!onAskTutor;
@@ -292,12 +296,8 @@ export function ItemView({ item, mode, context, active = true, onResult, onOffer
     setBusy("submit");
     setError(null);
     try {
-      const res = await api.attempt(item.id, {
-        answer,
-        hintsUsed: hints.length,
-        durationMs: Date.now() - (started.current ?? Date.now()),
-        context,
-      });
+      const durationMs = Date.now() - (started.current ?? Date.now());
+      const res = send ? await send(answer, durationMs) : await api.attempt(item.id, { answer, hintsUsed: hints.length, durationMs, context });
       setResponses((r) => [...r, res]);
       setSubmitted(res.correct === false ? draft : null);
       setTouch((n) => n + 1);
@@ -449,8 +449,8 @@ function Feedback({ mode, response, attempts }: { mode: ItemMode; response: Atte
       t("item.right")
     ) : response.correct === false ? (
       <>
-        {t(mode === "check" ? "item.wrong" : "item.notYet")}
-        {mode !== "check" && attempts > 1 && <span {...stylex.props(text.muted, text.tnum)}> · {t("item.attempt", { n: attempts })}</span>}
+        {t(mode === "check" || mode === "retry" ? "item.wrong" : "item.notYet")}
+        {mode !== "check" && mode !== "retry" && attempts > 1 && <span {...stylex.props(text.muted, text.tnum)}> · {t("item.attempt", { n: attempts })}</span>}
       </>
     ) : (
       t("item.sentForGrading")
@@ -458,7 +458,7 @@ function Feedback({ mode, response, attempts }: { mode: ItemMode; response: Atte
   return (
     <FeedbackBox tone={tone} icon={icon} title={title}>
       {response.feedback && <Markdown src={response.feedback} />}
-      {response.correctAnswer && (mode === "activate" || response.correct === true) && (
+      {response.correctAnswer && (mode === "activate" || mode === "retry" || response.correct === true) && (
         <p>
           {t("item.correctAnswer")} <strong>{response.correctAnswer}</strong>
         </p>
@@ -469,7 +469,7 @@ function Feedback({ mode, response, attempts }: { mode: ItemMode; response: Atte
           <Markdown src={response.solution} />
         </details>
       )}
-      {response.correct === false && mode !== "check" && <p {...stylex.props(text.muted)}>{t("item.fixAndRetry")}</p>}
+      {response.correct === false && mode !== "check" && mode !== "retry" && <p {...stylex.props(text.muted)}>{t("item.fixAndRetry")}</p>}
     </FeedbackBox>
   );
 }
