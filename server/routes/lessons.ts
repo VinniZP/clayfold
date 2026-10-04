@@ -5,6 +5,7 @@ import type { LessonView, StartLessonResponse } from "../../shared/api";
 import type { PublicStep } from "../../shared/schemas";
 import { runTurn } from "../claude/runner";
 import { db, newId } from "../db";
+import { lessonAlternatives } from "./alternatives";
 import { fail, readBody } from "./http";
 import { lessonItemStates, lessonRevealedLines } from "./progress";
 import { publicStep, type StepRow } from "./public";
@@ -58,6 +59,7 @@ lessons.get("/:lessonId", (c) => {
     itemStates: lessonItemStates(lesson.id),
     revealedLines: lessonRevealedLines(lesson.id),
     challengeIdx: lesson.challenge_idx,
+    alternatives: lessonAlternatives(lesson.id),
   } satisfies LessonView);
 });
 

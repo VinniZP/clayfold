@@ -1,12 +1,13 @@
 import * as stylex from "@stylexjs/stylex";
 import { Check, CircleCheck, CircleX, ExternalLink, Flag, MessageCircle, NotebookPen, Quote, ShieldCheck, X } from "lucide-react";
-import { useId, useRef, useState, type RefObject } from "react";
-import type { ItemState } from "@shared/api";
+import { useId, useRef, useState, type ReactNode, type RefObject } from "react";
+import type { AlternativeView, ItemState } from "@shared/api";
 import type { PublicCite, PublicItem, PublicStep } from "@shared/schemas";
 import { api, errorText } from "../lib/api";
 import { gameProgress } from "../lib/game";
 import type { MessageKey } from "@shared/i18n";
 import { t, useLang } from "../lib/i18n";
+import { ExplainDifferently } from "./ExplainDifferently";
 import { FigureView } from "./Figure";
 import { ItemView, restoredResponse, type ItemResult } from "./ItemView";
 import { NarratedBody } from "./Narration";
@@ -93,22 +94,33 @@ type StepProps = {
   itemStates: Record<string, ItemState>;
   revealedLines: { idx: number; text: string }[];
   lineResults?: LineResults;
+  /** Stored alternative explanations of the step; without it the step offers none. */
+  alternatives?: AlternativeView[];
 };
 
-export function StepView({ step, topicId, lessonId, active, tutor, onCheckResults, itemStates, revealedLines, lineResults }: StepProps) {
+export function StepView({ step, topicId, lessonId, active, tutor, onCheckResults, itemStates, revealedLines, lineResults, alternatives }: StepProps) {
   const ref = useRef<HTMLElement>(null);
   return (
     <article ref={ref} aria-labelledby={`step-title-${step.id}`} {...stylex.props(s.step)}>
       <h2 id={`step-title-${step.id}`} tabIndex={-1} {...stylex.props(s.title)}>
         {step.title}
       </h2>
-      <StepBody step={step} active={active} tutor={tutor} onCheckResults={onCheckResults} itemStates={itemStates} revealedLines={revealedLines} lineResults={lineResults} />
+      <StepBody
+        step={step}
+        active={active}
+        tutor={tutor}
+        onCheckResults={onCheckResults}
+        itemStates={itemStates}
+        revealedLines={revealedLines}
+        lineResults={lineResults}
+        alternatives={alternatives}
+      />
       <StepTools step={step} topicId={topicId} lessonId={lessonId} container={ref} />
     </article>
   );
 }
 
-function StepBody({ step, active, tutor, onCheckResults, itemStates, revealedLines, lineResults }: Omit<StepProps, "topicId" | "lessonId">) {
+function StepBody({ step, active, tutor, onCheckResults, itemStates, revealedLines, lineResults, alternatives }: Omit<StepProps, "topicId" | "lessonId">) {
   useLang();
   const offer = tutor && ((itemId: string, reason: "wrong_twice" | "idle") => tutor.onOfferTutor(itemId, step.id, reason));
   const ask = tutor && ((itemId: string) => tutor.onAskTutor(itemId, step.id));
@@ -129,6 +141,7 @@ function StepBody({ step, active, tutor, onCheckResults, itemStates, revealedLin
         <>
           <NarratedBody stepId={step.id} body={step.body} xstyle={s.body} />
           {step.figure && <FigureView figure={step.figure} />}
+          {alternatives && <ExplainDifferently stepId={step.id} kind="explain" initial={alternatives} />}
           <Citations cites={step.cites} />
           {step.checks.length > 0 && (
             <section aria-label={t("steps.selfCheck")} {...stylex.props(s.checks)}>
@@ -153,7 +166,15 @@ function StepBody({ step, active, tutor, onCheckResults, itemStates, revealedLin
         </>
       );
     case "worked_example":
-      return <WorkedExample step={step} revealedLines={revealedLines} lineResults={lineResults} onAnswerLine={(line) => tutor?.onAnswerLine(step.id, line)} />;
+      return (
+        <WorkedExample
+          step={step}
+          revealedLines={revealedLines}
+          lineResults={lineResults}
+          onAnswerLine={(line) => tutor?.onAnswerLine(step.id, line)}
+          explainDifferently={alternatives && <ExplainDifferently stepId={step.id} kind="worked_example" initial={alternatives} />}
+        />
+      );
     case "practice":
       return (
         <ItemView item={step.item} mode="practice" context="practice" active={active} initial={itemStates[step.item.id]} onOfferTutor={offer} onAskTutor={ask} />
@@ -213,11 +234,13 @@ function WorkedExample({
   revealedLines,
   lineResults,
   onAnswerLine,
+  explainDifferently,
 }: {
   step: WorkedStep;
   revealedLines: { idx: number; text: string }[];
   lineResults?: LineResults;
   onAnswerLine: (line: number) => void;
+  explainDifferently?: ReactNode;
 }) {
   useLang();
   const [own, setRevealed] = useState<Record<number, Revealed>>(() =>
@@ -290,6 +313,7 @@ function WorkedExample({
           {t("steps.moreLines", { count: step.lines.length - visible.length })}
         </p>
       )}
+      {explainDifferently}
       <Citations cites={step.cites} />
     </>
   );

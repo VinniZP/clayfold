@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
 import type { ApiError } from "../../shared/api";
+import { alternatives } from "./alternatives";
 import { conversations } from "./conversations";
 import { game } from "./game";
 import { glossary } from "./glossary";
@@ -25,6 +26,7 @@ api.route("/lessons", lessons);
 api.route("/", items);
 api.route("/", glossary);
 api.route("/", narration);
+api.route("/", alternatives);
 api.route("/", video);
 api.route("/", review);
 api.route("/", notes);

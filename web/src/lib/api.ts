@@ -1,5 +1,6 @@
 import type {
   ActivityDay,
+  AlternativeView,
   AttemptRequest,
   AttemptResponse,
   AuditEntry,
@@ -10,6 +11,7 @@ import type {
   CrownsView,
   GameBackfillView,
   GameView,
+  ExplainLens,
   GiveUpResponse,
   GlossaryEntry,
   GoalMinutes,
@@ -138,6 +140,7 @@ export const api = {
   videoExport: (lessonId: string) => get<VideoExportView>(`/api/lessons/${e(lessonId)}/video/export`),
   startVideoExport: (lessonId: string) => post<VideoExportView>(`/api/lessons/${e(lessonId)}/video/export`),
   narrate: (stepId: string) => post<NarrationView>(`/api/steps/${e(stepId)}/narration`),
+  explainDifferently: (stepId: string, lens: ExplainLens) => post<AlternativeView>(`/api/steps/${e(stepId)}/alternatives`, { lens }),
 
   auditSample: (n = 10) => get<AuditEntry[]>(`/api/audit/sample?n=${n}`),
   audit: (itemId: string, body: AuditVerdict) => post<unknown>(`/api/audit/${e(itemId)}`, body),
