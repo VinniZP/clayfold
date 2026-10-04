@@ -22,8 +22,8 @@ test("only accepted cards are exported, grouped by topic, with the topic title a
   insertCard(database, "a", "proposed");
   insertCard(database, "b", "suspended");
   insertCard(database, "b", "rejected");
-  const later = database.query("INSERT INTO cards (id, topic_id, node_id, content, status) SELECT 'cd_later', 'tp2', node_id, content, 'active' FROM cards WHERE id = ?").run(active);
-  expect(later.changes).toBe(1);
+  database.query("INSERT INTO cards (id, topic_id, node_id, content, status) SELECT 'cd_later', 'tp2', node_id, content, 'active' FROM cards WHERE id = ?").run(active);
+  expect(database.query("SELECT topic_id FROM cards WHERE id = 'cd_later'").get()).toEqual({ topic_id: "tp2" });
 
   expect(acceptedCards(null, database).map((c) => [c.id, c.deck])).toEqual([
     [active, "Topic"],
