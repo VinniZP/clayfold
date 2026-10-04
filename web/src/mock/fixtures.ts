@@ -474,6 +474,120 @@ export const condSteps: PublicStep[] = [
   },
 ];
 
+// ---------- Practice sets: items the simulated practice-set run publishes, in turn ----------
+
+export const practicePool: { nodeId: string; title: string; item: PublicItem }[] = [
+  {
+    nodeId: "bayes-theorem",
+    title: "A flagged bike brake",
+    item: item(
+      "pp1",
+      {
+        format: "single",
+        prompt: "In a city, 1 in 100 bikes has a faulty brake. A quick roadside test flags 90% of faulty brakes and 10% of good ones.\n\nYour bike is **flagged**. Which is closest to the chance that its brake is faulty?",
+        bloom: "apply",
+        options: [{ text: "About 8%" }, { text: "About 90%" }, { text: "About 50%" }],
+      },
+      {
+        correct: 0,
+        optionFeedback: ["Yes: false flags on the many good bikes outnumber the true ones.", "That is the share of faulty brakes the test flags, the reverse of the question.", "The rarity of faulty brakes pulls the answer far below a coin toss."],
+        solution: "Of 1000 bikes, 10 are faulty and 9 of them are flagged. Of the 990 good ones, 99 are flagged. **9 / 108 ≈ 8%**.",
+        correctAnswer: "About 8%",
+        hints: ["Turn the percentages into a group of 1000 bikes.", "Count the flagged bikes in both groups, then take the faulty share."],
+      },
+    ),
+  },
+  {
+    nodeId: "bayes-theorem",
+    title: "Positives on a hiking trip",
+    item: item(
+      "pp2",
+      { format: "number", prompt: "Of 1,000 hikers, 20 have a rare pollen allergy. A skin test is positive for 18 of them and for 49 of the others.\n\nHow many hikers test positive in total?", bloom: "apply", unit: "hikers" },
+      { correct: 67, tolerance: 0, feedback: "Add the positives from both groups.", solution: "18 true positives plus 49 false positives: **67 hikers**.", correctAnswer: "67 hikers", hints: ["Positives come from two groups.", "Add the allergic and the non-allergic positives."] },
+    ),
+  },
+  {
+    nodeId: "priors",
+    title: "Before and after the result",
+    item: item(
+      "pp3",
+      { format: "cloze", prompt: "Which words are missing?", bloom: "understand", text: "The share of a group before any test is the {{1}}; once the result is in, it becomes the {{2}} probability.", blankCount: 2 },
+      { correct: [["prior", "base rate"], ["posterior"]], solution: "Before the test: the **prior** (base rate). After the test: the **posterior** probability.", correctAnswer: "prior; posterior", hints: ["One word means “before”.", "The other means “after”."] },
+    ),
+  },
+  {
+    nodeId: "base-rate",
+    title: "A headline about a 99% test",
+    item: item(
+      "pp4",
+      {
+        format: "multi",
+        prompt: "A headline says: “The test is 99% accurate, so a positive result means you are almost surely ill.”\n\nSelect all that apply: what do you need to judge the claim?",
+        bloom: "analyze",
+        options: [{ text: "How common the illness is" }, { text: "How often healthy people test positive" }, { text: "How many labs run the test" }],
+      },
+      { correct: [0, 1], solution: "The answer depends on the **base rate** and the **false-positive rate**; the number of labs changes nothing.", correctAnswer: "The base rate and the false-positive rate", hints: ["Think about the two groups that can test positive.", "What decides how large each group is?"] },
+    ),
+  },
+  {
+    nodeId: "bayes-theorem",
+    title: "Steps of a frequency tree",
+    item: item(
+      "pp5",
+      {
+        format: "order",
+        prompt: "In what order do you find P(ill | positive) with natural frequencies?",
+        bloom: "apply",
+        entries: ["Divide the true positives by all positives", "Pick a group of 1,000 people", "Apply the hit rate and the false-alarm rate", "Split the group by the base rate"],
+      },
+      {
+        correct: ["Pick a group of 1,000 people", "Split the group by the base rate", "Apply the hit rate and the false-alarm rate", "Divide the true positives by all positives"],
+        solution: "Group → split by base rate → apply both test rates → true positives over all positives.",
+        correctAnswer: "Group, base rate, test rates, divide",
+        hints: ["You need people before you can split them.", "The division comes last."],
+      },
+    ),
+  },
+  {
+    nodeId: "base-rate",
+    title: "Two clinics, one test",
+    item: item(
+      "pp6",
+      {
+        format: "single",
+        prompt: "Two clinics use the same test. Clinic A sees mostly patients with symptoms; clinic B screens the general public.\n\nWhere does a positive result say more about illness?",
+        bloom: "analyze",
+        options: [{ text: "Clinic A, because more of its patients are ill" }, { text: "Clinic B, because it tests far more people" }, { text: "Both alike, because the test is the same" }],
+      },
+      {
+        correct: 0,
+        optionFeedback: ["Yes: a higher base rate means more of the positives are true.", "More people tested does not change the share of true positives.", "The same test gives different answers when the base rates differ."],
+        solution: "In clinic A the base rate is higher, so true positives make up a larger share of all positives.",
+        correctAnswer: "Clinic A",
+        hints: ["What differs between the two groups of patients?", "How does the base rate change the share of true positives?"],
+      },
+    ),
+  },
+  {
+    nodeId: "priors",
+    title: "Updating the odds",
+    item: item(
+      "pp7",
+      { format: "number", prompt: "The prior odds of a fault are 1 : 4. A warning light is 6 times as likely with a fault as without one.\n\nWhat are the posterior odds of a fault, as a single number?", bloom: "apply" },
+      { correct: 1.5, tolerance: 0.01, feedback: "Multiply the prior odds by the likelihood ratio.", solution: "Posterior odds = prior odds × likelihood ratio = 0.25 × 6 = **1.5**.", correctAnswer: "1.5", hints: ["Write the prior odds as one number.", "Multiply by how much more likely the light is with a fault."] },
+    ),
+  },
+  {
+    nodeId: "bayes-theorem",
+    title: "A positive doping test",
+    item: item(
+      "pp8",
+      { format: "short", prompt: "A friend says a 95%-accurate doping test proves that an athlete who tested positive doped.\n\nAnswer in 1–2 sentences: what would you ask first, and why?", bloom: "evaluate" },
+      { correct: null, solution: "Ask how common doping is **among** the athletes tested: with a low base rate, many positives are false alarms.", correctAnswer: "", hints: ["Which number does the friend leave out?", "Think about the false alarms among clean athletes."] },
+    ),
+  },
+];
+
 // ---------- Topics ----------
 
 const node = (id: string, title: string, prereqs: string[], mastery: NodeView["mastery"], kind: NodeView["kind"] = "knowledge", placement: NodeView["placement"] = null): NodeView => ({
@@ -506,9 +620,9 @@ const gitNodes: NodeView[] = [
 ];
 
 const bayesLessons: LessonSummary[] = [
-  { id: "l-cond", topicId: "t-bayes", title: "Conditional probability", objective: "Tell P(A | B) apart from P(A and B) and compute conditional probability from a table.", level: "novice", nodeIds: ["cond-prob"], status: "finished", createdAt: iso(9), stepsReady: 4, stepsTotal: 4, sourcesStale: true, supersededBy: null, learnerStatus: "in_progress", video: "ready" },
-  { id: "l-bayes", topicId: "t-bayes", title: "Bayes' theorem through a medical test", objective: "Compute the probability of disease after a positive test using natural frequencies.", level: "novice", nodeIds: ["bayes-theorem"], status: "generating", createdAt: iso(0, 9), stepsReady: 3, stepsTotal: 10, sourcesStale: false, supersededBy: null, learnerStatus: "in_progress", video: null },
-  { id: "l-bayes-v1", topicId: "t-bayes", title: "Bayes' theorem through a medical test", objective: "Compute the probability of disease after a positive test using natural frequencies.", level: "novice", nodeIds: ["bayes-theorem"], status: "finished", createdAt: iso(5), stepsReady: 8, stepsTotal: 8, sourcesStale: false, supersededBy: "l-bayes", learnerStatus: "completed", video: null },
+  { id: "l-cond", topicId: "t-bayes", title: "Conditional probability", objective: "Tell P(A | B) apart from P(A and B) and compute conditional probability from a table.", level: "novice", nodeIds: ["cond-prob"], status: "finished", createdAt: iso(9), stepsReady: 4, stepsTotal: 4, sourcesStale: true, supersededBy: null, learnerStatus: "in_progress", video: "ready", practice: null },
+  { id: "l-bayes", topicId: "t-bayes", title: "Bayes' theorem through a medical test", objective: "Compute the probability of disease after a positive test using natural frequencies.", level: "novice", nodeIds: ["bayes-theorem"], status: "generating", createdAt: iso(0, 9), stepsReady: 3, stepsTotal: 10, sourcesStale: false, supersededBy: null, learnerStatus: "in_progress", video: null, practice: null },
+  { id: "l-bayes-v1", topicId: "t-bayes", title: "Bayes' theorem through a medical test", objective: "Compute the probability of disease after a positive test using natural frequencies.", level: "novice", nodeIds: ["bayes-theorem"], status: "finished", createdAt: iso(5), stepsReady: 8, stepsTotal: 8, sourcesStale: false, supersededBy: "l-bayes", learnerStatus: "completed", video: null, practice: null },
 ];
 
 const bayesSources: SourceView[] = [
@@ -549,8 +663,8 @@ export const topicDetails: Record<string, TopicDetail> = {
     plan: [],
     goal: { id: "t-goal", title: "Workout tracking app", why: "Keep every version of the app and roll back a change that broke it." },
     goalNotes: [],
-    lessons: [{ id: "l-git", topicId: "t-git", title: "Branching and merging", objective: "Create branches, merge them and resolve a simple conflict.", level: "intermediate", nodeIds: ["merge"], status: "ready", createdAt: iso(3), stepsReady: 1, stepsTotal: 1, sourcesStale: false, supersededBy: null, learnerStatus: "not_started", video: null },
-      { id: "l-git-rebase", topicId: "t-git", title: "Rebase", objective: "Move a branch onto a new base and resolve conflicts along the way.", level: "intermediate", nodeIds: ["rebase"], status: "failed", createdAt: iso(1), stepsReady: 1, stepsTotal: 4, sourcesStale: false, supersededBy: null, learnerStatus: "not_started", video: null },
+    lessons: [{ id: "l-git", topicId: "t-git", title: "Branching and merging", objective: "Create branches, merge them and resolve a simple conflict.", level: "intermediate", nodeIds: ["merge"], status: "ready", createdAt: iso(3), stepsReady: 1, stepsTotal: 1, sourcesStale: false, supersededBy: null, learnerStatus: "not_started", video: null, practice: null },
+      { id: "l-git-rebase", topicId: "t-git", title: "Rebase", objective: "Move a branch onto a new base and resolve conflicts along the way.", level: "intermediate", nodeIds: ["rebase"], status: "failed", createdAt: iso(1), stepsReady: 1, stepsTotal: 4, sourcesStale: false, supersededBy: null, learnerStatus: "not_started", video: null, practice: null },
     ],
     sources: [{ id: "g1", url: "https://git-scm.com/book/en/v2", title: "Pro Git", kind: "book", note: "chapters 2–3", status: "ok" }],
     conversations: convs("cg", [0, 3, 5, 10, 17, 24, 33, 38]),

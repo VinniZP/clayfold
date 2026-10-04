@@ -60,7 +60,7 @@ claude -p "<text>" --output-format stream-json --verbose --include-partial-messa
 cwd: data/workspaces/<slug>     stdin: /dev/null     env: childEnv({ CLAYFOLD_MCP_URL, CLAYFOLD_TOPIC_ID })
 ```
 
-- The first turn of a conversation starts with the skill command: `/clayfold:onboard <request>`, `/clayfold:goal-plan <request>` for a goal, `/clayfold:lesson-author <nodeId|next>`, `/clayfold:review-session`.
+- The first turn of a conversation starts with the skill command: `/clayfold:onboard <request>`, `/clayfold:goal-plan <request>` for a goal, `/clayfold:lesson-author <nodeId|next>`, `/clayfold:practice-set <lessonId>`, `/clayfold:review-session`.
 - A goal (`topics.kind = 'goal'`) holds no lessons: its onboarding conversation runs with the `goal` tool scope and stores a plan of topics with `goal_plan_set`. Opening a plan entry creates a topic with `goal_id` set and starts its onboarding with the entry's brief. Conversations of such a topic record facts for the goal with `goal_note`; the goal page sends the unseen ones to the goal conversation when the learner asks.
 - Term marks `[[surface|Term]]` in model-written text resolve against `glossary_terms`, filled with `glossary_set`; the step gate rejects a mark whose term the topic glossary lacks (L19), the web Markdown renderer turns marks into terms, and one popover (`web/src/components/TermPopover.tsx`) shows their definitions.
 - A worked-example blank whose answer is in plain words (an open blank with `criteria`, or an older blank with a phrase among its `answers`) is answered through the tutor: the tutor turn carries the line and its criteria, and the tutor records the verdict with `worked_line_record`, which publishes `worked.answered`. Closed blanks keep exact checking in `server/routes/grading.ts`. Tutor turns carry no skill command; the server prepends the tutor context (L17).
@@ -108,6 +108,16 @@ Optional gamification, off by default (`settings.gamification`). Catalogs and co
 - Submission grades closed answers at once with `gradeClosedItem`; short answers go to `gradeShort`, three at a time, in the background, and the test stays `grading` until each one is graded or failed. A failed one is graded again on request; a `grading` test with no grading running in this process restarts it when read.
 - Test answers are not written to `attempts`, so first-try results, exit checks, lesson progress and learner signals do not see them. A correct answer at least a day after the node's exit check masters the node (L12). Answers of submitted tests count as activity for the day and the streak. An item whose latest test answer was wrong joins the Review session a day after that test, until a review attempt answers it.
 - A final exam (L21) is a practice test with `kind = 'final'` on a topic whose nodes all passed the exit check. `GET /api/topics/:topicId/final` (`finalView`) reports the node progress, the best and latest finals and the weak nodes of the latest one; `POST` starts a final only when `canStart` holds. One test of either kind is open per topic at a time. `TopicSummary.final` carries the best result for the course cards and the goal page.
+
+## Practice sets
+
+A practice set is a lesson whose outline holds only practice steps; `lessons.practice` holds its focus and the item it started from, and is NULL for a lesson.
+
+1. `POST /api/practice` (`server/routes/practice.ts`) takes where the learner asked from (a graph node, a lesson's nodes, or the node of an item they missed, which becomes the seed), a size of 3, 5 or 8 and a focus: `same`, `harder` or `mistakes`. It writes the lesson with a placeholder outline and a `lesson` conversation linked to it, and starts `/clayfold:practice-set <lessonId>`. The page opens the set at once and follows it through the lesson events (`step.status`, `step.published`, `lesson.finished`).
+2. `practice_brief` gives the run the nodes, size, focus, level, seed, the misconceptions the learner chose on these nodes (`targets`), the items they missed and the prompts of the topic's items on these nodes. Prequestion attempts are left out: they come before the teaching (L2).
+3. `step_submit` gates each item as a lesson step. A set has no check step, so its last index checks Q5 across the set and the L13 mix of recall and choice; a `harder` set needs `apply` or higher on every item. `lesson_finish` closes the set; it proposes no cards.
+
+Set items have the `practice` role: attempts feed learner signals and move a node from `new` to `learning`, but never pass the exit check (L12 counts `check` items). A set neither supersedes a lesson nor is superseded, is never stale, has no video, and is completed once every item is solved or given up. `GET /api/lessons/:lessonId/practice` returns first-try results per node. Stopping the run fails the set like a cancelled lesson run, and Retry resumes it in its session. The run uses the `lesson` role's model and effort.
 
 ## Narration
 

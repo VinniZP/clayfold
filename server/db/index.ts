@@ -15,6 +15,7 @@ const ADDED_COLUMNS = [
   ["topics", "goal_id", "TEXT REFERENCES topics(id) ON DELETE SET NULL"],
   ["videos", "timeline", "TEXT"],
   ["lessons", "challenge_idx", "INTEGER"],
+  ["lessons", "practice", "TEXT"],
 ] as const;
 
 export function openDb(file: string = paths.db): Database {

@@ -1,4 +1,4 @@
-import { isPhraseAnswer, type Blank, type Bloom, type Card, type GraphNode, type Item, type LessonPlan, type Step } from "../../shared/schemas";
+import { isPhraseAnswer, type Blank, type Bloom, type Card, type GraphNode, type Item, type LessonPlan, type PracticeFocus, type Step } from "../../shared/schemas";
 import { CONTENT_RULES, foldLetters } from "../../shared/i18n";
 import type { RuleId, Violation } from "../../shared/rules";
 import { itemSurface, stepBodyText, stepFigure, stepItems, type ItemRole } from "./content";
@@ -160,13 +160,36 @@ export function checkDuplicates(items: { item: Item; path: string }[], existing:
 }
 
 /** Q5 across a lesson: share of apply-or-higher items among its published items plus the check step. */
-export function checkBloomShare(blooms: Bloom[], r: Report, path = "items"): void {
+export function checkBloomShare(blooms: Bloom[], r: Report, path = "items", fix = "raise the level of check items"): void {
   r.check("Q5");
   if (blooms.length === 0) return;
   const share = blooms.filter((b) => HIGHER_BLOOM.has(b)).length / blooms.length;
   if (share < APPLY_SHARE_MIN) {
-    r.fail("Q5", `only ${Math.round(share * 100)}% of the lesson's items are apply or higher (${blooms.length} items); at least ${APPLY_SHARE_MIN * 100}% required — raise the level of check items`, path);
+    r.fail("Q5", `only ${Math.round(share * 100)}% of the lesson's items are apply or higher (${blooms.length} items); at least ${APPLY_SHARE_MIN * 100}% required — ${fix}`, path);
   }
+}
+
+const CHOICE_FORMATS = new Set<Item["format"]>(["single", "multi"]);
+
+/**
+ * A practice set has no check step, so its last index closes it: Q5 across the set and L13's mix of recall
+ * and choice. A "harder" set asks apply or higher of every item.
+ */
+export function checkPracticeSet(step: Step, practice: { focus: PracticeFocus; closing: boolean }, earlier: Item[], r: Report): void {
+  const all = [...earlier, ...stepItems(step).map((i) => i.item)];
+  if (practice.focus === "harder") {
+    r.check("Q5");
+    for (const { item, path } of stepItems(step)) {
+      if (!HIGHER_BLOOM.has(item.bloom)) r.fail("Q5", `a harder practice set asks apply or higher of every item; this one is '${item.bloom}'`, `${path}.bloom`);
+    }
+  } else if (practice.closing) {
+    checkBloomShare(all.map((i) => i.bloom), r, "item.bloom", "make this item apply or higher");
+  }
+  if (!practice.closing || all.length < 2) return;
+  r.check("L13");
+  const choice = all.filter((i) => CHOICE_FORMATS.has(i.format)).length;
+  if (choice === 0) r.fail("L13", "every item of the set is a recall item; make this one a single or multi choice item", "item.format");
+  if (choice === all.length) r.fail("L13", "every item of the set is a choice item; make this one a cloze, number, short or order item", "item.format");
 }
 
 export type StepContext = {

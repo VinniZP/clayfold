@@ -1,12 +1,14 @@
 import type { Database } from "bun:sqlite";
 import { Hono } from "hono";
 import { z } from "zod";
-import type { LessonView, StartLessonResponse } from "../../shared/api";
+import type { LessonView, PracticeResults, StartLessonResponse } from "../../shared/api";
 import type { PublicStep } from "../../shared/schemas";
 import { runTurn } from "../claude/runner";
 import { db, newId } from "../db";
+import { t } from "../i18n";
 import { fail, readBody } from "./http";
 import { lessonItemStates, lessonRevealedLines } from "./progress";
+import { practiceResults } from "./practice";
 import { publicStep, type StepRow } from "./public";
 import { lessonSummary, type LessonRow as SummaryRow } from "./lesson-summary";
 import { createConversation } from "./topics";
@@ -81,7 +83,7 @@ lessons.post("/:lessonId/rebuild", (c) => c.json(rebuildLesson(lessonRow(c.req.p
  * submits the steps still missing. A step left mid-check by the dead run counts as a rejected attempt.
  */
 export function resumeLesson(
-  lesson: { id: string; status: string },
+  lesson: { id: string; status: string; practice?: string | null },
   database: Database = db(),
   run: typeof runTurn = runTurn,
 ): StartLessonResponse {
@@ -91,18 +93,26 @@ export function resumeLesson(
       "SELECT id, session_id FROM conversations WHERE lesson_id = ? AND kind = 'lesson' ORDER BY created_at DESC, rowid DESC LIMIT 1",
     )
     .get(lesson.id);
-  if (!conv?.session_id) fail(409, "the lesson's authoring session is gone; rebuild the lesson instead");
+  if (!conv?.session_id) fail(409, lesson.practice ? t("practice.sessionGone") : "the lesson's authoring session is gone; rebuild the lesson instead");
   database.transaction(() => {
     database.query("UPDATE steps SET status = 'rejected' WHERE lesson_id = ? AND status = 'checking'").run(lesson.id);
     database.query("UPDATE lessons SET status = 'generating' WHERE id = ?").run(lesson.id);
   })();
   run({
     conversationId: conv.id,
-    text: `[Platform: the run that authored lesson ${lesson.id} stopped before the lesson was finished. Continue it: submit with step_submit every outline step that is not published or dropped yet, then finish the lesson and propose cards as the lesson-author skill says.]`,
+    text: lesson.practice
+      ? `[Platform: the run that authored practice set ${lesson.id} stopped before the set was finished. Continue it: submit with step_submit every index that is not published or dropped yet, then finish the set as the practice-set skill says.]`
+      : `[Platform: the run that authored lesson ${lesson.id} stopped before the lesson was finished. Continue it: submit with step_submit every outline step that is not published or dropped yet, then finish the lesson and propose cards as the lesson-author skill says.]`,
     display: null,
   });
   return { lessonId: lesson.id, conversationId: conv.id };
 }
+
+lessons.get("/:lessonId/practice", (c) => {
+  const lesson = lessonRow(c.req.param("lessonId"));
+  if (!lesson.practice) fail(404, "this lesson is not a practice set");
+  return c.json(practiceResults(lesson.id) satisfies PracticeResults);
+});
 
 lessons.post("/:lessonId/resume", (c) => c.json(resumeLesson(lessonRow(c.req.param("lessonId"))), 202));
 

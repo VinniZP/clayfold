@@ -1,0 +1,10 @@
+schema_version: "1.1"
+name: practice-mistakes-git
+context:
+  scaffold_script: workspace.sh
+---
+description: Practice set of 3 items on the staging-area node with the "mistakes" focus, started from an item the learner missed. Expect the brief read first, sourced items aimed at the learner's misconceptions, recall and choice formats mixed, and the set finished.
+tags: [practice]
+max_turns: 50
+timeout_seconds: 1200
+allowed_tools: [Read, Write, Edit, Glob, Grep, WebSearch, WebFetch]

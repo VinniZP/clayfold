@@ -74,7 +74,7 @@ CREATE TABLE IF NOT EXISTS sources (           -- B
   UNIQUE (topic_id, url)
 );
 
-CREATE TABLE IF NOT EXISTS lessons (           -- B (A sets status 'failed' when a run dies)
+CREATE TABLE IF NOT EXISTS lessons (           -- B (A creates practice sets and sets status 'failed' when a run dies)
   id TEXT PRIMARY KEY,
   topic_id TEXT NOT NULL REFERENCES topics(id) ON DELETE CASCADE,
   title TEXT NOT NULL,
@@ -89,7 +89,8 @@ CREATE TABLE IF NOT EXISTS lessons (           -- B (A sets status 'failed' when
   planned_sources TEXT,                         -- JSON source ids from lesson_plan (Q8)
   sources_at_plan INTEGER,                      -- ok sources of the topic when the lesson was planned
   announced_sources TEXT,                       -- JSON source ids the lesson author has been told about
-  challenge_idx INTEGER                         -- outline index of the challenge step (gamification, G1)
+  challenge_idx INTEGER,                        -- outline index of the challenge step (gamification, G1)
+  practice TEXT                                 -- JSON {focus, seedItemId} for a practice set; NULL for a lesson
 );
 
 CREATE TABLE IF NOT EXISTS steps (             -- B

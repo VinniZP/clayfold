@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { Card, GraphNode, Item, LessonPlan, Step } from "../../shared/schemas";
-import { checkBlanks, checkBloomShare, checkCaption, checkCard, checkDuplicates, checkGraph, checkItem, checkLessonPlan, checkStep, Report } from "./deterministic";
+import { checkBlanks, checkBloomShare, checkCaption, checkCard, checkDuplicates, checkGraph, checkItem, checkLessonPlan, checkPracticeSet, checkStep, Report } from "./deterministic";
 import { activateStep, card, clozeItem, explainStep, orderItem, singleItem } from "./test-fixtures";
 
 const rules = (r: Report) => r.violations.map((v) => v.rule);
@@ -167,6 +167,26 @@ describe("Q5 bloom share", () => {
     const check: Step = { kind: "check", title: "Summary", items: [singleItem(), { ...singleItem(), bloom: "analyze", prompt: "Why are the changes not in the history yet after git add?" }] };
     expect(rules(await checkStep(check, { existingSurfaces: [], lessonBlooms: ["remember", "remember", "remember", "remember"] }))).toEqual([]);
     expect(rules(await checkStep(check, { existingSurfaces: [], lessonBlooms: Array(6).fill("remember") }))).toEqual(["Q5"]);
+  });
+});
+
+describe("practice sets: Q5 and L13 without a check step", () => {
+  const set = (item: Item, focus: "same" | "harder", closing: boolean, earlier: Item[]) => {
+    const r = new Report();
+    checkPracticeSet({ kind: "practice", title: "Try it", item }, { focus, closing }, earlier, r);
+    return r.violations.map((v) => `${v.rule} ${v.path}`);
+  };
+  const remember = { ...singleItem(), bloom: "remember" } as Item;
+  test("a harder set asks apply or higher of every item", () => {
+    expect(set(remember, "harder", false, [])).toEqual(["Q5 item.bloom"]);
+    expect(set(singleItem(), "harder", false, [])).toEqual([]);
+  });
+  test("the last item checks the apply share and the format mix across the set", () => {
+    expect(set(remember, "same", false, [remember, remember])).toEqual([]);
+    expect(set(remember, "same", true, [{ ...orderItem(), bloom: "remember" } as Item, remember])).toEqual(["Q5 item.bloom"]);
+    expect(set(singleItem(), "same", true, [singleItem(), remember])).toEqual(["L13 item.format"]);
+    expect(set(orderItem(), "same", true, [clozeItem()])).toEqual(["L13 item.format"]);
+    expect(set(orderItem(), "same", true, [singleItem(), remember])).toEqual([]);
   });
 });
 

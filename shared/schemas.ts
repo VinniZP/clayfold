@@ -319,6 +319,14 @@ export type StageTrophy = z.infer<typeof StageTrophy>;
 export const Level = z.enum(["novice", "intermediate", "advanced"]);
 export type Level = z.infer<typeof Level>;
 
+/** What a practice set aims at: the learner's level, a step up (apply or higher), or the misconceptions they chose. */
+export const PracticeFocus = z.enum(["same", "harder", "mistakes"]);
+export type PracticeFocus = z.infer<typeof PracticeFocus>;
+
+/** Items in a practice set, one practice step each. */
+export const PRACTICE_SIZES = [3, 5, 8] as const;
+export type PracticeSize = (typeof PRACTICE_SIZES)[number];
+
 export const LessonPlan = z
   .object({
     title: z.string().min(3).max(120),

@@ -95,7 +95,7 @@ export function learnerState(db: Database, topicId: string, nodeIds?: string[]):
 
   const lessonsDone = db
     .query<{ id: string; title: string; node_ids: string; finished_at: string }, [string]>(
-      "SELECT id, title, node_ids, finished_at FROM lessons WHERE topic_id = ? AND status = 'finished' ORDER BY finished_at",
+      "SELECT id, title, node_ids, finished_at FROM lessons WHERE topic_id = ? AND status = 'finished' AND practice IS NULL ORDER BY finished_at",
     )
     .all(topicId)
     .map((l) => ({ lessonId: l.id, title: l.title, nodeIds: JSON.parse(l.node_ids) as string[], finishedAt: l.finished_at }))

@@ -90,25 +90,36 @@ type StepProps = {
   /** Without it the step offers no tutor, as on a page that has no tutor panel. */
   tutor?: TutorHooks;
   onCheckResults?: (stepId: string, results: { item: PublicItem; result: ItemResult | undefined }[]) => void;
+  /** Asks for a practice set like a practice item the learner got wrong. */
+  onPractiseMore?: (itemId: string) => void;
   itemStates: Record<string, ItemState>;
   revealedLines: { idx: number; text: string }[];
   lineResults?: LineResults;
 };
 
-export function StepView({ step, topicId, lessonId, active, tutor, onCheckResults, itemStates, revealedLines, lineResults }: StepProps) {
+export function StepView({ step, topicId, lessonId, active, tutor, onCheckResults, onPractiseMore, itemStates, revealedLines, lineResults }: StepProps) {
   const ref = useRef<HTMLElement>(null);
   return (
     <article ref={ref} aria-labelledby={`step-title-${step.id}`} {...stylex.props(s.step)}>
       <h2 id={`step-title-${step.id}`} tabIndex={-1} {...stylex.props(s.title)}>
         {step.title}
       </h2>
-      <StepBody step={step} active={active} tutor={tutor} onCheckResults={onCheckResults} itemStates={itemStates} revealedLines={revealedLines} lineResults={lineResults} />
+      <StepBody
+        step={step}
+        active={active}
+        tutor={tutor}
+        onCheckResults={onCheckResults}
+        onPractiseMore={onPractiseMore}
+        itemStates={itemStates}
+        revealedLines={revealedLines}
+        lineResults={lineResults}
+      />
       <StepTools step={step} topicId={topicId} lessonId={lessonId} container={ref} />
     </article>
   );
 }
 
-function StepBody({ step, active, tutor, onCheckResults, itemStates, revealedLines, lineResults }: Omit<StepProps, "topicId" | "lessonId">) {
+function StepBody({ step, active, tutor, onCheckResults, onPractiseMore, itemStates, revealedLines, lineResults }: Omit<StepProps, "topicId" | "lessonId">) {
   useLang();
   const offer = tutor && ((itemId: string, reason: "wrong_twice" | "idle") => tutor.onOfferTutor(itemId, step.id, reason));
   const ask = tutor && ((itemId: string) => tutor.onAskTutor(itemId, step.id));
@@ -145,6 +156,7 @@ function StepBody({ step, active, tutor, onCheckResults, itemStates, revealedLin
                     initial={itemStates[item.id]}
                     onOfferTutor={offer}
                     onAskTutor={ask}
+                    onPractiseMore={onPractiseMore}
                   />
                 ))}
               </div>
@@ -156,7 +168,16 @@ function StepBody({ step, active, tutor, onCheckResults, itemStates, revealedLin
       return <WorkedExample step={step} revealedLines={revealedLines} lineResults={lineResults} onAnswerLine={(line) => tutor?.onAnswerLine(step.id, line)} />;
     case "practice":
       return (
-        <ItemView item={step.item} mode="practice" context="practice" active={active} initial={itemStates[step.item.id]} onOfferTutor={offer} onAskTutor={ask} />
+        <ItemView
+          item={step.item}
+          mode="practice"
+          context="practice"
+          active={active}
+          initial={itemStates[step.item.id]}
+          onOfferTutor={offer}
+          onAskTutor={ask}
+          onPractiseMore={onPractiseMore}
+        />
       );
     case "reflect":
       return <Reflect step={step} />;

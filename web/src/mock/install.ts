@@ -10,6 +10,8 @@ import type {
   NoteRequest,
   PracticeAnswerUpdate,
   PracticeNodeScore,
+  PracticeResults,
+  PracticeScope,
   PracticeTestOverview,
   PracticeTestRequest,
   PracticeTestSummary,
@@ -26,7 +28,7 @@ import type {
 } from "@shared/api";
 import type { TopicEvent } from "@shared/events";
 import type { OutfitRef, OutfitSlot } from "@shared/game";
-import type { Answer, PublicStep } from "@shared/schemas";
+import type { Answer, PracticeFocus, PublicStep } from "@shared/schemas";
 import { marked } from "marked";
 import { lang, t } from "../lib/i18n";
 import * as fx from "./fixtures";
@@ -397,7 +399,76 @@ function syncBayesLesson() {
   return l;
 }
 
+// ---------- Practice sets ----------
+
+/** The topic and nodes a practice set from these parameters covers; items outside a practice set sit on Bayes' theorem. */
+function practiceScope(from: Record<string, unknown>): PracticeScope | null {
+  const nodesOf = (topicId: string, ids: string[]): PracticeScope | null => {
+    const d = fx.topicDetails[topicId];
+    const nodes = (d?.nodes ?? []).filter((n) => ids.includes(n.id)).map((n) => ({ id: n.id, title: n.title }));
+    const mistakes = Object.values(fx.itemStates).filter((st) => st.wrongAttempts > 0 || st.gaveUp).length;
+    return nodes.length ? { topicId, nodes, mistakes } : null;
+  };
+  if (typeof from.lessonId === "string") {
+    const lesson = Object.values(fx.topicDetails).flatMap((d) => d.lessons).find((l) => l.id === from.lessonId);
+    return lesson ? nodesOf(lesson.topicId, lesson.nodeIds) : null;
+  }
+  if (typeof from.itemId === "string") {
+    const set = [...sim.practiceSets.values()].find((x) => (from.itemId as string).startsWith(`${x.lesson.id}-i`));
+    const idx = set ? Number((from.itemId as string).slice(`${set.lesson.id}-i`.length)) : -1;
+    const entry = set ? fx.practicePool[(set.offset + idx) % fx.practicePool.length] : undefined;
+    return set && entry ? nodesOf(set.lesson.topicId, [entry.nodeId]) : nodesOf("t-bayes", ["bayes-theorem"]);
+  }
+  return typeof from.topicId === "string" && typeof from.nodeId === "string" ? nodesOf(from.topicId, [from.nodeId]) : null;
+}
+
+function practiceItemState(set: sim.PracticeSim, step: PublicStep) {
+  const st = step.kind === "practice" ? fx.itemStates[step.item.id] : undefined;
+  return {
+    nodeId: fx.practicePool[(set.offset + step.idx) % fx.practicePool.length]!.nodeId,
+    answered: !!st && (st.attempts > 0 || st.gaveUp),
+    firstTry: !!st && st.solved && st.wrongAttempts === 0 && st.hints.length === 0 && !st.gaveUp,
+    done: !!st && (st.solved || st.gaveUp),
+    solved: !!st && st.solved,
+  };
+}
+
+function practiceResults(set: sim.PracticeSim): PracticeResults {
+  const rows = set.steps.filter((st): st is PublicStep => st !== null).map((st) => practiceItemState(set, st));
+  const titles = new Map(fx.topicDetails[set.lesson.topicId]!.nodes.map((n) => [n.id, n.title]));
+  const nodes = new Map<string, PracticeResults["nodes"][number]>();
+  for (const r of rows) {
+    const n = nodes.get(r.nodeId) ?? { nodeId: r.nodeId, title: titles.get(r.nodeId) ?? r.nodeId, total: 0, firstTry: 0, solved: 0 };
+    n.total++;
+    n.firstTry += Number(r.firstTry);
+    n.solved += Number(r.solved);
+    nodes.set(r.nodeId, n);
+  }
+  const count = (f: (r: (typeof rows)[number]) => boolean) => rows.filter(f).length;
+  return { total: rows.length, answered: count((r) => r.answered), firstTry: count((r) => r.firstTry), solved: count((r) => r.solved), nodes: [...nodes.values()] };
+}
+
+/** Keeps a practice set's learner status in step with the mock's item progress. */
+function syncPractice(set: sim.PracticeSim) {
+  const rows = set.steps.filter((st): st is PublicStep => st !== null).map((st) => practiceItemState(set, st));
+  set.lesson.learnerStatus = rows.length > 0 && rows.every((r) => r.done) ? "completed" : rows.some((r) => r.answered) ? "in_progress" : "not_started";
+  return set.lesson;
+}
+
 function lessonView(id: string): LessonView | null {
+  const set = sim.practiceSets.get(id);
+  if (set) {
+    return {
+      lesson: { ...syncPractice(set), summary: set.summary },
+      outline: set.outline,
+      stepStatus: [...set.status],
+      steps: set.steps.filter((st): st is PublicStep => st !== null),
+      authorConversationId: set.convId,
+      tutorConversationId: null,
+      itemStates: { ...fx.itemStates },
+      revealedLines: {},
+    };
+  }
   if (id === "l-bayes") {
     return {
       lesson: { ...syncBayesLesson(), summary: lessonState.finished },
@@ -624,8 +695,29 @@ async function route(method: string, path: string, body: Record<string, unknown>
     setTimeout(() => sim.interview(id, conversationId), 600);
     return json({ topicId: id, conversationId });
   }
+  if (p === "/api/practice/scope") {
+    const scope = practiceScope(Object.fromEntries(url.searchParams));
+    return scope ? json(scope) : json({ error: "node not found" }, 404);
+  }
+  if (p === "/api/practice" && method === "POST") {
+    const scope = practiceScope((body.from ?? {}) as Record<string, unknown>);
+    if (!scope) return json({ error: "node not found" }, 404);
+    const focus = body.focus as PracticeFocus;
+    if (focus === "mistakes" && scope.mistakes === 0) return json({ error: t("practice.noMistakes") }, 409);
+    const conversationId = `c-practice-${++seq}`;
+    fx.conversations[conversationId] = { topicId: scope.topicId, kind: "lesson", messages: [] };
+    const set = sim.createPracticeSet(scope.topicId, conversationId, scope.nodes, Number(body.size), focus);
+    fx.topicDetails[scope.topicId]?.conversations.push({ id: conversationId, kind: "lesson", lessonId: set.lesson.id, createdAt: new Date().toISOString() });
+    setTimeout(() => sim.runPracticeGeneration(set), 400);
+    return json({ lessonId: set.lesson.id, conversationId }, 202);
+  }
+  if ((m = p.match(/^\/api\/lessons\/([^/]+)\/practice$/))) {
+    const set = sim.practiceSets.get(m[1]!);
+    return set ? json(practiceResults(set)) : json({ error: "this lesson is not a practice set" }, 404);
+  }
   if ((m = p.match(/^\/api\/topics\/([^/]+)$/))) {
     if (m[1] === "t-bayes") syncBayesLesson();
+    for (const set of sim.practiceSets.values()) syncPractice(set);
     const d = fx.topicDetails[m[1]!];
     return d ? json(d) : json({ error: "Topic not found" }, 404);
   }
@@ -652,6 +744,11 @@ async function route(method: string, path: string, body: Record<string, unknown>
     const lesson = Object.values(fx.topicDetails).flatMap((d) => d.lessons).find((l) => l.id === m![1]);
     if (lesson?.status !== "failed") return json({ error: "only an interrupted lesson can be continued" }, 409);
     lesson.status = "generating";
+    const set = sim.practiceSets.get(lesson.id);
+    if (set) {
+      sim.runPracticeGeneration(set);
+      return json({ lessonId: lesson.id, conversationId: set.convId }, 202);
+    }
     return json({ lessonId: lesson.id, conversationId: "c-author-resume" }, 202);
   }
   if ((m = p.match(/^\/api\/lessons\/([^/]+)\/rebuild$/))) {
@@ -726,6 +823,7 @@ async function route(method: string, path: string, body: Record<string, unknown>
     return json({ accepted: true }, 202);
   }
   if ((m = p.match(/^\/api\/conversations\/([^/]+)\/cancel$/))) {
+    sim.failPracticeRun(m[1]!);
     sim.finishRun(fx.conversations[m[1]!]?.topicId ?? "t-bayes", m[1]!, "Stopped");
     return json(undefined, 202);
   }

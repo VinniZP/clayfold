@@ -1,5 +1,5 @@
 import * as stylex from "@stylexjs/stylex";
-import { ArrowDown, ArrowRight, ArrowUp, CircleCheck, CircleX, GripVertical, Info, Lightbulb, MessageCircle, X } from "lucide-react";
+import { ArrowDown, ArrowRight, ArrowUp, CircleCheck, CircleX, Dumbbell, GripVertical, Info, Lightbulb, MessageCircle, X } from "lucide-react";
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import type { AttemptRequest, AttemptResponse, GiveUpResponse, ItemState } from "@shared/api";
 import type { Answer, PublicItem } from "@shared/schemas";
@@ -198,6 +198,7 @@ const s = stylex.create({
   hint: { paddingBlock: 11, paddingInline: 16, borderRadius: radius.field, backgroundColor: color.butter },
   hintLabel: { display: "block", marginBottom: 2, fontSize: 12, fontWeight: 750, color: color.warning },
   feedbackRegion: { display: "grid", gap: 10 },
+  more: { justifySelf: "start" },
   feedback: {
     display: "grid",
     gridTemplateColumns: "auto minmax(0, 1fr)",
@@ -250,6 +251,8 @@ type Props = {
   onResult?: (itemId: string, result: ItemResult) => void;
   onOfferTutor?: (itemId: string, reason: "wrong_twice" | "idle") => void;
   onAskTutor?: (itemId: string) => void;
+  /** practice mode: offered after a wrong answer or a give-up, to ask for a practice set like this item. */
+  onPractiseMore?: (itemId: string) => void;
   /** check mode: show the graded result (after the whole check is submitted). */
   revealed?: boolean;
   number?: number;
@@ -257,7 +260,7 @@ type Props = {
   initial?: ItemState;
 };
 
-export function ItemView({ item, mode, context, active = true, onResult, onOfferTutor, onAskTutor, revealed, number, initial }: Props) {
+export function ItemView({ item, mode, context, active = true, onResult, onOfferTutor, onAskTutor, onPractiseMore, revealed, number, initial }: Props) {
   useLang();
   const [draft, setDraft] = useState<Draft>(() => initialDraft(item));
   const [restored] = useState(() => restoredResponse(initial, mode));
@@ -441,6 +444,12 @@ export function ItemView({ item, mode, context, active = true, onResult, onOffer
           </FeedbackBox>
         )}
       </div>
+
+      {onPractiseMore && mode === "practice" && (wrongCount > 0 || gaveUp) && (
+        <button type="button" onClick={() => onPractiseMore(item.id)} {...stylex.props(btn.base, btn.ghost, btn.sm, s.more)}>
+          <Dumbbell size={14} aria-hidden="true" /> {t("practice.thisMore")}
+        </button>
+      )}
     </div>
   );
 }

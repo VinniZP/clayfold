@@ -36,6 +36,8 @@ Hence: lessons are structured sequences; every item carries a verified solution;
 | L11 | A lesson ends with an unaided check. | Practice performance overstates learning (Soderstrom & Bjork 2015, https://pubmed.ncbi.nlm.nih.gov/25910388/) [P]; Bastani 2025 [P] | `lesson_plan`, UI |
 | L12 | A node is mastered after the exit check (≥ 80% first-try correct) and a delayed retrieval ≥ 1 day later: a correct review attempt without hints, a card rated Good or Easy, or a correct practice-test answer (L20). Practice-test answers never pass the exit check. Self-ratings unlock nothing. | Roediger & Karpicke 2006 (testing beats restudy at 2 days, not at 5 min; restudy inflates confidence), https://pubmed.ncbi.nlm.nih.gov/16507066/ [P]; a test answer is a retrieval under stricter conditions than a review attempt (no hints, no feedback before submission), so it counts [D]; 80% and 1 day [D] | review module |
 | L13 | Formats mix recall and choice; choice items have 3 options, at most 4. | Cued-recall initial tests g = 0.61 vs recognition 0.29 (Rowland 2014) [P]; three options are optimal (Rodriguez 2005) [S] | schema, skill |
+| L12 | A node is mastered after the exit check (≥ 80% first-try correct) and a delayed retrieval ≥ 1 day later. Self-ratings unlock nothing. | Roediger & Karpicke 2006 (testing beats restudy at 2 days, not at 5 min; restudy inflates confidence), https://pubmed.ncbi.nlm.nih.gov/16507066/ [P]; 80% and 1 day [D] | review module |
+| L13 | Formats mix recall and choice; choice items have 3 options, at most 4. | Cued-recall initial tests g = 0.61 vs recognition 0.29 (Rowland 2014) [P]; three options are optimal (Rodriguez 2005) [S] | schema, skill, deterministic gate (a practice set's last item) |
 | L14 | Review interleaves only confusable categories. | Interleaving g = 0.42 overall, helps discrimination, hurts word lists g = −0.39 (Brunmair & Richter 2019) [S]; classroom RCT d = 0.83 (Rohrer et al. 2020) [S] | review module |
 | L15 | Sessions open with a warm-up on earlier lessons; FSRS target retention 0.90. | Optimal gap grows with retention interval (Cepeda et al. 2008) [P]; FSRS default retention 0.9 (https://github.com/open-spaced-repetition/fsrs4anki/wiki/The-optimal-retention) [P] | review module |
 | L16 | Problem contexts come from the learner's interests; the logic stays the same and realistic. | Context personalisation raised interest and learning (Walkington 2013; Bernacki & Walkington 2018) [S]; LLM personalisation produced unrealistic contexts (arXiv 2602.15876) [S] | skill, critic |
@@ -66,7 +68,7 @@ Mayer numbers: Cambridge Handbook of Multimedia Learning, 2nd ed., chapters on e
 | Q2 | The key cannot be found from the options alone. | Choices-only models beat chance in 11/12 settings (Balepur et al., ACL 2024) [S] | critic |
 | Q3 | Key position is shuffled by code. | LLMs place keys in biased positions (preprint, 2026) [S] | MCP `step_submit` |
 | Q4 | Options of similar length; no stem cues; no all/none of the above. | Haladyna, Downing & Rodriguez 2002 item-writing guidelines [S]; 1.3× threshold [D] | deterministic gate |
-| Q5 | Every item has a Bloom level; ≥ 30% of a lesson's items are apply or higher. | LLM items: 16% apply+ vs 44% human (Law 2025) [P]; 30% [D] | deterministic gate (on the check step), critic |
+| Q5 | Every item has a Bloom level; ≥ 30% of a lesson's items are apply or higher. | LLM items: 16% apply+ vs 44% human (Law 2025) [P]; 30% [D] | deterministic gate (on the check step; on a practice set's last item, and on every item of a harder set), critic |
 | Q6 | Every key, explanation and card answer cites a verbatim quote from a source the server fetched; the quote supports the claim. | Grounding preferred unless over-literal (Levonian et al. 2024, https://arxiv.org/abs/2310.03184) [P]; error rates above | quote gate, critic |
 | Q7 | No near-duplicate items in a topic. | 14% duplicates in LLM items (Law 2025) [P] | deterministic gate |
 | Q8 | A lesson cites at least two publishers when the topic has sources from two or more. | A lesson built on one article presents one vendor's framing as the field's; perspective diversity [D] | `lesson_plan` (planned sources), check-step gate |
@@ -90,6 +92,10 @@ The meerkat is optional and off by default (Settings). While it is on:
 - A lesson crown needs 80% of the exit check right on the first attempt, the L12 threshold. [D]
 - Lesson steps carry no game elements (V1): the app frames the challenge step, and rewards appear outside the steps.
 - Unlocks wait for the end of a lesson, and the companion says nothing about exit-check answers before their results show (L11). [D]
+
+## Practice on demand
+
+A learner can ask for a practice set: 3, 5 or 8 new items on a node, on a lesson's nodes, or on the node of an item they missed. Its items pass the same gates as lesson items and carry the same solution, misconceptions and hints (L8); the tutor helps as in practice. A set has no exit check, so it never moves a node past `learning` (L12). The `mistakes` focus builds items around the misconceptions the learner chose in graded attempts on those nodes; `harder` asks apply or higher of every item. Sizes, focuses and their gates are defaults of this project [D].
 
 ## Learner signals
 

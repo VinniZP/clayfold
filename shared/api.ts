@@ -1,6 +1,6 @@
 import type { HabitId, Outfit, OutfitItemId, OutfitSlot, RewardCondition, Tier } from "./game";
 import type { Lang } from "./i18n";
-import type { Answer, Card, GoalPlanEntry, GraphNode, Level, PublicFigure, PublicItem, PublicStep, Resident } from "./schemas";
+import type { Answer, Card, GoalPlanEntry, GraphNode, Level, PracticeFocus, PracticeSize, PublicFigure, PublicItem, PublicStep, Resident } from "./schemas";
 
 // REST contract. All routes are under /api and exchange JSON.
 // Errors: non-2xx with body ApiError.
@@ -63,6 +63,8 @@ export type LessonSummary = {
   learnerStatus: "not_started" | "in_progress" | "completed";
   /** The lesson's video, if one was requested. */
   video: VideoStatus | null;
+  /** Set for a practice set: a lesson of practice steps only, with no exit check. */
+  practice: { size: number; focus: PracticeFocus } | null;
 };
 
 // POST /api/lessons/:lessonId/resume -> StartLessonResponse (continues a failed lesson in its own authoring
@@ -120,6 +122,28 @@ export type MemoryFile = { path: string; content: string; updatedAt: string };
 // POST /api/topics/:topicId/lessons { nodeId? } -> StartLessonResponse (starts a lesson-author run)
 export type StartLessonRequest = { nodeId?: string };
 export type StartLessonResponse = { lessonId: string | null; conversationId: string };
+
+// Practice sets: fresh practice items on demand, written by a practice-set run and gated like lesson steps.
+// GET  /api/practice/scope?topicId=&nodeId= | ?lessonId= | ?itemId= -> PracticeScope (the nodes a set from there covers)
+// POST /api/practice PracticeRequest -> StartLessonResponse (lessonId set: the set exists at once, its steps follow)
+// GET  /api/lessons/:lessonId/practice -> PracticeResults (practice sets only)
+/** Where the learner asked for practice: a graph node, a lesson's nodes, or the node of an item ("more like this"). */
+export type PracticeFrom = { topicId: string; nodeId: string } | { lessonId: string } | { itemId: string };
+export type PracticeRequest = { from: PracticeFrom; size: PracticeSize; focus: PracticeFocus };
+export type PracticeScope = {
+  topicId: string;
+  nodes: { id: string; title: string }[];
+  /** Items on these nodes the learner answered wrongly or gave up on; the "mistakes" focus needs at least one. */
+  mistakes: number;
+};
+/** First try: correct on the first attempt, without hints. */
+export type PracticeResults = {
+  total: number;
+  answered: number;
+  firstTry: number;
+  solved: number;
+  nodes: { nodeId: string; title: string; total: number; firstTry: number; solved: number }[];
+};
 
 // GET /api/lessons/:lessonId -> LessonView
 export type LessonView = {
