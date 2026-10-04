@@ -42,7 +42,7 @@ function interleave<T>(lists: T[][]): T[] {
 }
 
 /**
- * L20: items with a wrong answer rated "sure" and no correct review answer since, once a day has passed
+ * L23: items with a wrong answer rated "sure" and no correct review answer since, once a day has passed
  * since their latest attempt, whatever the mastery of their node. Oldest confident error first.
  */
 export function retestItems(topicId: string | null, at: Date = new Date(), database: Database = db()): ItemRow[] {
@@ -62,7 +62,7 @@ export function retestItems(topicId: string | null, at: Date = new Date(), datab
 }
 
 /**
- * Due cards, retests of confident errors (L20), delayed-retrieval items (L12) for nodes whose exit check passed
+ * Due cards, retests of confident errors (L23), delayed-retrieval items (L12) for nodes whose exit check passed
  * at least a day ago, then missed practice-test questions. L14: delayed-retrieval items interleave only within a cluster of confusable nodes
  * and stay blocked otherwise; siblings that share a prerequisite stand in for "confusable" (a heuristic, not a
  * measure of similarity).

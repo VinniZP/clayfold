@@ -55,7 +55,7 @@ test("weak spots: items wrong twice in 30 days and leech cards, worst first rela
   expect(weakSpots("tp1", 1, NOW, database)).toHaveLength(1);
 });
 
-test("calibration counts rated, graded answers per confidence level, overall and per topic, busiest topic first (L20)", async () => {
+test("calibration counts rated, graded answers per confidence level, overall and per topic, busiest topic first (L23)", async () => {
   database.query("INSERT INTO topics (id, slug, title, request) VALUES ('tp2', 'tp2', 'Second', 'request')").run();
   const rate = (id: string, choice: number, confidence?: Confidence, context: "practice" | "activate" = "practice") =>
     submitAttempt(id, { answer: { format: "single", choice }, hintsUsed: 0, durationMs: 1000, context, confidence }, { database, at: NOW });

@@ -143,7 +143,7 @@ describe("submitAttempt", () => {
     expect(database.query<{ correct: number }, []>("SELECT correct FROM attempts").get()!.correct).toBe(0);
   });
 
-  test("confidence is stored with the attempt and echoed; prequestions and unrated answers store none (L20)", async () => {
+  test("confidence is stored with the attempt and echoed; prequestions and unrated answers store none (L23)", async () => {
     const practice = insertItem(database, items.single(), { role: "practice", lessonId: "ls1" });
     const pre = insertItem(database, items.single("a"), { role: "activate", lessonId: "ls1" });
     const sure = await submitAttempt(practice, { ...req({ format: "single", choice: 0 }), confidence: "sure" }, { database });

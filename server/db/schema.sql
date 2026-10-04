@@ -134,7 +134,7 @@ CREATE TABLE IF NOT EXISTS attempts (          -- A
   duration_ms INTEGER,
   context TEXT NOT NULL,
   created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
-  confidence TEXT CHECK (confidence IN ('guess','unsure','sure'))  -- learner's rating before the check (L20)
+  confidence TEXT CHECK (confidence IN ('guess','unsure','sure'))  -- learner's rating before the check (L23)
 );
 
 CREATE TABLE IF NOT EXISTS cards (             -- B inserts proposals; A owns review state
@@ -318,7 +318,7 @@ CREATE TABLE IF NOT EXISTS focus_runs (        -- A
   created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
 );
 
-CREATE TABLE IF NOT EXISTS retries (           -- A; mistakes-notebook retries, kept out of attempts (L20)
+CREATE TABLE IF NOT EXISTS retries (           -- A; mistakes-notebook retries, kept out of attempts (L22)
   id TEXT PRIMARY KEY,
   item_id TEXT NOT NULL REFERENCES items(id) ON DELETE CASCADE,
   answer TEXT NOT NULL,                         -- JSON Answer

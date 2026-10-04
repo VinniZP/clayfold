@@ -153,7 +153,7 @@ describe("review session", () => {
     expect(JSON.stringify(session)).not.toContain("SECRET");
   });
 
-  test("a wrong answer rated sure comes back first, a day after the item's latest attempt, until a review answer is right (L20)", async () => {
+  test("a wrong answer rated sure comes back first, a day after the item's latest attempt, until a review answer is right (L23)", async () => {
     database.query("UPDATE nodes SET mastery = 'exit_passed', exit_passed_at = ? WHERE topic_id = 'tp1' AND id = 'b'").run(T0.toISOString());
     const planned = insertItem(database, items.single("b0", "b"), { role: "check", lessonId: "ls1" });
     const sure = insertItem(database, items.single("s", "b"), { role: "practice", lessonId: "ls1" });

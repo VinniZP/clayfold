@@ -155,7 +155,7 @@ function mistakeCounts(): TodayView["mistakes"] {
   return { open: open.length, ready: open.filter((e) => Date.parse(e.readyAt) <= Date.now()).length };
 }
 
-/** The server's rule (L20): a correct retry resolves the entry from a day after its latest error; a wrong one restarts the day. */
+/** The server's rule (L22): a correct retry resolves the entry from a day after its latest error; a wrong one restarts the day. */
 function retry(itemId: string, body: RetryRequest): RetryResponse | null {
   const entry = fx.mistakes.find((e) => e.itemId === itemId);
   const key = fx.keys[itemId];

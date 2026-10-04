@@ -7,7 +7,7 @@ import { t, useLang } from "../lib/i18n";
 import { btn, layout, text } from "../theme/ui";
 import { Spinner } from "./ui";
 
-/** Starts a teach-back on the node (L20) and opens it. */
+/** Starts a teach-back on the node (L24) and opens it. */
 export function TeachBackButton({ topicId, nodeId, lessonId, primary = false }: { topicId: string; nodeId: string; lessonId?: string; primary?: boolean }) {
   useLang();
   const navigate = useNavigate();

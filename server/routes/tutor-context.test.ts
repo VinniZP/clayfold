@@ -34,7 +34,7 @@ test("tutor context shows a match item's pairs and distractor, and each pair of 
   }
 });
 
-test("tutor context carries the confidence of each attempt and flags a confident error (L20)", async () => {
+test("tutor context carries the confidence of each attempt and flags a confident error (L23)", async () => {
   const database = openDb(":memory:");
   seed(database);
   const id = insertItem(database, items.single("b1", "b"), { role: "practice", lessonId: "ls1" });
@@ -46,7 +46,7 @@ test("tutor context carries the confidence of each attempt and flags a confident
   await answer(0, "sure");
   const context = buildTutorContext({ lessonId: "ls1", itemId: id }, database);
   expect(context).toContain("2. [2] wrong2 b1 — wrong (confidence before checking: sure;");
-  expect(context).toContain("The learner was sure of a wrong answer on this item (L20)");
+  expect(context).toContain("The learner was sure of a wrong answer on this item (L23)");
 });
 
 test("tutor context for an open worked line carries its question, hidden line, criteria and earlier answers", () => {

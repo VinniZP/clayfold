@@ -47,7 +47,7 @@ function takeaway(levels: CalibrationLevel[]): string {
   return t("calibration.lowData");
 }
 
-/** How often the learner is right at each confidence level (L20), overall and per course. */
+/** How often the learner is right at each confidence level (L23), overall and per course. */
 export function Calibration({ view }: { view: CalibrationView }) {
   useLang();
   const enabled = useConfidenceEnabled();

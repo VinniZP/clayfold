@@ -21,7 +21,7 @@ export async function initConfidence(): Promise<void> {
   if (settings) setConfidenceEnabled(settings.confidence.enabled);
 }
 
-/** Whether graded answers ask how sure the learner is before checking (L20). */
+/** Whether graded answers ask how sure the learner is before checking (L23). */
 export function useConfidenceEnabled(): boolean {
   return useSyncExternalStore(subscribe, () => enabled);
 }

@@ -1,5 +1,5 @@
 ---
-description: Opening turn of a teach-back on the git index after its lesson. The novice introduces itself, asks the learner to explain the node and ends the turn, explaining nothing itself (L20).
+description: Opening turn of a teach-back on the git index after its lesson. The novice introduces itself, asks the learner to explain the node and ends the turn, explaining nothing itself (L24).
 tags: [teachback]
 max_turns: 5
 timeout_seconds: 180

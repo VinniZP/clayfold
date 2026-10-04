@@ -184,7 +184,7 @@ export function buildTutorContext(
     );
     if (attempts.some((a) => a.confidence === "sure" && a.correct === 0 && a.gave_up === 0)) {
       parts.push(
-        "The learner was sure of a wrong answer on this item (L20). Name the belief that answer rests on and set it against the correct reasoning; the item returns in their review a day after their last attempt.",
+        "The learner was sure of a wrong answer on this item (L23). Name the belief that answer rests on and set it against the correct reasoning; the item returns in their review a day after their last attempt.",
       );
     }
 

@@ -278,7 +278,7 @@ export type SendMessageRequest = { text: string };
 // Items (grading happens on the server; keys never leave it)
 // POST /api/items/:itemId/attempt AttemptRequest -> AttemptResponse
 
-/** How sure the learner was before checking an answer (L20). Self-reported: it changes neither the grade nor mastery. */
+/** How sure the learner was before checking an answer (L23). Self-reported: it changes neither the grade nor mastery. */
 export const CONFIDENCE_LEVELS = ["guess", "unsure", "sure"] as const;
 export type Confidence = (typeof CONFIDENCE_LEVELS)[number];
 
@@ -319,7 +319,7 @@ export type WorkedLineResponse = { correct: boolean; text: string };
  */
 export type TutorRequest = { itemId?: string; stepId?: string; line?: number; quote?: string; text: string };
 
-// Teach-back (L20): after completing a lesson the learner explains a node to a novice persona.
+// Teach-back (L24): after completing a lesson the learner explains a node to a novice persona.
 // POST /api/topics/:topicId/teachbacks StartTeachbackRequest -> TeachbackView (starts the conversation; without lessonId
 // the newest lesson on the node the learner completed; 409 when there is none)
 // GET /api/teachbacks/:id -> TeachbackView
@@ -370,7 +370,7 @@ export type ReviewCard = { id: string; topicId: string; kind: Card["kind"]; fron
 export type ReviewSession = {
   cards: ReviewCard[];
   items: PublicItem[];
-  /** Ids of `items` that return because the learner was sure of a wrong answer to them (L20). */
+  /** Ids of `items` that return because the learner was sure of a wrong answer to them (L23). */
   retests: string[];
 };
 // POST /api/cards/:cardId/review { rating: 1|2|3|4, durationMs? } -> { due }
@@ -564,7 +564,7 @@ export type WeakSpot =
   | { kind: "item"; itemId: string; topicId: string; lessonId: string | null; nodeId: string; prompt: string; wrongAttempts: number; lastMisconception: string | null }
   | { kind: "card"; cardId: string; topicId: string; nodeId: string; front: string; lapses: number };
 
-// Mistakes notebook (L20): GET /api/mistakes -> MistakesView
+// Mistakes notebook (L22): GET /api/mistakes -> MistakesView
 // GET /api/mistakes/:itemId/solution -> MistakeSolution ; POST /api/mistakes/:itemId/retry RetryRequest -> RetryResponse
 // Both 404 for an item that is not in the notebook, so a solution never leaves the server before an attempt (L7, L9).
 // A graded item (not a prequestion) is in the notebook when its first attempt was wrong or the learner gave up on it.
@@ -665,7 +665,7 @@ export type Settings = {
   narration: { keySet: boolean; voiceId: string | null; model: TtsModel; prefetch: boolean };
   /** Video lessons; they use the narration key, voice and model. */
   video: { enabled: boolean };
-  /** Graded answers offer a confidence rating before they are checked (L20); on by default. */
+  /** Graded answers offer a confidence rating before they are checked (L23); on by default. */
   confidence: { enabled: boolean };
   /** Key badges on answer options and primary buttons, shown on devices with a fine pointer. */
   shortcuts: { hints: boolean };

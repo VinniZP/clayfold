@@ -136,7 +136,7 @@ export function TopicsPage() {
   );
 }
 
-/** The server starts a teach-back only after a completed lesson on the node (L20). */
+/** The server starts a teach-back only after a completed lesson on the node (L24). */
 const explainable = (detail: TopicDetail, nodeId: string) =>
   detail.lessons.some((l) => l.nodeIds.includes(nodeId) && (l.status === "ready" || l.status === "finished") && l.learnerStatus === "completed");
 

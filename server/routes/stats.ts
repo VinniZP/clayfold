@@ -109,7 +109,7 @@ export function weakSpots(topicId: string | null, limit: number, at: Date = new 
     .map((r) => r.spot);
 }
 
-/** Rated, graded answers per confidence level, overall and per topic (L20); prequestions and give-ups are left out. */
+/** Rated, graded answers per confidence level, overall and per topic (L23); prequestions and give-ups are left out. */
 export function calibration(database: Database = db()): CalibrationView {
   const rows = database
     .query<{ topic_id: string; title: string; confidence: Confidence; attempts: number; correct: number }, []>(

@@ -21,7 +21,7 @@ import { Markdown, Spinner } from "./ui";
  * activate: one ungraded answer, then the solution (L2).
  * check:    one answer, no hints, no tutor; results shown by the parent at the end (L11).
  * review:   delayed retrieval; retries and give-up, no hints or tutor.
- * retry:    one unaided answer to a mistake, then the solution (L20); `send` records it.
+ * retry:    one unaided answer to a mistake, then the solution (L22); `send` records it.
  */
 export type ItemMode = "practice" | "activate" | "check" | "review" | "retry";
 
@@ -324,7 +324,7 @@ export function ItemView({ item, mode, context, active = true, onResult, onOffer
   // Wrong attempts before the restored one are known only as a count.
   const earlierWrong = initial ? initial.wrongAttempts - (restored?.correct === false ? 1 : 0) : 0;
   const wrongCount = earlierWrong + responses.filter((r) => r.correct === false).length;
-  // L20: only the first answer is rated; a retry comes after the learner has seen feedback.
+  // L23: only the first answer is rated; a retry comes after the learner has seen feedback.
   const askConfidence = confidenceOn && mode !== "activate" && mode !== "retry" && wrongCount === 0;
   const confidentError = responses.some((r) => r.correct === false && r.confidence === "sure");
   const canGiveUp = (mode === "practice" || mode === "review") && wrongCount > 0;
