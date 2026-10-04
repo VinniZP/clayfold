@@ -113,7 +113,7 @@ CREATE TABLE IF NOT EXISTS items (             -- B inserts on publish; A update
   node_id TEXT NOT NULL,
   format TEXT NOT NULL,
   content TEXT NOT NULL,                        -- JSON authoring Item
-  display_order TEXT,                           -- JSON permutation for options/entries (Q3)
+  display_order TEXT,                           -- JSON permutation for options/entries (Q3); match: left, then right
   status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active','flagged','retired')),
   created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
 );

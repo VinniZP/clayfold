@@ -1,6 +1,7 @@
 import type { Database } from "bun:sqlite";
 import type { Card, Item, Step } from "../../shared/schemas";
 import { newId } from "../db";
+import { displayLength } from "../gates/content";
 import { stepItems } from "./public";
 
 // Test builders: rows shaped as step_submit writes them on publish.
@@ -38,6 +39,27 @@ export const items = {
     correct: [0, 2],
   }),
   order: (tag = "o", nodeId = "a"): Item => ({ format: "order", ...common(tag, nodeId), sequence: ["first", "second", "third", "fourth"] }),
+  match: (tag = "mt", nodeId = "a"): Item => ({
+    format: "match",
+    ...common(tag, nodeId),
+    pairs: [
+      { left: "left0", right: "right0", mistake: { misconception: `SECRET-MISC0-${tag}`, feedback: `SECRET-FB0-${tag}` } },
+      { left: "left1", right: "right1" },
+      { left: "left2", right: "right2" },
+    ],
+    distractors: [{ text: "extra", misconception: `SECRET-MISCX-${tag}`, feedback: `SECRET-FBX-${tag}` }],
+  }),
+  sort: (tag = "so", nodeId = "a"): Item => ({
+    format: "sort",
+    ...common(tag, nodeId),
+    categories: ["catA", "catB"],
+    entries: [
+      { text: "e0", category: 0 },
+      { text: "e1", category: 1, mistake: { misconception: `SECRET-MISC1-${tag}`, feedback: `SECRET-FB1-${tag}` } },
+      { text: "e2", category: 0 },
+      { text: "e3", category: 1 },
+    ],
+  }),
   cloze: (tag = "c", nodeId = "a"): Item => ({
     format: "cloze",
     ...common(tag, nodeId),
@@ -71,6 +93,15 @@ export function seed(database: Database): void {
 
 const ROLE: Record<string, string> = { activate: "activate", explain: "explain_check", practice: "practice", check: "check" };
 
+const reversed = (n: number) => Array.from({ length: n }, (_, i) => n - 1 - i);
+
+/** Reversed display order; a match item reverses each side. */
+function reversedOrder(item: Item): number[] | null {
+  const length = displayLength(item);
+  if (item.format === "match") return [...reversed(item.pairs.length), ...reversed(length - item.pairs.length)];
+  return length ? reversed(length) : null;
+}
+
 /** Inserts a published step and its item rows (reversed display order). Returns the step id and item ids in step order. */
 export function insertStep(database: Database, idx: number, step: Step, lessonId = "ls1"): { stepId: string; itemIds: string[] } {
   const stepId = newId("st");
@@ -87,8 +118,7 @@ export function insertItem(
   opts: { stepId?: string | null; lessonId?: string | null; role: string; displayOrder?: number[] | null },
 ): string {
   const id = newId("it");
-  const length = "options" in item ? item.options.length : "sequence" in item ? item.sequence.length : 0;
-  const order = opts.displayOrder === undefined ? (length ? Array.from({ length }, (_, i) => length - 1 - i) : null) : opts.displayOrder;
+  const order = opts.displayOrder === undefined ? reversedOrder(item) : opts.displayOrder;
   database
     .query(
       "INSERT INTO items (id, topic_id, lesson_id, step_id, role, node_id, format, content, display_order) VALUES (?, 'tp1', ?, ?, ?, ?, ?, ?, ?)",

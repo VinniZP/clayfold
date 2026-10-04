@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { Step } from "../../shared/schemas";
 import { critiqueCards, critiqueStep, stepRubric, type CriticRunner } from "./critic";
-import { card, explainStep, practiceStep, singleItem } from "./test-fixtures";
+import { card, explainStep, matchItem, practiceStep, singleItem, sortItem } from "./test-fixtures";
 
 type Reply = (prompt: string, schema: { properties: Record<string, unknown> }) => unknown;
 
@@ -83,6 +83,36 @@ describe("blind solve (Q1)", () => {
   });
 });
 
+describe("blind solve of match and sort (Q1)", () => {
+  // Left shown as git status, git add, git commit; right shown as A distractor, B commit, C add, D status.
+  const match = { level: "novice" as const, displayOrders: [[2, 0, 1, 3, 1, 0, 2]] };
+  const solve = (placements: string[], step = practiceStep(undefined, matchItem()), opts = match) => {
+    let seen = "";
+    return critiqueStep(step, opts, fakeRunner({ solve: (p) => ((seen = p), { items: [{ id: "q1", placements, unambiguous: true, reason: "" }] }), rubric: allPass })).then((v) => ({
+      q1: v.ok ? v.checks.find((c) => c.rule === "Q1") : undefined,
+      seen,
+    }));
+  };
+
+  test("a match pairing is compared through both display orders", async () => {
+    const { q1, seen } = await solve(["D", "C", "B"]);
+    expect(q1?.pass).toBe(true);
+    expect(seen).toContain('"1. git status"');
+    expect(seen).toContain('"A. Sends commits to the remote"');
+    expect(seen).not.toContain("misconception");
+    expect((await solve(["D", "B", "C"])).q1).toEqual(expect.objectContaining({ pass: false, path: "item" }));
+    expect((await solve(["D", "C"])).q1?.pass).toBe(false);
+  });
+
+  test("a sort placement is compared through the display order", async () => {
+    // Entries shown as: a new file, a file you just edited, a change ready for the next commit, a change after git add.
+    const opts = { level: "novice" as const, displayOrders: [[2, 0, 3, 1]] };
+    const step = practiceStep(undefined, sortItem());
+    expect((await solve(["A", "A", "B", "B"], step, opts)).q1?.pass).toBe(true);
+    expect((await solve(["A", "B", "B", "B"], step, opts)).q1?.pass).toBe(false);
+  });
+});
+
 describe("options only (Q2)", () => {
   const step = practiceStep();
   const opts = { level: "novice" as const, displayOrders: [[0, 1, 2]] };
@@ -112,6 +142,10 @@ describe("rubric", () => {
     expect(rules.filter((r) => r === "Q6").length).toBe(2);
     expect(rules.filter((r) => r === "L8").length).toBe(2);
     expect(rules).toEqual(expect.arrayContaining(["Q5", "L16", "V1", "V2", "L3"]));
+  });
+  test("a match item asks about each distractor and its mistakes", () => {
+    const qs = stepRubric(practiceStep(undefined, matchItem()), "novice").filter((q) => q.rule === "L8");
+    expect(qs.map((q) => q.path)).toEqual(["item.distractors.0", "item"]);
   });
   test("L6 only for novices", () => {
     const worked: Step = { kind: "worked_example", title: "Example", problem: "Save the edit in a commit.", lines: [{ text: "git add f" }, { text: "git commit" }], cites: [{ sourceId: "s", quote: "12345678" }] };

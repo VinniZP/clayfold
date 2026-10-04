@@ -31,6 +31,29 @@ describe("gradeClosed", () => {
     expect(gradeClosed(item, reversed(4), { format: "order", sequence: ["second", "first", "third", "fourth"] }).correct).toBe(false);
   });
 
+  test("match maps both sides through the display order and marks each pair", () => {
+    const item = items.match();
+    // Left shown as left2, left1, left0; right shown as extra, right2, right1, right0.
+    const order = [2, 1, 0, 3, 2, 1, 0];
+    expect(gradeClosed(item, order, { format: "match", pairs: [1, 2, 3] })).toMatchObject({ correct: true, feedback: null, marks: [true, true, true] });
+    const wrong = gradeClosed(item, order, { format: "match", pairs: [0, 2, 1] });
+    expect(wrong).toMatchObject({ correct: false, chosenOption: null, misconception: "SECRET-MISCX-mt", marks: [false, true, false] });
+    expect(wrong.feedback).toBe("1 of 3 placed right.\n\n- **left2**: SECRET-FBX-mt\n- **left0**: SECRET-FB0-mt");
+    expect(() => gradeClosed(item, order, { format: "match", pairs: [1, 2, 9] })).toThrow();
+    expect(() => gradeClosed(item, order, { format: "match", pairs: [1, 2] })).toThrow();
+  });
+
+  test("sort compares each entry's category; a misplacement without a mistake only counts", () => {
+    const item = items.sort();
+    // Entries shown as e3, e2, e1, e0.
+    expect(gradeClosed(item, reversed(4), { format: "sort", categories: [1, 0, 1, 0] })).toMatchObject({ correct: true, marks: [true, true, true, true] });
+    const wrong = gradeClosed(item, reversed(4), { format: "sort", categories: [0, 0, 0, 0] });
+    expect(wrong).toMatchObject({ correct: false, misconception: "SECRET-MISC1-so", marks: [false, true, false, true] });
+    expect(wrong.feedback).toBe("2 of 4 placed right.\n\n- **e1**: SECRET-FB1-so");
+    expect(gradeClosed(item, reversed(4), { format: "sort", categories: [0, 0, 1, 0] }).feedback).toBe("3 of 4 placed right.");
+    expect(() => gradeClosed(item, reversed(4), { format: "sort", categories: [1, 0, 2, 0] })).toThrow();
+  });
+
   test("cloze matches each blank case-insensitively, trimmed, with collapsed whitespace", () => {
     const item = items.cloze();
     expect(gradeClosed(item, [], { format: "cloze", blanks: ["  alt answer ", "SECOND"] }).correct).toBe(true);
@@ -91,6 +114,18 @@ describe("submitAttempt", () => {
     expect(row).toEqual({ chosen_option: 1, misconception: "SECRET-MISC1-s" });
     const right = await submitAttempt(id, req({ format: "single", choice: 2 }), { database });
     expect(right).toMatchObject({ correct: true, solution: "SECRET-SOL-s", correctAnswer: "key s", attemptNo: 3 });
+  });
+
+  test("match and sort answers carry marks; the key and solution come only with the right answer", async () => {
+    const id = insertItem(database, items.match(), { role: "practice", lessonId: "ls1" });
+    const wrong = await submitAttempt(id, req({ format: "match", pairs: [0, 2, 1] }), { database });
+    expect(wrong).toMatchObject({ correct: false, marks: [false, true, false] });
+    expect(wrong.correctAnswer).toBeUndefined();
+    expect(database.query<{ misconception: string }, []>("SELECT misconception FROM attempts").get()!.misconception).toBe("SECRET-MISCX-mt");
+    const right = await submitAttempt(id, req({ format: "match", pairs: [1, 2, 3] }), { database });
+    expect(right).toMatchObject({ correct: true, marks: [true, true, true], correctAnswer: "left0 → right0; left1 → right1; left2 → right2" });
+    const sortId = insertItem(database, items.sort(), { role: "practice", lessonId: "ls1" });
+    expect(giveUp(sortId, { database }).correctAnswer).toBe("catA: e0, e2; catB: e1, e3");
   });
 
   test("check items never offer the tutor and refuse hints", async () => {

@@ -1,7 +1,7 @@
 import type { Card, Item, Level, Step } from "../../shared/schemas";
 import type { RuleId } from "../../shared/rules";
 import { runJsonPrompt, type OneShotResult } from "../claude/oneshot";
-import { cardCites, itemCites, stepCites, stepFigure, stepItems, type PathCite } from "./content";
+import { cardCites, displayLength, itemCites, matchOrders, matchTargets, stepCites, stepFigure, stepItems, type PathCite } from "./content";
 import { normalizeForQuote } from "./text";
 
 // Model-based checks, each a narrow yes/no question with a rule ID. No holistic scores.
@@ -28,7 +28,8 @@ const fromLetter = (s: string | undefined) => {
   const i = LETTERS.indexOf((s ?? "").trim().toUpperCase().replace(/[^A-J]/g, "").slice(0, 1));
   return i >= 0 ? i : null;
 };
-const display = <T>(arr: T[], order: number[] | null) => (order ?? arr.map((_, i) => i)).map((i) => arr[i]!);
+const identity = (n: number) => Array.from({ length: n }, (_, i) => i);
+const display = <T>(arr: T[], order: number[] | null) => (order ?? identity(arr.length)).map((i) => arr[i]!);
 const norm = (s: string) => normalizeForQuote(s).replace(/[.,;:!?]+$/u, "");
 
 type Call<T> = { prompt: string; schema: object; validate: (v: T) => string | null };
@@ -57,6 +58,8 @@ type SolveAnswer = {
   choice?: string;
   choices?: string[];
   order?: string[];
+  /** match: per numbered entry, the letter of its target; sort: per numbered entry, the letter of its category. */
+  placements?: string[];
   blanks?: string[];
   /** cloze: per blank, every other answer a knowledgeable person could defend. */
   alternatives?: string[][];
@@ -75,6 +78,21 @@ function blindView(c: CriticItem): Record<string, unknown> {
       return { ...base, options: display(item.options, c.displayOrder).map((o, i) => `${letter(i)}. ${o.text}`) };
     case "order":
       return { ...base, entries: display(item.sequence, c.displayOrder).map((e, i) => `${letter(i)}. ${e}`) };
+    case "match": {
+      const { left, right } = matchOrders(item, c.displayOrder ?? identity(displayLength(item)));
+      const targets = matchTargets(item);
+      return {
+        ...base,
+        entries: left.map((i, d) => `${d + 1}. ${item.pairs[i]!.left}`),
+        targets: right.map((i, d) => `${letter(d)}. ${targets[i]}`),
+      };
+    }
+    case "sort":
+      return {
+        ...base,
+        entries: display(item.entries, c.displayOrder).map((e, d) => `${d + 1}. ${e.text}`),
+        categories: item.categories.map((cat, k) => `${letter(k)}. ${cat}`),
+      };
     case "cloze":
       return { ...base, text: item.text, blankCount: item.blanks.length };
     case "number":
@@ -100,6 +118,11 @@ const SOLVE_SCHEMA = {
           choice: { type: "string", description: "single: the letter of your answer" },
           choices: { type: "array", items: { type: "string" }, description: "multi: letters of all correct options" },
           order: { type: "array", items: { type: "string" }, description: "order: entry letters in the correct order" },
+          placements: {
+            type: "array",
+            items: { type: "string" },
+            description: "match: for entries 1, 2, ... in order, the letter of each one's target; sort: for entries 1, 2, ... in order, the letter of each one's category",
+          },
           blanks: { type: "array", items: { type: "string" }, description: "cloze: one answer per blank, in blank order" },
           alternatives: {
             type: "array",
@@ -123,10 +146,12 @@ Solve each item below yourself, as an expert would. The items are shown without 
 - single: give the letter of the one correct option in "choice".
 - multi: give the letters of every correct option in "choices".
 - order: give the entry letters in the correct order in "order".
+- match: pair every numbered entry with one lettered target; in "placements" give, for entries 1, 2, ... in order, the letter of its target. A target may be left over.
+- sort: put every numbered entry into one lettered category; in "placements" give, for entries 1, 2, ... in order, the letter of its category.
 - cloze: give one answer per blank {{1}}, {{2}}, ... in "blanks", and in "alternatives" list for each blank every other answer a knowledgeable person could defend (synonyms, equivalent terms, other word forms that fit the sentence).
 - number: give the numeric answer in "value" (in the stated unit, if any).
 - short: a reference answer is shown; set "referenceCorrect" to true only if it is correct and complete for the prompt.
-Set "unambiguous" to true only if exactly one answer is defensible (for multi: exactly one defensible set of options; for order: exactly one defensible order; for number: the prompt determines the value). For cloze and short items set it to true; their ambiguity is judged from "alternatives" and "referenceCorrect". If two options could be defended by a knowledgeable person, set it to false and name them in "reason".
+Set "unambiguous" to true only if exactly one answer is defensible (for multi: exactly one defensible set of options; for order: exactly one defensible order; for match: exactly one defensible target per entry; for sort: exactly one defensible category per entry; for number: the prompt determines the value). For cloze and short items set it to true; their ambiguity is judged from "alternatives" and "referenceCorrect". If two options could be defended by a knowledgeable person, set it to false and name them in "reason".
 
 Items:
 ${JSON.stringify(items.map(blindView), null, 2)}`;
@@ -154,6 +179,24 @@ function judgeSolve(c: CriticItem, a: SolveAnswer): CriticCheck {
     case "order": {
       const got = (a.order ?? []).map((s) => toAuthoring(fromLetter(s)));
       if (got.length !== item.sequence.length || got.some((x, i) => x !== i)) return fail(`the solver's order ${(a.order ?? []).join(" ")} differs from the key`);
+      break;
+    }
+    case "match": {
+      const { left, right } = matchOrders(item, c.displayOrder ?? identity(displayLength(item)));
+      const got = a.placements ?? [];
+      const wrong = left.findIndex((pair, d) => {
+        const pick = fromLetter(got[d]);
+        return pick === null || right[pick] !== pair;
+      });
+      if (got.length !== left.length || wrong >= 0) return fail(`the solver's pairing ${got.map((g, d) => `${d + 1}${g}`).join(" ")} differs from the key`);
+      break;
+    }
+    case "sort": {
+      const order = c.displayOrder ?? identity(item.entries.length);
+      const got = a.placements ?? [];
+      if (got.length !== order.length) return fail(`the solver placed ${got.length} of ${order.length} entries`);
+      const wrong = order.findIndex((i, d) => fromLetter(got[d]) !== item.entries[i]!.category);
+      if (wrong >= 0) return fail(`the solver put entry ${wrong + 1} into ${got[wrong]}, which differs from the key`);
       break;
     }
     case "cloze": {
@@ -289,6 +332,24 @@ function itemQuestions(item: Item, path: string, ids: () => string): RubricQuest
         path: `${path}.options.${i}`,
         question: `Option "${path}.options.${i}": is this option actually wrong for the prompt, AND is its "misconception" a plausible error that a learner could really make? true only if both hold.`,
       });
+    });
+  }
+  if (item.format === "match") {
+    item.distractors?.forEach((_, i) => {
+      qs.push({
+        id: ids(),
+        rule: "L8",
+        path: `${path}.distractors.${i}`,
+        question: `Distractor "${path}.distractors.${i}": does it fit none of the left entries, AND is its "misconception" a plausible error that a learner could really make? true only if both hold.`,
+      });
+    });
+  }
+  if ((item.format === "match" && item.pairs.some((p) => p.mistake)) || (item.format === "sort" && item.entries.some((e) => e.mistake))) {
+    qs.push({
+      id: ids(),
+      rule: "L8",
+      path,
+      question: `Item "${path}": is every "mistake" a plausible error a learner could really make with that entry, and does its feedback explain the error without naming the entry's correct ${item.format === "match" ? "right entry" : "category"}? true only if both hold for every mistake.`,
     });
   }
   qs.push({

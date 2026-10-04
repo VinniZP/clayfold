@@ -64,6 +64,7 @@ function grade(itemId: string, body: AttemptRequest): AttemptResponse {
   const a = body.answer;
   let correct = false;
   let feedback = key.feedback ?? "";
+  let marks: boolean[] | undefined;
   switch (a.format) {
     case "single":
       correct = a.choice === key.correct;
@@ -75,6 +76,17 @@ function grade(itemId: string, body: AttemptRequest): AttemptResponse {
     case "order":
       correct = JSON.stringify(a.sequence) === JSON.stringify(key.correct);
       break;
+    case "match":
+    case "sort": {
+      const picks = a.format === "match" ? a.pairs : a.categories;
+      marks = picks.map((p, i) => p === (key.correct as number[])[i]);
+      correct = marks.every(Boolean);
+      if (!correct) {
+        const lines = marks.flatMap((m, i) => (m || !key.placementFeedback?.[i] ? [] : [`- ${key.placementFeedback[i]}`]));
+        feedback = [t("grading.placedRight", { right: marks.filter(Boolean).length, total: marks.length }), lines.join("\n")].filter(Boolean).join("\n\n");
+      }
+      break;
+    }
     case "cloze":
       correct = a.blanks.every((b, i) => (key.correct as string[][])[i]?.some((x) => x.toLowerCase() === b.toLowerCase()));
       break;
@@ -91,7 +103,7 @@ function grade(itemId: string, body: AttemptRequest): AttemptResponse {
   if (body.context === "activate") {
     st.solution = key.solution;
     st.correctAnswer = key.correctAnswer;
-    return { correct: null, feedback, solution: key.solution, correctAnswer: key.correctAnswer, attemptNo, offerTutor: false };
+    return { correct: null, feedback, marks, solution: key.solution, correctAnswer: key.correctAnswer, attemptNo, offerTutor: false };
   }
   if (correct) {
     st.solved = true;
@@ -104,6 +116,7 @@ function grade(itemId: string, body: AttemptRequest): AttemptResponse {
   return {
     correct,
     feedback,
+    marks,
     solution: correct ? key.solution : undefined,
     correctAnswer: correct ? key.correctAnswer : undefined,
     attemptNo,

@@ -14,9 +14,11 @@ export const iso = (daysAgo: number, hour = 10) => {
 
 export type Key = {
   correct: number | number[] | string[] | number | string[][] | null;
-  kind: "single" | "multi" | "order" | "cloze" | "number" | "short";
+  kind: PublicItem["format"];
   tolerance?: number;
   optionFeedback?: string[];
+  /** match and sort: feedback per entry, by display index, shown when it is placed wrong. */
+  placementFeedback?: Record<number, string>;
   feedback?: string;
   solution: string;
   correctAnswer: string;
@@ -257,6 +259,27 @@ Two groups get a positive result. The answer to the question is the share of the
           hints: ["The first number is 1% of 1000.", "The second is 90% of the first."],
         },
       ),
+      item(
+        "c2m",
+        {
+          format: "match",
+          prompt: "Match each probability from the test example to what it describes.",
+          bloom: "understand",
+          entries: ["P(test+ | sick)", "P(sick)", "P(test+ | healthy)", "P(sick | test+)"],
+          targets: ["The share of positives who are actually sick", "The false positive rate", "The test's sensitivity", "The prevalence of the disease", "The share of healthy people who test negative"],
+        },
+        {
+          correct: [2, 3, 1, 0],
+          placementFeedback: {
+            0: "**P(test+ | sick)**: the part after the bar names the group; this share is computed among the sick, not among the positives.",
+            2: "**P(test+ | healthy)**: a positive result in a healthy person is a false alarm, not a correct negative.",
+            3: "**P(sick | test+)**: the group here is everyone who tested positive; the question is how many of them are sick.",
+          },
+          solution: "P(test+ | sick) is the sensitivity, P(sick) the prevalence, P(test+ | healthy) the false positive rate, and P(sick | test+) the share of positives who are actually sick. The share of healthy people who test negative, P(test− | healthy), pairs with none of them.",
+          correctAnswer: "P(test+ | sick) → sensitivity; P(sick) → prevalence; P(test+ | healthy) → false positive rate; P(sick | test+) → share of positives who are sick",
+          hints: ["Read the part after the bar first: it names the group the share is computed in.", "Only one of the four is computed among the people who tested positive."],
+        },
+      ),
     ],
   },
   {
@@ -430,6 +453,34 @@ export const condSteps: PublicStep[] = [
     figure: brokenMermaid,
     cites,
     checks: [
+      item(
+        "cc2",
+        {
+          format: "sort",
+          prompt: "Each statement describes a probability. Is it joint or conditional?",
+          bloom: "understand",
+          entries: [
+            "Of the people with a positive test, the share who are sick",
+            "The chance that a random person is sick and tests positive",
+            "The share of chess players among the girls",
+            "The chance that a day is both cloudy and rainy",
+            "The chance of rain on a day when clouds are forecast",
+            "The share of students who are girls and play chess",
+          ],
+          categories: ["Joint: P(A and B)", "Conditional: P(A | B)"],
+        },
+        {
+          correct: [1, 0, 1, 0, 1, 0],
+          placementFeedback: {
+            1: "**The chance that a random person is sick and tests positive**: the share is taken over everyone; nothing narrows the group.",
+            2: "**The share of chess players among the girls**: “among the girls” narrows the group before the share is taken.",
+            4: "**The chance of rain on a day when clouds are forecast**: only days with a cloud forecast count.",
+          },
+          solution: "Conditional statements narrow the group first (“of the people with a positive test”, “among the girls”, “on a day when clouds are forecast”). Joint statements take both events over everyone (“sick and tests positive”, “cloudy and rainy”, “girls and play chess”).",
+          correctAnswer: "Joint: sick and positive, cloudy and rainy, girls who play chess; Conditional: sick among positives, chess players among girls, rain given a forecast",
+          hints: ["Look for words that narrow the group: “of”, “among”, “when”.", "A joint probability counts both events over everyone."],
+        },
+      ),
       item(
         "cc1",
         { format: "short", prompt: "In your own words: what does dividing by P(B) do?", bloom: "understand" },
@@ -776,6 +827,31 @@ export const audit: AuditEntry[] = [
       { stage: "schema", rule: "S1", pass: true, message: "" },
       { stage: "critic", rule: "Q1", pass: true, message: "Blind solve: 27.9%" },
       { stage: "critic", rule: "L16", pass: false, message: "The problem context is not tied to the interests in MISSION (A/B tests); skipped on resubmission" },
+    ],
+  },
+  {
+    itemId: "c2m",
+    topicTitle: "Bayesian statistics",
+    item: {
+      format: "match",
+      prompt: "Match each probability from the test example to what it describes.",
+      bloom: "understand",
+      pairs: [
+        { left: "P(test+ | sick)", right: "The test's sensitivity", mistake: { misconception: "Reads the bar backwards: takes the share among the positives", feedback: "The part after the bar names the group; this share is computed among the sick." } },
+        { left: "P(sick)", right: "The prevalence of the disease" },
+        { left: "P(test+ | healthy)", right: "The false positive rate" },
+        { left: "P(sick | test+)", right: "The share of positives who are actually sick", mistake: { misconception: "Confuses forward and inverse probability", feedback: "The group here is everyone who tested positive." } },
+      ],
+      distractors: [{ text: "The share of healthy people who test negative", misconception: "Confuses the false positive rate with specificity", feedback: "A positive result in a healthy person is a false alarm, not a correct negative." }],
+      solution: "P(test+ | sick) is the sensitivity, P(sick) the prevalence, P(test+ | healthy) the false positive rate, and P(sick | test+) the share of positives who are actually sick.",
+      hints: ["Read the part after the bar first.", "Only one of the four is computed among the positives."],
+    },
+    gate: [
+      { stage: "schema", rule: "S1", pass: true, message: "" },
+      { stage: "deterministic", rule: "Q1", pass: true, message: "ok" },
+      { stage: "deterministic", rule: "Q4", pass: true, message: "ok" },
+      { stage: "critic", rule: "Q1", pass: true, message: "Blind solve agrees with the key" },
+      { stage: "critic", rule: "L8", pass: true, message: "items.1.distractors.0: The distractor fits no entry and names a common confusion" },
     ],
   },
 ];

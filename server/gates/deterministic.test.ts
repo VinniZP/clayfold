@@ -1,7 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import type { Card, GraphNode, Item, LessonPlan, Step } from "../../shared/schemas";
+import { itemSurface } from "./content";
 import { checkBlanks, checkBloomShare, checkCaption, checkCard, checkDuplicates, checkGraph, checkItem, checkLessonPlan, checkStep, Report } from "./deterministic";
-import { activateStep, card, clozeItem, explainStep, orderItem, singleItem } from "./test-fixtures";
+import { activateStep, card, clozeItem, explainStep, matchItem, orderItem, singleItem, sortItem } from "./test-fixtures";
 
 const rules = (r: Report) => r.violations.map((v) => v.rule);
 const item = (i: Item, role: "activate" | "practice" = "practice") => {
@@ -16,6 +17,10 @@ describe("L2 closed prequestions", () => {
   test("short item in activate step is a violation", () => expect(rules(item(short, "activate"))).toEqual(["L2"]));
   test("short item in practice step is fine", () => expect(item(short, "practice").violations).toEqual([]));
   test("closed formats pass", () => expect(item(singleItem(), "activate").violations).toEqual([]));
+  test("match and sort are closed formats", () => {
+    expect(item(matchItem(), "activate").violations).toEqual([]);
+    expect(item(sortItem(), "activate").violations).toEqual([]);
+  });
 });
 
 describe("L4 explain length", () => {
@@ -155,6 +160,49 @@ describe("format structure", () => {
   });
 });
 
+describe("match", () => {
+  const m = matchItem();
+  const paths = (i: Item) => item(i).violations.map((v) => `${v.rule} ${v.path}`);
+  test("a repeated left or right entry has two correct pairings", () => {
+    expect(paths({ ...m, pairs: [m.pairs[0]!, { ...m.pairs[1]!, left: " Git  ADD" }, m.pairs[2]!] })).toEqual(["Q1 item.pairs.1.left"]);
+    expect(paths({ ...m, distractors: [{ ...m.distractors![0]!, text: "puts a change into the index" }] })).toEqual(["Q1 item.distractors.0.text"]);
+  });
+  test("some wrong pairing names its misconception", () => {
+    expect(paths({ ...m, pairs: m.pairs.map(({ left, right }) => ({ left, right })), distractors: undefined })).toEqual(["L8 item.pairs"]);
+    expect(paths({ ...m, pairs: m.pairs.map(({ left, right }) => ({ left, right })) })).toEqual([]);
+  });
+  test("a long word shared only by a pair matches it without knowledge", () => {
+    const cue = { ...m, pairs: [...m.pairs.slice(0, 2), { left: "git rebase", right: "Rebase replays commits on a new base" }] };
+    expect(paths(cue)).toEqual(["Q4 item.pairs.2"]);
+    const shared = { ...cue, distractors: [{ ...m.distractors![0]!, text: "Rebase merges two branches" }] };
+    expect(paths(shared)).toEqual([]);
+  });
+  test("a catch-all distractor", () => {
+    expect(paths({ ...m, distractors: [{ ...m.distractors![0]!, text: "None of the above" }] })).toEqual(["Q4 item.distractors.0.text"]);
+  });
+});
+
+describe("sort", () => {
+  const s = sortItem();
+  const paths = (i: Item) => item(i).violations.map((v) => `${v.rule} ${v.path}`);
+  test("a category index past the list", () => {
+    expect(paths({ ...s, entries: [...s.entries, { text: "A stash entry", category: 2 }] })).toEqual(["S1 item.entries.4.category"]);
+  });
+  test("every category holds an entry", () => {
+    expect(paths({ ...s, categories: [...s.categories, "Repository"] })).toEqual(["S1 item.categories.2"]);
+  });
+  test("repeated entries and categories", () => {
+    expect(paths({ ...s, categories: ["Index", "index"] })).toEqual(["Q1 item.categories.1"]);
+    expect(paths({ ...s, entries: [...s.entries, { text: "A change after git add", category: 1 }] })).toEqual(["Q1 item.entries.4.text"]);
+  });
+  test("some misplacement names its misconception", () => {
+    expect(paths({ ...s, entries: s.entries.map(({ text, category }) => ({ text, category })) })).toEqual(["L8 item.entries"]);
+  });
+  test("an entry that repeats a long word of its own category only", () => {
+    expect(paths({ ...s, categories: ["Working tree", "Staged"], entries: [...s.entries, { text: "A staged rename", category: 1 }] })).toEqual(["Q4 item.entries.4.text"]);
+  });
+});
+
 describe("Q5 bloom share", () => {
   const share = (blooms: Parameters<typeof checkBloomShare>[0]) => {
     const r = new Report();
@@ -176,6 +224,11 @@ describe("Q7 near duplicates", () => {
     const a = singleItem();
     const b = singleItem(undefined, { prompt: `${a.prompt} ` });
     checkDuplicates([{ item: b, path: "item" }], [[a.prompt, ...a.options.map((o) => o.text)].join("\n")], r);
+    expect(rules(r)).toEqual(["Q7"]);
+  });
+  test("a match item reworded slightly is a duplicate", () => {
+    const r = new Report();
+    checkDuplicates([{ item: { ...matchItem(), prompt: "Match each command to what it does!" }, path: "item" }], [itemSurface(matchItem())], r);
     expect(rules(r)).toEqual(["Q7"]);
   });
   test("different items pass", () => {

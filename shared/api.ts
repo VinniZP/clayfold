@@ -188,6 +188,8 @@ export type AttemptResponse = {
   correct: boolean | null; // null for ungraded prequestions and pending short answers
   /** Option-specific feedback, or general feedback. */
   feedback: string;
+  /** match and sort: per entry in display order, whether the learner placed it right. */
+  marks?: boolean[];
   /** Present when the learner answered correctly, gave up, or the item is a prequestion. */
   solution?: string;
   correctAnswer?: string;
