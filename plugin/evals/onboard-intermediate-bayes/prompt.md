@@ -1,5 +1,5 @@
 ---
-description: Intermediate learner whose request already answers the interview. Expect mission, 12-25 registered sources from diverse publishers, a 6-25 node graph, then one first-step placement question and the end of the turn.
+description: Intermediate learner whose request already answers the interview. Expect mission, at least 15 registered sources from diverse publishers, a 6-25 node graph, sources for each node, then one first-step placement question and the end of the turn.
 tags: [onboard]
 max_turns: 120
 timeout_seconds: 2400
