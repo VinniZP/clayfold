@@ -296,6 +296,8 @@ export type Settings = {
   narration: { keySet: boolean; voiceId: string | null; model: TtsModel };
   /** Video lessons; they use the narration key, voice and model. */
   video: { enabled: boolean };
+  /** Key badges on answer options and primary buttons, shown on devices with a fine pointer. */
+  shortcuts: { hints: boolean };
   claude: Record<ClaudeInstanceKind, ClaudeRoleSetting & { defaultModel: string; defaultEffort: Effort }>;
   /** The meerkat; off by default. While on, goal plans carry trophies and lessons a challenge step. */
   gamification: boolean;
@@ -319,6 +321,7 @@ export type SettingsUpdate = {
   voiceId?: string;
   ttsModel?: TtsModel;
   videoEnabled?: boolean;
+  shortcutHints?: boolean;
   claudeRole?: ClaudeRoleSetting & { role: ClaudeInstanceKind };
 };
 

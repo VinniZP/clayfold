@@ -14,6 +14,7 @@ import { StaleSources } from "../components/LessonStatus";
 import { useHeader } from "../components/header";
 import type { ItemResult } from "../components/ItemView";
 import { ProposedCards } from "../components/ProposedCards";
+import { KeyHint } from "../components/Shortcuts";
 import { StepView, type LineResults, type TutorHooks } from "../components/Steps";
 import { CardHead, Clay, Empty, ErrorBox, Markdown, PageLoading, Progress, Spinner } from "../components/ui";
 import { VideoLesson } from "../components/VideoLesson";
@@ -24,6 +25,7 @@ import { t, useLang } from "../lib/i18n";
 import { useOverlayScroll } from "../lib/overlayScroll";
 import { useStreamStatus, useTopicStream } from "../lib/stream";
 import { useGlossaryScope } from "../lib/glossary";
+import { useShortcutPage, useShortcuts } from "../lib/shortcuts";
 import { useResource } from "../lib/useResource";
 import { bp, color, font, radius } from "../theme/tokens.stylex";
 import { banner, btn, card, chip, layout, shadow, text } from "../theme/ui";
@@ -195,7 +197,7 @@ const s = stylex.create({
   },
   tutorHead: { display: "flex", alignItems: "center", gap: 12 },
   tutorAvatar: { borderRadius: "50%", backgroundColor: color.surface2 },
-  tutorName: { fontFamily: font.display, fontSize: 22, fontWeight: 800, letterSpacing: "-0.01em", flexGrow: 1 },
+  tutorName: { fontFamily: font.display, fontSize: 22, fontWeight: 800, letterSpacing: "-0.01em", flexGrow: 1, outline: "none" },
   tutorIntro: { display: "grid", gap: 8, color: color.textMuted },
   tutorList: { display: "grid", gap: 4, margin: 0, paddingLeft: 18, fontSize: 13.5 },
   offer: { display: "grid", gap: 10, padding: 16, borderRadius: radius.inner, backgroundColor: color.lilacSoft },
@@ -253,6 +255,8 @@ export function LessonPage() {
   const videoOn = useResource(() => api.settings(), "settings").data?.video.enabled ?? false;
   const docked = useMediaQuery("(min-width: 1281px)");
   const outlineRef = useRef<HTMLElement>(null);
+  const tutorRef = useRef<HTMLElement>(null);
+  const tutorToggle = useRef<HTMLButtonElement>(null);
   useOverlayScroll(outlineRef);
   const [offer, setOffer] = useState<Offer | null>(null);
   const [tutorCtx, setTutorCtx] = useState<{ itemId?: string; stepId?: string; line?: number }>({});
@@ -413,6 +417,45 @@ export function LessonPage() {
       },
     }),
     [openOffer],
+  );
+
+  const tutorAllowed = !inCheck && topicId !== null && (docked || (!isEnd && total > 0));
+  const focusTutor = () => {
+    setTutorOpen(true);
+    requestAnimationFrame(() => {
+      const box = tutorRef.current;
+      (box?.querySelector<HTMLElement>("form textarea:not(:disabled)") ?? box?.querySelector<HTMLElement>("h2"))?.focus();
+    });
+  };
+
+  useShortcutPage("lesson");
+  useShortcuts(
+    "page",
+    (a) => {
+      switch (a.name) {
+        case "submit":
+        case "nextStep":
+          if (isEnd || total === 0) return false;
+          go(nextPos);
+          return true;
+        case "prevStep":
+          if (prevPos < 0) return false;
+          go(prevPos);
+          return true;
+        case "tutor":
+          if (!tutorAllowed) return false;
+          focusTutor();
+          return true;
+        case "escape":
+          if (docked || !tutorOpen || inCheck) return false;
+          setTutorOpen(false);
+          tutorToggle.current?.focus();
+          return true;
+        default:
+          return false;
+      }
+    },
+    tab === "lesson",
   );
 
   useHeader({
@@ -596,7 +639,7 @@ export function LessonPage() {
                   <Progress value={done} max={total} label={t("lesson.stepsDone")} />
                 </div>
                 {!inCheck && !isEnd && !docked && (
-                  <button type="button" aria-expanded={tutorOpen} onClick={() => setTutorOpen((o) => !o)} {...stylex.props(btn.base, btn.ghost, btn.sm)}>
+                  <button ref={tutorToggle} type="button" aria-expanded={tutorOpen} onClick={() => setTutorOpen((o) => !o)} {...stylex.props(btn.base, btn.ghost, btn.sm)}>
                     <MessageCircle size={16} aria-hidden="true" /> {t("lesson.tutor")}
                   </button>
                 )}
@@ -650,11 +693,11 @@ export function LessonPage() {
 
               <nav aria-label={t("lesson.stepNav")} {...stylex.props(s.nav)}>
                 <button type="button" disabled={prevPos < 0} onClick={() => go(prevPos)} {...stylex.props(btn.base, btn.ghost, s.navBtn)}>
-                  <ArrowLeft size={17} aria-hidden="true" /> {t("lesson.back")}
+                  <ArrowLeft size={17} aria-hidden="true" /> {t("lesson.back")} <KeyHint>K</KeyHint>
                 </button>
                 {!isEnd && (
                   <button type="button" onClick={() => go(nextPos)} {...stylex.props(btn.base, btn.primary, s.navBtn)}>
-                    {t(nextPos >= total ? "lesson.toSummary" : "lesson.next")} <ArrowRight size={17} aria-hidden="true" />
+                    {t(nextPos >= total ? "lesson.toSummary" : "lesson.next")} <ArrowRight size={17} aria-hidden="true" /> <KeyHint>J</KeyHint>
                   </button>
                 )}
               </nav>
@@ -671,10 +714,12 @@ export function LessonPage() {
         )}
 
         {showTutor && topicId && (
-          <aside aria-label={t("lesson.aiTutor")} {...stylex.props(card.base, s.tutor, !docked && s.tutorFloating, !docked && shadow.pop)}>
+          <aside ref={tutorRef} aria-label={t("lesson.aiTutor")} {...stylex.props(card.base, s.tutor, !docked && s.tutorFloating, !docked && shadow.pop)}>
             <div {...stylex.props(s.tutorHead)}>
               <Clay name="tutor-avatar" size={56} xstyle={s.tutorAvatar} />
-              <h2 {...stylex.props(s.tutorName)}>{t("lesson.aiTutor")}</h2>
+              <h2 tabIndex={-1} {...stylex.props(s.tutorName)}>
+                {t("lesson.aiTutor")}
+              </h2>
               {!docked && (
                 <button type="button" aria-label={t("lesson.closeTutor")} onClick={() => setTutorOpen(false)} {...stylex.props(btn.base, btn.icon)}>
                   <PanelRightClose size={18} aria-hidden="true" />

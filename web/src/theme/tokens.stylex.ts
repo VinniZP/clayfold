@@ -181,6 +181,7 @@ export const bp = stylex.defineConsts({
   mobile: "@media (max-width: 900px)",
   phone: "@media (max-width: 480px)",
   reduce: "@media (prefers-reduced-motion: reduce)",
+  finePointer: "@media (pointer: fine)",
 });
 
 export const motion = stylex.defineConsts({

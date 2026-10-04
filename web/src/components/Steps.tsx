@@ -7,9 +7,12 @@ import { api, errorText } from "../lib/api";
 import { gameProgress } from "../lib/game";
 import type { MessageKey } from "@shared/i18n";
 import { t, useLang } from "../lib/i18n";
+import { isTypingTarget } from "../lib/keys";
+import { isCurrent, submitOnModEnter, useShortcuts } from "../lib/shortcuts";
 import { FigureView } from "./Figure";
 import { ItemView, restoredResponse, type ItemResult } from "./ItemView";
 import { NarratedBody } from "./Narration";
+import { KeyHint } from "./Shortcuts";
 import { bp, color, font, motion, radius } from "../theme/tokens.stylex";
 import { banner, btn, chip, field, layout, text } from "../theme/ui";
 import { Markdown, Spinner } from "./ui";
@@ -98,12 +101,12 @@ type StepProps = {
 export function StepView({ step, topicId, lessonId, active, tutor, onCheckResults, itemStates, revealedLines, lineResults }: StepProps) {
   const ref = useRef<HTMLElement>(null);
   return (
-    <article ref={ref} aria-labelledby={`step-title-${step.id}`} {...stylex.props(s.step)}>
+    <article ref={ref} data-shortcut-scope="step" aria-labelledby={`step-title-${step.id}`} {...stylex.props(s.step)}>
       <h2 id={`step-title-${step.id}`} tabIndex={-1} {...stylex.props(s.title)}>
         {step.title}
       </h2>
       <StepBody step={step} active={active} tutor={tutor} onCheckResults={onCheckResults} itemStates={itemStates} revealedLines={revealedLines} lineResults={lineResults} />
-      <StepTools step={step} topicId={topicId} lessonId={lessonId} container={ref} />
+      <StepTools step={step} topicId={topicId} lessonId={lessonId} active={active} container={ref} />
     </article>
   );
 }
@@ -127,7 +130,7 @@ function StepBody({ step, active, tutor, onCheckResults, itemStates, revealedLin
     case "explain":
       return (
         <>
-          <NarratedBody stepId={step.id} body={step.body} xstyle={s.body} />
+          <NarratedBody stepId={step.id} body={step.body} active={active} xstyle={s.body} />
           {step.figure && <FigureView figure={step.figure} />}
           <Citations cites={step.cites} />
           {step.checks.length > 0 && (
@@ -391,6 +394,7 @@ function Reflect({ step }: { step: Extract<PublicStep, { kind: "reflect" }> }) {
   return (
     <form
       {...stylex.props(s.reflect)}
+      onKeyDown={submitOnModEnter}
       onSubmit={async (e) => {
         e.preventDefault();
         setState("busy");
@@ -451,10 +455,28 @@ function CheckStep({
   });
   // A check answered in full before a reload opens with its results.
   const [revealed, setRevealed] = useState(() => step.items.every((i) => results[i.id]));
+  const summaryRef = useRef<HTMLDivElement>(null);
   const answered = step.items.filter((i) => results[i.id]).length;
   const correct = step.items.filter((i) => results[i.id]?.response.correct === true).length;
   const pending = step.items.filter((i) => results[i.id] && results[i.id]!.response.correct === null).length;
   const wrong = answered - correct - pending;
+
+  const finish = () => {
+    setRevealed(true);
+    onResults?.(step.id, step.items.map((item) => ({ item, result: results[item.id] })));
+    requestAnimationFrame(() => summaryRef.current?.focus());
+  };
+
+  useShortcuts(
+    "step",
+    (a) => {
+      if (a.name !== "submit" || answered < step.items.length) return false;
+      finish();
+      return true;
+    },
+    active && !revealed,
+  );
+
   return (
     <>
       <p {...stylex.props(banner.base, banner.ink)}>
@@ -484,16 +506,13 @@ function CheckStep({
             type="button"
             disabled={answered < step.items.length}
             {...stylex.props(btn.base, btn.primary)}
-            onClick={() => {
-              setRevealed(true);
-              onResults?.(step.id, step.items.map((item) => ({ item, result: results[item.id] })));
-            }}
+            onClick={finish}
           >
-            {t("steps.finishCheck")}
+            {t("steps.finishCheck")} <KeyHint>↵</KeyHint>
           </button>
         </div>
       ) : (
-        <div role="status" {...stylex.props(s.summary)}>
+        <div ref={summaryRef} tabIndex={-1} role="status" {...stylex.props(s.summary)}>
           <p {...stylex.props(s.score)}>
             {correct} <span {...stylex.props(s.scoreOf)}>{t("steps.scoreOf", { total: step.items.length })}</span>
           </p>
@@ -511,11 +530,13 @@ function StepTools({
   step,
   topicId,
   lessonId,
+  active,
   container,
 }: {
   step: PublicStep;
   topicId: string | null;
   lessonId: string;
+  active: boolean;
   container: RefObject<HTMLElement | null>;
 }) {
   useLang();
@@ -526,6 +547,9 @@ function StepTools({
   const [done, setDone] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const id = useId();
+  const noteButton = useRef<HTMLButtonElement>(null);
+  const reportButton = useRef<HTMLButtonElement>(null);
+  const formRef = useRef<HTMLFormElement>(null);
 
   const captureSelection = () => {
     const sel = window.getSelection();
@@ -540,6 +564,28 @@ function StepTools({
     if (which === "report") setQuote("");
     setOpen((o) => (o === which ? null : which));
   };
+
+  useShortcuts(
+    "step",
+    (a, e) => {
+      if (!isCurrent(container.current, "step")) return false;
+      if (a.name === "note") {
+        if (open === "note") formRef.current?.querySelector("textarea")?.focus();
+        else {
+          captureSelection();
+          toggle("note");
+        }
+        return true;
+      }
+      if (a.name === "escape" && open && (formRef.current?.contains(e.target as Node) || !isTypingTarget(e.target))) {
+        setOpen(null);
+        (open === "note" ? noteButton : reportButton).current?.focus();
+        return true;
+      }
+      return false;
+    },
+    active,
+  );
 
   const submit = async () => {
     setBusy(true);
@@ -567,6 +613,7 @@ function StepTools({
     <footer {...stylex.props(s.tools)}>
       <div {...stylex.props(layout.row)}>
         <button
+          ref={noteButton}
           type="button"
           {...stylex.props(btn.base, btn.ghost, btn.sm)}
           aria-expanded={open === "note"}
@@ -576,7 +623,7 @@ function StepTools({
         >
           <NotebookPen size={16} aria-hidden="true" /> {t("steps.note")}
         </button>
-        <button type="button" aria-expanded={open === "report"} onClick={() => toggle("report")} {...stylex.props(btn.base, btn.ghost, btn.sm)}>
+        <button ref={reportButton} type="button" aria-expanded={open === "report"} onClick={() => toggle("report")} {...stylex.props(btn.base, btn.ghost, btn.sm)}>
           <Flag size={16} aria-hidden="true" /> {t("steps.reportProblem")}
         </button>
         {done && (
@@ -587,7 +634,9 @@ function StepTools({
       </div>
       {open && (
         <form
+          ref={formRef}
           {...stylex.props(s.toolForm)}
+          onKeyDown={submitOnModEnter}
           onSubmit={(e) => {
             e.preventDefault();
             void submit();

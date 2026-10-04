@@ -232,6 +232,7 @@ let settings: Settings = {
   narration: { keySet: false, voiceId: null, model: "eleven_v4" },
   // On in the mock so the Video tab can be looked at; the server default is off.
   video: { enabled: true },
+  shortcuts: { hints: true },
   claude: Object.fromEntries(
     CLAUDE_ROLES.map((role) => [role, { model: null, effort: null, defaultModel: ["critic", "grading", "narration", "video", "game"].includes(role) ? "sonnet" : "opus", defaultEffort: ({ onboard: "medium", lesson: "high", critic: "high", video: "medium", game: "medium" } as Record<string, Effort>)[role] ?? "low" }]),
   ) as Settings["claude"],
@@ -496,7 +497,7 @@ async function route(method: string, path: string, body: Record<string, unknown>
   if (p === "/api/today") return json(fx.today);
   if (p === "/api/settings") {
     if (method === "PUT") {
-      const { language, voiceId, ttsModel, videoEnabled, claudeRole, gamification, introSeen } = body as SettingsUpdate;
+      const { language, voiceId, ttsModel, videoEnabled, claudeRole, gamification, introSeen, shortcutHints } = body as SettingsUpdate;
       if (gamification !== undefined) setMockGameOn(gamification);
       settings = {
         gamification: gamification ?? settings.gamification,
@@ -504,6 +505,7 @@ async function route(method: string, path: string, body: Record<string, unknown>
         language: language ?? settings.language,
         narration: { ...settings.narration, voiceId: voiceId ?? settings.narration.voiceId, model: ttsModel ?? settings.narration.model },
         video: { enabled: videoEnabled ?? settings.video.enabled },
+        shortcuts: { hints: shortcutHints ?? settings.shortcuts.hints },
         claude: claudeRole
           ? { ...settings.claude, [claudeRole.role]: { ...settings.claude[claudeRole.role], model: claudeRole.model, effort: claudeRole.effort } }
           : settings.claude,

@@ -5,6 +5,7 @@ import { Link } from "react-router";
 import type { NarrationSegment } from "@shared/api";
 import { api, ApiFailure, errorText } from "../lib/api";
 import { t, useLang } from "../lib/i18n";
+import { useShortcuts } from "../lib/shortcuts";
 import { btn, layout, text } from "../theme/ui";
 import { Markdown, Spinner } from "./ui";
 
@@ -19,7 +20,7 @@ type State =
   | { status: "error"; message: string; needsSettings: boolean };
 
 /** Explanation body with a Listen button; while the audio plays, the block being read is highlighted. */
-export function NarratedBody({ stepId, body, xstyle }: { stepId: string; body: string; xstyle?: stylex.StyleXStyles }) {
+export function NarratedBody({ stepId, body, active, xstyle }: { stepId: string; body: string; active: boolean; xstyle?: stylex.StyleXStyles }) {
   useLang();
   const [state, setState] = useState<State>({ status: "idle" });
   const bodyRef = useRef<HTMLDivElement>(null);
@@ -57,6 +58,20 @@ export function NarratedBody({ stepId, body, xstyle }: { stepId: string; body: s
       mark(null);
     };
   }, [audio]);
+
+  useShortcuts(
+    "step",
+    (a) => {
+      if (a.name !== "narration") return false;
+      const player = audioRef.current;
+      if (state.status === "ready" && player) {
+        if (player.paused) void player.play().catch(() => {});
+        else player.pause();
+      } else if (state.status !== "loading") void listen();
+      return true;
+    },
+    active,
+  );
 
   const onTime = (time: number) => {
     if (state.status !== "ready") return;
