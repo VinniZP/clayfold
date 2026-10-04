@@ -41,11 +41,18 @@ export function publisherOf(url: string): string {
   return labels.at(-(tldLen + 1)) ?? host;
 }
 
+/** All learner materials of a topic count as one publisher (Q8); the space keeps the name apart from domain labels. */
+export const LEARNER_PUBLISHER = "learner materials";
+
+export type SourceOrigin = { url: string; origin: "web" | "learner" };
+
+export const sourcePublisher = (s: SourceOrigin): string => (s.origin === "learner" ? LEARNER_PUBLISHER : publisherOf(s.url));
+
 /** Ok sources of the topic counted per publisher. */
 export function publisherCounts(topicId: string, database: Database = db()): Record<string, number> {
   const counts: Record<string, number> = {};
-  for (const { url } of database.query<{ url: string }, [string]>("SELECT url FROM sources WHERE topic_id = ? AND status = 'ok'").all(topicId)) {
-    const publisher = publisherOf(url);
+  for (const source of database.query<SourceOrigin, [string]>("SELECT url, origin FROM sources WHERE topic_id = ? AND status = 'ok'").all(topicId)) {
+    const publisher = sourcePublisher(source);
     counts[publisher] = (counts[publisher] ?? 0) + 1;
   }
   return counts;

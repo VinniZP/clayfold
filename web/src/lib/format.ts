@@ -29,6 +29,14 @@ export function formatUsd(v: number): string {
   return `$${v.toFixed(v < 0.1 ? 3 : 2)}`;
 }
 
+export const formatNumber = (n: number): string => new Intl.NumberFormat(lang()).format(n);
+
+/** A file size in the largest unit that keeps it at 1 or more: 820 B, 14 kB, 2.3 MB. */
+export function formatBytes(n: number): string {
+  const [value, unit] = n >= 1024 * 1024 ? [n / 1024 / 1024, "megabyte"] : n >= 1024 ? [n / 1024, "kilobyte"] : [n, "byte"];
+  return new Intl.NumberFormat(lang(), { style: "unit", unit, unitDisplay: "short", maximumFractionDigits: value < 10 ? 1 : 0 }).format(value);
+}
+
 export const kindLabel = (kind: string): string => (isStepKind(kind) ? t(`kind.${kind}`) : kind);
 
 export const levelLabel = (level: Level): string => t(`level.${level}`);

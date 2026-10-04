@@ -13,7 +13,7 @@ test("tutor: memory tools, the tutoring tools and goal_note; every authoring too
   const t = parse("tutor");
   expect(t.tools).toEqual(["Edit", "Glob", "Grep", "Read", "Write"]);
   expect(t.allowed).toEqual(["Edit", "Glob", "Grep", "Read", "Write", "ask_learner", "get_learner_state", "goal_note", "source_search", "worked_line_record"]);
-  expect(t.denied).toEqual([...AUTHORING, "glossary_set", "goal_plan_set", "graph_set", "placement_record", "source_add"].sort());
+  expect(t.denied).toEqual([...AUTHORING, "glossary_set", "goal_plan_set", "graph_set", "material_list", "material_read", "placement_record", "source_add"].sort());
 });
 
 test("review adds item_replace; onboard has the web and graph tools but cannot author; lesson has everything", () => {

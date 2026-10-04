@@ -8,6 +8,7 @@ import { Chat } from "../components/Chat";
 import { useHeader } from "../components/header";
 import { GraphLegend, KnowledgeGraph } from "../components/KnowledgeGraph";
 import { LessonList } from "../components/LessonList";
+import { MaterialsSection } from "../components/Materials";
 import { StaleSources, readyLine } from "../components/LessonStatus";
 import { CourseResident } from "../components/meerkat/CourseGame";
 import { OnboardingStepper } from "../components/OnboardingStepper";
@@ -281,6 +282,8 @@ export function TopicPage() {
             <LessonList lessons={d.lessons} />
           )}
         </section>
+
+        <MaterialsSection topicId={topicId} materials={d.materials} reload={detail.reload} />
 
         <section aria-labelledby="sources-title" {...stylex.props(card.base)}>
           <CardHead title={t("topic.sources")} id="sources-title" />

@@ -14,6 +14,10 @@ export async function readBody<S extends z.ZodType>(c: Context, schema: S): Prom
   } catch {
     fail(400, "invalid JSON body");
   }
+  return parseBody(schema, raw);
+}
+
+export function parseBody<S extends z.ZodType>(schema: S, raw: unknown): z.infer<S> {
   const parsed = schema.safeParse(raw);
   if (!parsed.success) fail(400, parsed.error.issues.map((i) => `${i.path.join(".") || "body"}: ${i.message}`).join("; "));
   return parsed.data;

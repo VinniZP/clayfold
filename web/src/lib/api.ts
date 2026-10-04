@@ -15,10 +15,12 @@ import type {
   GoalMinutes,
   HintResponse,
   LessonView,
+  MaterialView,
   MemoryFile,
   NarrationView,
   NoteRequest,
   NoteView,
+  PastedMaterial,
   ReportRequest,
   ReviewRating,
   ReviewSession,
@@ -55,8 +57,8 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
   try {
     res = await fetch(path, {
       method,
-      headers: body === undefined ? undefined : { "content-type": "application/json" },
-      body: body === undefined ? undefined : JSON.stringify(body),
+      headers: body === undefined || body instanceof FormData ? undefined : { "content-type": "application/json" },
+      body: body === undefined ? undefined : body instanceof FormData ? body : JSON.stringify(body),
     });
   } catch {
     throw new ApiFailure(t("error.offline"), 0);
@@ -84,9 +86,31 @@ const get = <T>(path: string) => request<T>("GET", path);
 const post = <T>(path: string, body: unknown = {}) => request<T>("POST", path, body);
 const e = encodeURIComponent;
 
+/** A material the learner picked and has not sent yet. */
+export type MaterialDraft = { kind: "file"; file: File } | { kind: "text"; title: string; text: string } | { kind: "link"; url: string };
+
+function materialsForm(drafts: MaterialDraft[], form = new FormData()): FormData {
+  for (const d of drafts) {
+    if (d.kind === "file") form.append("file", d.file, d.file.name);
+    else if (d.kind === "text") form.append("text", JSON.stringify({ title: d.title, text: d.text } satisfies PastedMaterial));
+    else form.append("link", d.url);
+  }
+  return form;
+}
+
+function newTopicForm(request: string, kind: TopicSummary["kind"], drafts: MaterialDraft[]): FormData {
+  const form = new FormData();
+  form.append("request", request);
+  form.append("kind", kind);
+  return materialsForm(drafts, form);
+}
+
 export const api = {
   topics: () => get<TopicSummary[]>("/api/topics"),
-  createTopic: (text: string, kind: TopicSummary["kind"] = "topic") => post<CreateTopicResponse>("/api/topics", { request: text, kind }),
+  createTopic: (text: string, kind: TopicSummary["kind"] = "topic", materials: MaterialDraft[] = []) =>
+    post<CreateTopicResponse>("/api/topics", materials.length > 0 ? newTopicForm(text, kind, materials) : { request: text, kind }),
+  addMaterials: (topicId: string, drafts: MaterialDraft[]) => post<MaterialView[]>(`/api/topics/${e(topicId)}/materials`, materialsForm(drafts)),
+  removeMaterial: (topicId: string, id: string) => request<unknown>("DELETE", `/api/topics/${e(topicId)}/materials/${e(id)}`),
   glossary: () => get<GlossaryEntry[]>("/api/glossary"),
   discussGoalNotes: (goalId: string) => post<{ conversationId: string }>(`/api/topics/${e(goalId)}/notes/discuss`),
   openPlanEntry: (goalId: string, entryId: string) => post<CreateTopicResponse>(`/api/topics/${e(goalId)}/plan/${e(entryId)}/open`),

@@ -42,7 +42,7 @@ A change to a contract file changes every module that uses it; make it there fir
 | `server/routes/*` | REST handlers; server-side grading; review; notes; reports; audit |
 | `server/review/*` | FSRS scheduling (ts-fsrs, retention 0.90), mastery (L12), learner signals to `regen_queue` |
 | `server/mcp/index.ts` | `handleMcp(req: Request, topicId: string): Promise<Response>`; one stateless MCP server per request |
-| `server/gates/*` | Deterministic checks, source fetching and quote verification, critic |
+| `server/gates/*` | Deterministic checks, source fetching, learner materials and quote verification, critic |
 | `plugin/` | Tutor output style, skills, eval suite |
 | `web/` | React UI |
 
@@ -99,6 +99,14 @@ Optional gamification, off by default (`settings.gamification`). Catalogs and co
 - Content built before the meerkat was on gets its rewards from `POST /api/game/backfill` (`server/game/backfill.ts`): one `runJsonPrompt` call (purpose `game`) per course, goal and lesson that lacks them; a lesson's challenge becomes its last practice step with an apply-or-higher item.
 - Rewards go to `rewards`, residents to `residents`. `GET /api/game` (`server/game/view.ts`) works out every condition from learning data, stamps first unlocks, and records habit and rank unlocks in `unlocks`; turning the meerkat on rewards earlier learning at once.
 - The web app keeps the state in `web/src/lib/game.ts` and fetches it only while the meerkat is on. Unlocks show one at a time in `Celebrations`, held back while a lesson page is open until its end.
+
+## Learner materials
+
+- The learner adds files (`.txt`, `.md`, `.html`, `.pdf`), pasted text and links when creating a topic (`POST /api/topics` as multipart) or on the topic page (`POST /api/topics/:id/materials`). Limits are `MATERIAL_LIMITS` in `shared/api.ts`; one part that fails fails the request with a translated message naming it.
+- `server/gates/materials.ts` extracts the text: HTML through the same Readability path as fetched pages, PDF through `unpdf` (a serverless build of Mozilla's pdf.js, no native dependencies), text and Markdown as written. Only the text is stored, in `sources` with `origin = 'learner'`; the uploaded file is not written to disk, and the browser receives title, kind and sizes, never the stored text or HTML.
+- A material is an ok source: `source_search`, Q6 and the critic treat it like a fetched page. A link the topic already has as a source becomes a material under the same id, so its cites stay valid, and `source_add` leaves a learner's link as added.
+- `material_list` and `material_read` give Claude the materials and their headings with offsets. The onboard and lesson-author skills build on them first; a lesson planned after a material is added sees it in `get_learner_state`, and a lesson being written hears of it through the new-source note of `step_submit`.
+- A material that a step, item or card cites cannot be removed (409).
 
 ## Narration
 

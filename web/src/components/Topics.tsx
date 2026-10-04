@@ -1,10 +1,11 @@
 import * as stylex from "@stylexjs/stylex";
-import { ArrowRight, Flag, Repeat2, Search, Sparkles } from "lucide-react";
+import { ArrowRight, ChevronDown, Flag, Paperclip, Repeat2, Search, Sparkles } from "lucide-react";
 import { useId, useState } from "react";
 import { Link, useNavigate } from "react-router";
-import type { TopicSummary } from "@shared/api";
+import { MATERIAL_LIMITS, type TopicSummary } from "@shared/api";
 import { CONTENT_RULES, TOPIC_ART } from "@shared/i18n";
-import { api, errorText } from "../lib/api";
+import { api, errorText, type MaterialDraft } from "../lib/api";
+import { AttachPanel, DraftList } from "./Materials";
 import { t, useLang } from "../lib/i18n";
 import { bp, color, font, motion, radius, space } from "../theme/tokens.stylex";
 import { btn, chip, layout, text } from "../theme/ui";
@@ -40,6 +41,11 @@ const s = stylex.create({
   inputSmall: { height: 48, fontSize: 15, borderColor: { default: color.border, ":hover": color.borderStrong, ":focus-visible": color.focus }, boxShadow: { default: "none", ":focus-visible": `0 0 0 4px ${color.lilacSoft}` } },
   submit: { height: 60, paddingInline: 30, fontSize: 17, borderRadius: 22 },
   submitSmall: { height: 48, fontSize: 15 },
+  attach: { justifySelf: "start", paddingInline: 4, textDecoration: "none" },
+  attachHint: { color: color.textMuted, fontWeight: 500 },
+  chevron: { transitionProperty: "transform", transitionDuration: motion.fast },
+  chevronOpen: { transform: "rotate(180deg)" },
+  materials: { display: "grid", gap: space.md, maxWidth: 720, padding: space.lg, borderRadius: radius.inner, backgroundColor: color.surface },
   card: {
     position: "relative",
     display: "grid",
@@ -137,8 +143,11 @@ export function NewTopicForm({ big }: { big?: boolean }) {
   const [value, setValue] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [attachOpen, setAttachOpen] = useState(false);
+  const [drafts, setDrafts] = useState<MaterialDraft[]>([]);
   const navigate = useNavigate();
   const id = useId();
+  const materials = kind === "topic" ? drafts : [];
   return (
     <form
       onSubmit={async (e) => {
@@ -147,7 +156,7 @@ export function NewTopicForm({ big }: { big?: boolean }) {
         setBusy(true);
         setError(null);
         try {
-          const res = await api.createTopic(value.trim(), kind);
+          const res = await api.createTopic(value.trim(), kind, materials);
           navigate(`/topics/${res.topicId}?c=${encodeURIComponent(res.conversationId)}`);
         } catch (err) {
           setError(errorText(err));
@@ -182,6 +191,27 @@ export function NewTopicForm({ big }: { big?: boolean }) {
           {busy ? <Spinner /> : <Sparkles size={19} aria-hidden="true" />} {t(kind === "goal" ? "topics.createGoal" : "topics.create")}
         </button>
       </div>
+      {kind === "topic" && (
+        <>
+          <button
+            type="button"
+            aria-expanded={attachOpen}
+            aria-controls={`${id}-materials`}
+            onClick={() => setAttachOpen((o) => !o)}
+            {...stylex.props(btn.base, btn.plain, btn.sm, s.attach)}
+          >
+            <Paperclip size={15} aria-hidden="true" /> {t("material.attach")}
+            <span {...stylex.props(s.attachHint)}>{drafts.length ? t("material.count", { count: drafts.length }) : t("material.attachHint")}</span>
+            <ChevronDown size={15} aria-hidden="true" {...stylex.props(s.chevron, attachOpen && s.chevronOpen)} />
+          </button>
+          {attachOpen && (
+            <div id={`${id}-materials`} {...stylex.props(s.materials)}>
+              <DraftList drafts={drafts} busy={busy} onRemove={(d) => setDrafts((list) => list.filter((x) => x !== d))} />
+              {!busy && <AttachPanel room={MATERIAL_LIMITS.perRequest - drafts.length} onAdd={(added) => setDrafts((list) => [...list, ...added])} />}
+            </div>
+          )}
+        </>
+      )}
       {error && (
         <p role="alert" {...stylex.props(text.error)}>
           {error}

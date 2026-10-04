@@ -10,12 +10,25 @@ export const sourceAdd = defineTool({
 Call it for each page you intend to cite, before writing lessons or cards that cite it. WebFetch shows you a paraphrase, not the page text, so take quotes from source_search, never from WebFetch.
 PDFs and other non-HTML content are stored as failed: pick an HTML page instead. Adding the same URL again re-downloads it.
 Returns {ok: true, sourceId, title, chars, headings, publishers} or {ok: false, error}. Cite the source as {sourceId, quote}.
-publishers counts the topic's ok sources per publisher (the organisation behind the domain). Check the spread: no publisher should exceed 40% of the sources.`,
+publishers counts the topic's ok sources per publisher (the organisation behind the domain). Check the spread: no publisher should exceed 40% of the sources. The learner's own materials count as one publisher, "learner materials", which the 40% limit leaves out.`,
   async handler(ctx, { url, kind, note }) {
-    const fetched = await fetchSource(url, ctx.fetch);
     const existing = ctx.db
-      .query<{ id: string }, [string, string]>("SELECT id FROM sources WHERE topic_id = ? AND url = ?")
+      .query<{ id: string; title: string; text: string | null; origin: string }, [string, string]>(
+        "SELECT id, title, text, origin FROM sources WHERE topic_id = ? AND url = ?",
+      )
       .get(ctx.topicId, url);
+    if (existing?.origin === "learner") {
+      const result: SourceAddResult = {
+        ok: true,
+        sourceId: existing.id,
+        title: existing.title,
+        chars: existing.text?.length ?? 0,
+        headings: [],
+        publishers: publisherCounts(ctx.topicId, ctx.db),
+      };
+      return { result, notes: ["This link is already one of the learner's materials; it is stored as the learner added it. See material_list."] };
+    }
+    const fetched = await fetchSource(url, ctx.fetch);
     const id = existing?.id ?? newId("src");
     const title = fetched.title || url;
     ctx.db

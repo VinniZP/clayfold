@@ -70,11 +70,60 @@ export type LessonSummary = {
 
 export type SourceView = { id: string; url: string; title: string; kind: string; note: string; status: "ok" | "failed" };
 
+export const MATERIAL_KINDS = ["text", "markdown", "html", "pdf", "link"] as const;
+export type MaterialKind = (typeof MATERIAL_KINDS)[number];
+
+/** File name extensions a learner material may have, and the kind each one is read as. */
+export const MATERIAL_EXTENSIONS: Record<string, Exclude<MaterialKind, "link">> = {
+  ".txt": "text",
+  ".md": "markdown",
+  ".markdown": "markdown",
+  ".html": "html",
+  ".htm": "html",
+  ".pdf": "pdf",
+};
+
+export const MATERIAL_LIMITS = {
+  /** A file, a pasted text or a downloaded link. */
+  bytes: 20 * 1024 * 1024,
+  /** Extracted text of one material. */
+  chars: 2_000_000,
+  /** Materials in one request. */
+  perRequest: 10,
+} as const;
+
+/** A source the learner brought. Its extracted text is stored like a fetched page, so lessons cite it (Q6). */
+export type MaterialView = {
+  id: string;
+  title: string;
+  kind: MaterialKind;
+  /** The address of a link; null for a file or pasted text. */
+  url: string | null;
+  /** Size of the file or the pasted text; null for a link. */
+  bytes: number | null;
+  /** Characters of extracted text. */
+  chars: number;
+  addedAt: string;
+  /** Lesson steps, exercises or cards cite it, so it cannot be removed. */
+  cited: boolean;
+};
+
+/** A `text` part of a materials request. */
+export type PastedMaterial = { title: string; text: string };
+
+// POST /api/topics/:topicId/materials  multipart/form-data -> MaterialView[] (201; the added materials)
+// Parts, up to MATERIAL_LIMITS.perRequest in all: `file` (a file with an extension of MATERIAL_EXTENSIONS),
+// `text` (JSON PastedMaterial), `link` (an http(s) address). The server extracts the text of every part before it
+// stores any; a part that fails fails the request with a message naming it.
+// DELETE /api/topics/:topicId/materials/:materialId -> 204 (409 when lesson content cites it)
+
 export type TopicDetail = {
   topic: TopicSummary;
   nodes: NodeView[];
   lessons: LessonSummary[];
+  /** Sources Claude registered; the learner's own are in `materials`. */
   sources: SourceView[];
+  materials: MaterialView[];
   conversations: { id: string; kind: ConversationKind; lessonId: string | null; createdAt: string }[];
   onboarding: OnboardingPhase[];
   /** Goals only, in plan order. */
@@ -101,6 +150,8 @@ export type GoalNoteView = { id: string; text: string; topicId: string; topicTit
 export type GoalPlanEntryView = Omit<GoalPlanEntry, "brief"> & { topic: TopicSummary | null };
 
 // POST /api/topics  { request, kind? }  -> CreateTopicResponse  (starts the onboarding run)
+// A topic created with materials is posted as multipart/form-data: `request`, `kind` and the parts of a materials
+// request. The materials are stored before the onboarding run starts; one that fails creates nothing.
 export type CreateTopicRequest = { request: string; kind?: TopicSummary["kind"] };
 export type CreateTopicResponse = { topicId: string; conversationId: string };
 

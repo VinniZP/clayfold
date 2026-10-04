@@ -7,7 +7,7 @@ import { checkLessonPlan } from "../../gates/deterministic";
 import { checkPlanSources, okSources } from "../../gates/diversity";
 import { criticOutage, gateStep, recordGates } from "../../gates/pipeline";
 import { checkDrawing, storeLessonReward } from "../../game/rewards";
-import { publisherOf } from "../../publishers";
+import { sourcePublisher } from "../../publishers";
 import { defineTool, ToolError, type ToolContext } from "../context";
 
 export const MAX_ATTEMPTS = 3;
@@ -35,7 +35,7 @@ export function announceNewSources(ctx: ToolContext, lessonId: string): string |
   ctx.db
     .query("UPDATE lessons SET announced_sources = ? WHERE id = ?")
     .run(JSON.stringify([...announced, ...fresh.map((s) => s.id)]), lessonId);
-  const list = fresh.map((s) => `${s.id} — ${s.title} (${publisherOf(s.url)})`).join("; ");
+  const list = fresh.map((s) => `${s.id} — ${s.title} (${sourcePublisher(s)})`).join("; ");
   return `${fresh.length} new sources were added to this topic after the lesson was planned: ${list}; consider citing them in the remaining steps.`;
 }
 
@@ -58,7 +58,7 @@ export const lessonPlan = defineTool({
   name: "lesson_plan",
   description: `Start a lesson: store its title, objective, graph nodes, learner level, the sources it will cite and the outline of steps (kind + title per step). The learner sees the outline at once.
 The outline must start with an 'activate' step (2-3 ungraded prequestions, L2) and end with a 'check' step (unaided exit check, L11); every nodeId must already be in the graph.
-sourceIds: ok sources of this topic (see get_learner_state). When the topic's sources come from two or more publishers, the planned sources must too (Q8), and the lesson's cites must span at least two publishers by the check step, which the gates enforce.
+sourceIds: ok sources of this topic (see get_learner_state). When the topic's sources come from two or more publishers, the planned sources must too (Q8), and the lesson's cites must span at least two publishers by the check step, which the gates enforce. All of the learner's materials (origin "learner") count as one publisher, "learner materials".
 Returns {lessonId}. Then submit the steps in order with step_submit (index = position in the outline), and close with lesson_finish.`,
   gameDescription: `Gamification is on. challenge: the outline index of one practice step, the lesson's hardest item (G1). reward: the meerkat wearable this lesson awards, drawn per the system prompt (G2); earnedBy "complete" (the exit check answered), "silver" (its crown) or "gold" (crown plus the challenge right on the first try, only with a challenge).`,
   handler(ctx, { plan, challenge, reward }) {
