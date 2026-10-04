@@ -286,7 +286,7 @@ export type Effort = (typeof EFFORTS)[number];
 /** Haiku models take no effort parameter (supportedModels of the Claude API effort docs). */
 export const supportsEffort = (model: string): boolean => !model.includes("haiku");
 
-export const CLAUDE_ROLES = ["onboard", "lesson", "tutor", "review", "critic", "grading", "narration", "video"] as const satisfies readonly ClaudeInstanceKind[];
+export const CLAUDE_ROLES = ["onboard", "lesson", "tutor", "review", "critic", "grading", "narration", "video", "game"] as const satisfies readonly ClaudeInstanceKind[];
 
 /** Null fields use the server defaults: CLAYFOLD_MODEL or CLAYFOLD_CRITIC_MODEL, and the role's default effort. */
 export type ClaudeRoleSetting = { model: ClaudeModel | null; effort: Effort | null };
@@ -349,6 +349,19 @@ export type HabitView = {
   target: number;
   unlockedAt: string | null;
   seen: boolean;
+};
+
+// GET /api/game/backfill -> GameBackfillView ; POST -> GameBackfillView (starts one Claude call per course, goal and
+// lesson that was built before the meerkat was on and lacks its rewards; a running backfill is left alone)
+export type GameBackfillView = {
+  running: boolean;
+  done: number;
+  total: number;
+  /** Titles of the courses, goals and lessons whose rewards could not be made. */
+  failed: string[];
+  finishedAt: string | null;
+  /** Courses, goals and lessons still without their rewards. */
+  missing: number;
 };
 
 /** silver: at least CROWN_SHARE of the exit check right on the first attempt; gold: also the challenge right on the first attempt without hints. */
@@ -448,7 +461,7 @@ export type VideoExportView =
 // Claude Code mode: GET /api/system -> SystemView
 // The running server and every `claude` process it controls.
 
-export type ClaudeInstanceKind = ConversationKind | "critic" | "grading" | "narration" | "video";
+export type ClaudeInstanceKind = ConversationKind | "critic" | "grading" | "narration" | "video" | "game";
 
 export type ClaudeInstance = {
   pid: number;

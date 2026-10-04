@@ -6,7 +6,7 @@ import type { PublicStep } from "@shared/schemas";
 import { marked } from "marked";
 import { lang, t } from "../lib/i18n";
 import * as fx from "./fixtures";
-import { mockCrowns, mockGameOn, mockGameView, mockSeen, mockWear, setMockGameOn } from "./game";
+import { mockBackfill, mockCrowns, mockGameOn, mockGameView, mockSeen, mockWear, setMockGameOn, startMockBackfill } from "./game";
 import * as sim from "./sim";
 
 // Dev-only stand-in for the server: answers /api/* from fixtures and drives the topic
@@ -232,7 +232,7 @@ let settings: Settings = {
   // On in the mock so the Video tab can be looked at; the server default is off.
   video: { enabled: true },
   claude: Object.fromEntries(
-    CLAUDE_ROLES.map((role) => [role, { model: null, effort: null, defaultModel: ["critic", "grading", "narration", "video"].includes(role) ? "sonnet" : "opus", defaultEffort: ({ onboard: "medium", lesson: "high", critic: "high", video: "medium" } as Record<string, Effort>)[role] ?? "low" }]),
+    CLAUDE_ROLES.map((role) => [role, { model: null, effort: null, defaultModel: ["critic", "grading", "narration", "video", "game"].includes(role) ? "sonnet" : "opus", defaultEffort: ({ onboard: "medium", lesson: "high", critic: "high", video: "medium", game: "medium" } as Record<string, Effort>)[role] ?? "low" }]),
   ) as Settings["claude"],
 };
 
@@ -302,6 +302,7 @@ async function route(method: string, path: string, body: Record<string, unknown>
       return json(undefined, 204);
     }
     if (p === "/api/game/focus") return json(undefined, 204);
+    if (p === "/api/game/backfill") return json(method === "POST" ? startMockBackfill() : mockBackfill(), method === "POST" ? 202 : 200);
   }
   if (p === "/api/topics" && method === "GET") return json(summaries());
   if (p === "/api/topics" && method === "POST") {

@@ -322,6 +322,7 @@ export const ru: Catalog = {
   "claudeMode.kind.grading": "Проверка",
   "claudeMode.kind.narration": "Озвучка",
   "claudeMode.kind.video": "Видео",
+  "claudeMode.kind.game": "Сурикат",
   "search.label": "Поиск по темам",
   "search.results": "Найденные темы",
   "search.searching": "Ищу…",
@@ -953,6 +954,16 @@ export const ru: Catalog = {
   "game.lessonReward": "Награда за урок",
   "game.lessonRewardEarned": "Получено за урок",
   "game.mystery": "Загадочная вещь",
+  "game.backfill": "Награды для прежних курсов и уроков",
+  "game.backfillIntro": {
+    one: "{count} курс, цель или урок созданы до суриката, и наград у них пока нет. Claude может придумать и нарисовать их: по одному вызову на каждый.",
+    few: "{count} курса, цели и урока созданы до суриката, и наград у них пока нет. Claude может придумать и нарисовать их: по одному вызову на каждый.",
+    many: "{count} курсов, целей и уроков созданы до суриката, и наград у них пока нет. Claude может придумать и нарисовать их: по одному вызову на каждый.",
+    other: "{count} курса, цели и урока созданы до суриката, и наград у них пока нет. Claude может придумать и нарисовать их: по одному вызову на каждый.",
+  },
+  "game.backfillStart": "Нарисовать награды",
+  "game.backfillRunning": "Claude рисует: готово {done} из {total}.",
+  "game.backfillFailed": "Не получилось нарисовать награды для: {items}. Попробуйте ещё раз.",
 };
 
 export const ruContent: ContentRules = {

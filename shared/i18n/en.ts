@@ -332,6 +332,7 @@ export const en = {
   "claudeMode.kind.grading": "Grading",
   "claudeMode.kind.narration": "Narration",
   "claudeMode.kind.video": "Video",
+  "claudeMode.kind.game": "Meerkat",
   "search.label": "Search topics",
   "search.results": "Matching topics",
   "search.searching": "Searching…",
@@ -925,6 +926,14 @@ export const en = {
   "game.lessonReward": "Reward of this lesson",
   "game.lessonRewardEarned": "Earned in this lesson",
   "game.mystery": "Mystery item",
+  "game.backfill": "Rewards for earlier courses and lessons",
+  "game.backfillIntro": {
+    one: "{count} course, goal or lesson was made before the meerkat and has no rewards yet. Claude can design and draw them: one call for each.",
+    other: "{count} courses, goals and lessons were made before the meerkat and have no rewards yet. Claude can design and draw them: one call for each.",
+  },
+  "game.backfillStart": "Draw the rewards",
+  "game.backfillRunning": "Claude is drawing: {done} of {total} done.",
+  "game.backfillFailed": "Could not draw the rewards for: {items}. Try again.",
 } as const satisfies Record<string, string | { one: string; other: string }>;
 
 export type MessageKey = keyof typeof en;

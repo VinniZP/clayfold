@@ -8,6 +8,7 @@ import type {
   ConversationView,
   CreateTopicResponse,
   CrownsView,
+  GameBackfillView,
   GameView,
   GiveUpResponse,
   GlossaryEntry,
@@ -146,6 +147,8 @@ export const api = {
   wear: (slot: OutfitSlot, item: OutfitRef | null) => request<GameView>("PUT", "/api/game/outfit", { slot, item }),
   gameSeen: (marks: { rewards?: string[]; habits?: string[]; ranks?: number[]; residents?: string[] }) => post<unknown>("/api/game/seen", marks),
   gameFocus: (lessonId: string, longestAwayMs: number) => post<unknown>("/api/game/focus", { lessonId, longestAwayMs }),
+  gameBackfill: () => get<GameBackfillView>("/api/game/backfill"),
+  startGameBackfill: () => post<GameBackfillView>("/api/game/backfill"),
 
   system: () => get<SystemView>("/api/system"),
   update: () => get<UpdateView>("/api/update"),

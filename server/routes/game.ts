@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { z } from "zod";
 import { OUTFIT_SLOTS } from "../../shared/game";
 import { db } from "../db";
+import { backfillView, startBackfill } from "../game/backfill";
 import { gameOn, storedOutfit, storeOutfit } from "../game/state";
 import { crownsView, gameView, markSeen, wearable } from "../game/view";
 import { t } from "../i18n";
@@ -48,6 +49,9 @@ game.post("/game/seen", async (c) => {
   markSeen(marks);
   return c.body(null, 204);
 });
+
+game.get("/game/backfill", (c) => c.json(backfillView()));
+game.post("/game/backfill", (c) => c.json(startBackfill(), 202));
 
 game.post("/game/focus", async (c) => {
   const { lessonId, longestAwayMs } = await readBody(c, z.object({ lessonId: z.string().min(1), longestAwayMs: z.number().int().min(0) }));

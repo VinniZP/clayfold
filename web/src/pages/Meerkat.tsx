@@ -1,8 +1,8 @@
 import * as stylex from "@stylexjs/stylex";
-import { Crown, Lock, Shirt } from "lucide-react";
-import { useState } from "react";
+import { Crown, Lock, Shirt, Sparkles } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router";
-import type { BurrowRoom, GameView, RewardView } from "@shared/api";
+import type { BurrowRoom, GameBackfillView, GameView, RewardView } from "@shared/api";
 import { OUTFIT_SLOTS, type OutfitSlot } from "@shared/game";
 import { useHeader } from "../components/header";
 import { conditionTextFor } from "../components/meerkat/conditions";
@@ -10,9 +10,9 @@ import { ItemArt, svgDataUrl, type SlotArt } from "../components/meerkat/items";
 import { Meerkat } from "../components/meerkat/Meerkat";
 import { RankBar, Savanna } from "../components/meerkat/MeerkatCard";
 import { rankName, TIER_COLOR, wardrobe, wornArt, type WardrobeEntry } from "../components/meerkat/outfit";
-import { CardHead, Empty, PageLoading } from "../components/ui";
+import { CardHead, Empty, PageLoading, Spinner } from "../components/ui";
 import { api, errorText } from "../lib/api";
-import { setGameView, useGame } from "../lib/game";
+import { refreshGame, setGameView, useGame } from "../lib/game";
 import { t, useLang } from "../lib/i18n";
 import { bp, color, font, radius } from "../theme/tokens.stylex";
 import { btn, card, layout, text } from "../theme/ui";
@@ -141,6 +141,8 @@ const s = stylex.create({
   habitBar: { height: 6, borderRadius: radius.pill, backgroundColor: color.surface3, overflow: "hidden", marginTop: 6 },
   error: { marginTop: 10 },
   intro: { maxWidth: "70ch" },
+  backfill: { display: "grid", gap: 12 },
+  backfillBtn: { justifySelf: "start" },
 });
 
 const progressOf = (e: WardrobeEntry): { done: number; total: number } | null =>
@@ -362,6 +364,70 @@ function Burrow({ view }: { view: GameView }) {
   );
 }
 
+/** Rewards for courses, goals and lessons built before the meerkat was on: Claude designs them on request. */
+function Backfill() {
+  useLang();
+  const [state, setState] = useState<GameBackfillView | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const wasRunning = useRef(false);
+  useEffect(() => {
+    let stop = false;
+    let timer: ReturnType<typeof setTimeout>;
+    const poll = async () => {
+      try {
+        const next = await api.gameBackfill();
+        if (stop) return;
+        if (wasRunning.current && !next.running) refreshGame();
+        wasRunning.current = next.running;
+        setState(next);
+        if (next.running) timer = setTimeout(poll, 3000);
+      } catch (err) {
+        if (!stop) setError(errorText(err));
+      }
+    };
+    void poll();
+    return () => {
+      stop = true;
+      clearTimeout(timer);
+    };
+  }, [state?.running]);
+
+  if (!state || (!state.running && state.missing === 0 && state.failed.length === 0)) return null;
+  const start = async () => {
+    setError(null);
+    try {
+      setState(await api.startGameBackfill());
+    } catch (err) {
+      setError(errorText(err));
+    }
+  };
+  return (
+    <section aria-labelledby="backfill-title" {...stylex.props(card.base, card.lilac, s.backfill)}>
+      <CardHead id="backfill-title" title={t("game.backfill")} />
+      {state.running ? (
+        <p role="status" {...stylex.props(text.tnum)}>
+          <Spinner /> {t("game.backfillRunning", { done: state.done, total: state.total })}
+        </p>
+      ) : (
+        <>
+          {state.missing > 0 && <p {...stylex.props(s.intro)}>{t("game.backfillIntro", { count: state.missing })}</p>}
+          {state.failed.length > 0 && <p {...stylex.props(text.small, text.error)}>{t("game.backfillFailed", { items: state.failed.join(", ") })}</p>}
+          {state.missing > 0 && (
+            <button type="button" onClick={() => void start()} {...stylex.props(btn.base, btn.primary, s.backfillBtn)}>
+              <Sparkles size={16} aria-hidden="true" /> {t("game.backfillStart")}
+            </button>
+          )}
+        </>
+      )}
+      {error && (
+        <p role="alert" {...stylex.props(text.error)}>
+          {error}
+        </p>
+      )}
+    </section>
+  );
+}
+
 function Habits({ view }: { view: GameView }) {
   useLang();
   return (
@@ -401,6 +467,7 @@ export function MeerkatPage() {
   if (!view) return <PageLoading />;
   return (
     <div {...stylex.props(s.page)}>
+      <Backfill />
       <Wardrobe view={view} />
       <Burrow view={view} />
       <Habits view={view} />

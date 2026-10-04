@@ -4,6 +4,7 @@ import { HABITS, RANKS } from "../../shared/game";
 import { openDb } from "../db";
 import { submitAttempt } from "../routes/grading";
 import { insertStep, items, seed } from "../routes/test-fixtures";
+import { backfillView, startBackfill, type GameRunner } from "./backfill";
 import { lessonProgress } from "./progress";
 import { gameInstruction } from "./prompt";
 import { checkDrawing, storeCourseRewards, storeLessonReward, storeResident, storeStageTrophies } from "./rewards";
@@ -120,6 +121,34 @@ test("checkDrawing accepts a 100 x 100 drawing and rejects text, scripts and ano
   expect(rules(DRAWING.replace("0 0 100 100", "0 0 200 100"))).toEqual(["G2"]);
   expect(rules(DRAWING.replace("</svg>", "<text>hat</text></svg>"))).toEqual(["G2"]);
   expect(rules(DRAWING.replace("</svg>", "<script>alert(1)</script></svg>"))).toContain("G2");
+});
+
+test("backfill picks the last apply-level practice as the challenge and redraws a drawing that fails G2", async () => {
+  insertStep(db, 1, { kind: "practice", title: "Easy", item: items.single("e") });
+  insertStep(db, 2, { kind: "practice", title: "Hard", item: items.single("h") });
+  insertStep(db, 3, { kind: "check", title: "Check", items: [items.single("c1"), items.single("c2")] });
+  db.query("UPDATE lessons SET status = 'finished', outline = ? WHERE id = 'ls1'").run(JSON.stringify([{ kind: "practice", title: "Easy" }]));
+  db.query("UPDATE steps SET content = json_set(content, '$.item.bloom', 'remember') WHERE idx = 1").run();
+  const resident = { name: "Octavia", species: "octopus", bio: "Archivist of the deep.", svg: DRAWING, lines: { greet: ["Hello there"], cheer: ["Well done", "Nice one"], support: ["Try again", "So close"], nudge: ["Come back"] } };
+  const prompts: string[] = [];
+  const call: GameRunner = async <T,>(opts: { prompt: string }) => {
+    prompts.push(opts.prompt);
+    const value = opts.prompt.includes("knowledge graph")
+      ? { resident, rewards: [{ ...wear, key: "core", nodeIds: ["a"], mastery: "exit_passed" }, { ...wear, key: "all", nodeIds: ["a", "b"], mastery: "mastered" }] }
+      : { reward: { ...wear, earnedBy: "gold", svg: prompts.filter((p) => p.includes("lesson's reward")).length === 1 ? DRAWING.replace("100 100", "50 50") : DRAWING } };
+    return { ok: true, value: value as T, costUsd: 0 };
+  };
+  expect(startBackfill(db, call)).toMatchObject({ running: true, total: 2 });
+  while (backfillView(db).running) await Bun.sleep(5);
+
+  expect(db.query("SELECT challenge_idx FROM lessons WHERE id = 'ls1'").get()).toEqual({ challenge_idx: 2 });
+  expect(backfillView(db)).toMatchObject({ done: 2, failed: [], missing: 0 });
+  expect(db.query("SELECT source, ref FROM rewards ORDER BY source, ref").all()).toEqual([
+    { source: "course", ref: "all" },
+    { source: "course", ref: "core" },
+    { source: "lesson", ref: "ls1" },
+  ]);
+  expect(prompts.filter((p) => p.includes("lesson's reward"))[1]).toContain("viewBox");
 });
 
 test("only the runs that build content get the meerkat's tasks", () => {

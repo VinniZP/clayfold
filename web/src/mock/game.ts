@@ -1,4 +1,4 @@
-import type { BurrowRoom, CrownsView, GameView, HabitView, ResidentView, RewardView } from "@shared/api";
+import type { BurrowRoom, CrownsView, GameBackfillView, GameView, HabitView, ResidentView, RewardView } from "@shared/api";
 import { HABITS, OUTFIT_ITEMS, rankOf, RANKS, REWARD_PREFIX, rewardTier, TIER_POINTS, type Outfit, type OutfitRef, type OutfitSlot, type RewardCondition } from "@shared/game";
 import type { Resident } from "@shared/schemas";
 import { iso, topicDetails } from "./fixtures";
@@ -163,6 +163,23 @@ export function mockSeen(marks: { rewards?: string[]; habits?: string[]; ranks?:
   for (const id of marks.habits ?? []) seen.add(id);
   for (const r of marks.ranks ?? []) seen.add(`rank:${r}`);
   for (const id of marks.residents ?? []) seen.add(`f:${id}`);
+}
+
+let backfill: GameBackfillView = { running: false, done: 0, total: 0, failed: [], finishedAt: null, missing: 3 };
+
+export const mockBackfill = (): GameBackfillView => backfill;
+
+/** Pretends to draw three rewards, one a second. */
+export function startMockBackfill(): GameBackfillView {
+  if (backfill.running) return backfill;
+  backfill = { ...backfill, running: true, done: 0, total: backfill.missing, failed: [] };
+  const tick = () => {
+    const done = backfill.done + 1;
+    backfill = done < backfill.total ? { ...backfill, done } : { ...backfill, done, running: false, missing: 0, finishedAt: new Date().toISOString() };
+    if (backfill.running) setTimeout(tick, 1000);
+  };
+  setTimeout(tick, 1000);
+  return backfill;
 }
 
 const GAME_KEY = "clayfold-mock-game";
