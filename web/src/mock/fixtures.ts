@@ -1,4 +1,4 @@
-import type { ActivityDay, AuditEntry, CardView, ChatMessage, GlossaryEntry, ItemState, LessonSummary, MemoryFile, NodeView, NoteView, SourceView, SystemView, TodayView, TopicDetail, UpdateView, WeakSpot } from "@shared/api";
+import type { ActivityDay, AuditEntry, CardView, ChatMessage, GlossaryEntry, ItemState, LessonSummary, MemoryFile, NodeView, NoteView, SourceView, SystemView, TodayView, TopicDetail, UpdateView, VideoTimeline, WeakSpot } from "@shared/api";
 import type { PublicCite, PublicFigure, PublicItem, PublicStep } from "@shared/schemas";
 
 // Development fixtures for VITE_MOCK=1. Content is illustrative.
@@ -504,9 +504,9 @@ const gitNodes: NodeView[] = [
 ];
 
 const bayesLessons: LessonSummary[] = [
-  { id: "l-cond", topicId: "t-bayes", title: "Conditional probability", objective: "Tell P(A | B) apart from P(A and B) and compute conditional probability from a table.", level: "novice", nodeIds: ["cond-prob"], status: "finished", createdAt: iso(9), stepsReady: 4, stepsTotal: 4, sourcesStale: true, supersededBy: null, learnerStatus: "in_progress" },
-  { id: "l-bayes", topicId: "t-bayes", title: "Bayes' theorem through a medical test", objective: "Compute the probability of disease after a positive test using natural frequencies.", level: "novice", nodeIds: ["bayes-theorem"], status: "generating", createdAt: iso(0, 9), stepsReady: 3, stepsTotal: 10, sourcesStale: false, supersededBy: null, learnerStatus: "in_progress" },
-  { id: "l-bayes-v1", topicId: "t-bayes", title: "Bayes' theorem through a medical test", objective: "Compute the probability of disease after a positive test using natural frequencies.", level: "novice", nodeIds: ["bayes-theorem"], status: "finished", createdAt: iso(5), stepsReady: 8, stepsTotal: 8, sourcesStale: false, supersededBy: "l-bayes", learnerStatus: "completed" },
+  { id: "l-cond", topicId: "t-bayes", title: "Conditional probability", objective: "Tell P(A | B) apart from P(A and B) and compute conditional probability from a table.", level: "novice", nodeIds: ["cond-prob"], status: "finished", createdAt: iso(9), stepsReady: 4, stepsTotal: 4, sourcesStale: true, supersededBy: null, learnerStatus: "in_progress", video: "ready" },
+  { id: "l-bayes", topicId: "t-bayes", title: "Bayes' theorem through a medical test", objective: "Compute the probability of disease after a positive test using natural frequencies.", level: "novice", nodeIds: ["bayes-theorem"], status: "generating", createdAt: iso(0, 9), stepsReady: 3, stepsTotal: 10, sourcesStale: false, supersededBy: null, learnerStatus: "in_progress", video: null },
+  { id: "l-bayes-v1", topicId: "t-bayes", title: "Bayes' theorem through a medical test", objective: "Compute the probability of disease after a positive test using natural frequencies.", level: "novice", nodeIds: ["bayes-theorem"], status: "finished", createdAt: iso(5), stepsReady: 8, stepsTotal: 8, sourcesStale: false, supersededBy: "l-bayes", learnerStatus: "completed", video: null },
 ];
 
 const bayesSources: SourceView[] = [
@@ -547,8 +547,8 @@ export const topicDetails: Record<string, TopicDetail> = {
     plan: [],
     goal: { id: "t-goal", title: "Workout tracking app", why: "Keep every version of the app and roll back a change that broke it." },
     goalNotes: [],
-    lessons: [{ id: "l-git", topicId: "t-git", title: "Branching and merging", objective: "Create branches, merge them and resolve a simple conflict.", level: "intermediate", nodeIds: ["merge"], status: "ready", createdAt: iso(3), stepsReady: 1, stepsTotal: 1, sourcesStale: false, supersededBy: null, learnerStatus: "not_started" },
-      { id: "l-git-rebase", topicId: "t-git", title: "Rebase", objective: "Move a branch onto a new base and resolve conflicts along the way.", level: "intermediate", nodeIds: ["rebase"], status: "failed", createdAt: iso(1), stepsReady: 1, stepsTotal: 4, sourcesStale: false, supersededBy: null, learnerStatus: "not_started" },
+    lessons: [{ id: "l-git", topicId: "t-git", title: "Branching and merging", objective: "Create branches, merge them and resolve a simple conflict.", level: "intermediate", nodeIds: ["merge"], status: "ready", createdAt: iso(3), stepsReady: 1, stepsTotal: 1, sourcesStale: false, supersededBy: null, learnerStatus: "not_started", video: null },
+      { id: "l-git-rebase", topicId: "t-git", title: "Rebase", objective: "Move a branch onto a new base and resolve conflicts along the way.", level: "intermediate", nodeIds: ["rebase"], status: "failed", createdAt: iso(1), stepsReady: 1, stepsTotal: 4, sourcesStale: false, supersededBy: null, learnerStatus: "not_started", video: null },
     ],
     sources: [{ id: "g1", url: "https://git-scm.com/book/en/v2", title: "Pro Git", kind: "book", note: "chapters 2–3", status: "ok" }],
     conversations: convs("cg", [0, 3, 5, 10, 17, 24, 33, 38]),
@@ -883,3 +883,84 @@ export const glossary: GlossaryEntry[] = [
   { topicId: "t-bayes", topicTitle: "Bayesian statistics", term: "Sensitivity", definition: "The share of positive results among the people who have the condition: P(test+ | sick).", original: "true positive rate", avoid: ["accuracy"], updatedAt: iso(5) },
   { topicId: "t-git", topicTitle: "Git basics", term: "Commit", definition: "A snapshot of the staging area saved in the repository.", original: null, avoid: ["save"], updatedAt: iso(30) },
 ];
+
+/** The stored video of l-cond: two chapters with every kind of scene, over silent mock clips. */
+export const condVideo: VideoTimeline = (() => {
+  const cue = (text: string, at: number) => ({ text, at });
+  return {
+    duration: 71,
+    clips: [
+      { start: 0, duration: 8 },
+      { start: 11.1, duration: 26 },
+      { start: 40.2, duration: 18.2 },
+      { start: 59, duration: 9 },
+    ],
+    chapters: [
+      { title: "Joint and conditional probability", start: 8.6 },
+      { title: "Reading it from a table", start: 37.7 },
+    ],
+    scenes: [
+      {
+        start: 0,
+        screen: {
+          kind: "intro",
+          heading: "Conditional probability",
+          subheading: "Tell **P(A | B)** apart from P(A and B) and read both from a table",
+          chapters: [cue("Joint and conditional probability", 1.2), cue("Reading it from a table", 1.45)],
+        },
+      },
+      { start: 8.6, screen: { kind: "chapter", number: 1, heading: "Joint and conditional probability" } },
+      {
+        start: 11.1,
+        screen: {
+          kind: "points",
+          heading: "Two different questions",
+          points: [cue("**Joint**: A and B both happen", 12.5), cue("**Conditional**: A, once B is known", 15), cue("Divide by `P(B)` to switch", 17.5)],
+        },
+      },
+      { start: 20, screen: { kind: "statement", text: "Conditioning **narrows the world** to the cases where B happened.", note: "Everything else is set aside." } },
+      {
+        start: 26,
+        screen: {
+          kind: "figure",
+          heading: "Keep only the cases where B happened",
+          caption: "From all cases to the B cases",
+          figure: {
+            kind: "mermaid",
+            code: "flowchart LR\n  All[All cases] --> B[B happened]\n  B --> AB[A and B]\n  B --> nA[B without A]",
+            teaches: "Conditioning on B narrows the cases to those where B happened",
+            alt: "All cases narrow to the cases where B happened, which split into A and B, and B without A.",
+          },
+        },
+      },
+      { start: 37.7, screen: { kind: "chapter", number: 2, heading: "Reading it from a table" } },
+      {
+        start: 40.2,
+        screen: { kind: "block", heading: "The counts", markdown: "| | B | not B | total |\n|---|---|---|---|\n| A | 12 | 8 | 20 |\n| not A | 18 | 62 | 80 |\n| total | 30 | 70 | 100 |" },
+      },
+      { start: 46, screen: { kind: "block", heading: "The same in code", markdown: "```python\np_a_and_b = 12 / 100\np_b = 30 / 100\np_a_given_b = p_a_and_b / p_b  # 0.4\n```" } },
+      {
+        start: 51,
+        screen: {
+          kind: "example",
+          heading: "From a table",
+          problem: "30 of 100 people have B; 12 of them also have A. Find **P(A | B)**.",
+          lines: [cue("Keep the 30 with B", 52), cue("12 of them have A", 54), cue("P(A | B) = 12 / 30 = **0.4**", 56)],
+        },
+      },
+      {
+        start: 59,
+        screen: {
+          kind: "summary",
+          heading: "Key takeaways",
+          points: [cue("Joint and conditional answer different questions", 60), cue("Conditioning keeps only the B cases", 62), cue("P(A | B) = P(A and B) / P(B)", 64)],
+        },
+      },
+    ],
+    captions: [
+      { text: "Conditional probability answers a different question.", start: 0.3, end: 3.5 },
+      { text: "A joint probability asks whether both things happen.", start: 11.3, end: 14.5 },
+      { text: "Twelve of the thirty people with B also have A.", start: 52, end: 55 },
+    ],
+  };
+})();

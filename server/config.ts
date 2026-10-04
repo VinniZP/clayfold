@@ -20,4 +20,6 @@ export const paths = {
   db: `${config.dataDir}/clayfold.sqlite`,
   workspaces: `${config.dataDir}/workspaces`,
   workspace: (slug: string) => `${config.dataDir}/workspaces/${slug}`,
+  /** Lesson videos rendered to MP4. */
+  exports: `${config.dataDir}/exports`,
 };

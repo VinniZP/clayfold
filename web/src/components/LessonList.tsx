@@ -1,5 +1,5 @@
 import * as stylex from "@stylexjs/stylex";
-import { ChevronRight } from "lucide-react";
+import { ChevronRight, Clapperboard } from "lucide-react";
 import { Link } from "react-router";
 import type { LessonSummary } from "@shared/api";
 import type { MessageKey } from "@shared/i18n";
@@ -151,6 +151,11 @@ export function LessonList({ lessons }: { lessons: LessonSummary[] }) {
                 <div {...stylex.props(s.chips)}>
                   <AuthoringChip lesson={l} />
                   {l.status !== "failed" && <LearnerChip status={l.learnerStatus} />}
+                  {l.video === "ready" && (
+                    <span {...stylex.props(chip.base, chip.lilac)}>
+                      <Clapperboard size={12} aria-hidden="true" /> {t("video.ready")}
+                    </span>
+                  )}
                 </div>
                 <span {...stylex.props(text.small, text.muted)}>
                   {levelLabel(l.level)} · {formatDate(l.createdAt)}

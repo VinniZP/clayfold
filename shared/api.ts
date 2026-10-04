@@ -1,5 +1,5 @@
 import type { Lang } from "./i18n";
-import type { Answer, Card, GoalPlanEntry, GraphNode, Level, PublicItem, PublicStep } from "./schemas";
+import type { Answer, Card, GoalPlanEntry, GraphNode, Level, PublicFigure, PublicItem, PublicStep } from "./schemas";
 
 // REST contract. All routes are under /api and exchange JSON.
 // Errors: non-2xx with body ApiError.
@@ -58,6 +58,8 @@ export type LessonSummary = {
   supersededBy: string | null;
   /** The learner's progress, separate from the authoring `status`: completed once every exit-check item has an attempt. */
   learnerStatus: "not_started" | "in_progress" | "completed";
+  /** The lesson's video, if one was requested. */
+  video: VideoStatus | null;
 };
 
 // POST /api/lessons/:lessonId/resume -> StartLessonResponse (continues a failed lesson in its own authoring
@@ -281,7 +283,7 @@ export type Effort = (typeof EFFORTS)[number];
 /** Haiku models take no effort parameter (supportedModels of the Claude API effort docs). */
 export const supportsEffort = (model: string): boolean => !model.includes("haiku");
 
-export const CLAUDE_ROLES = ["onboard", "lesson", "tutor", "review", "critic", "grading", "narration"] as const satisfies readonly ClaudeInstanceKind[];
+export const CLAUDE_ROLES = ["onboard", "lesson", "tutor", "review", "critic", "grading", "narration", "video"] as const satisfies readonly ClaudeInstanceKind[];
 
 /** Null fields use the server defaults: CLAYFOLD_MODEL or CLAYFOLD_CRITIC_MODEL, and the role's default effort. */
 export type ClaudeRoleSetting = { model: ClaudeModel | null; effort: Effort | null };
@@ -289,6 +291,8 @@ export type ClaudeRoleSetting = { model: ClaudeModel | null; effort: Effort | nu
 export type Settings = {
   language: Lang;
   narration: { keySet: boolean; voiceId: string | null; model: TtsModel };
+  /** Video lessons; they use the narration key, voice and model. */
+  video: { enabled: boolean };
   claude: Record<ClaudeInstanceKind, ClaudeRoleSetting & { defaultModel: string; defaultEffort: Effort }>;
 };
 
@@ -296,6 +300,7 @@ export type SettingsUpdate = {
   language?: Lang;
   voiceId?: string;
   ttsModel?: TtsModel;
+  videoEnabled?: boolean;
   claudeRole?: ClaudeRoleSetting & { role: ClaudeInstanceKind };
 };
 
@@ -310,10 +315,64 @@ export type NarrationSegment = { block: number; start: number; end: number };
 
 export type NarrationView = { audioUrl: string; segments: NarrationSegment[] };
 
+// Video lessons: GET /api/lessons/:lessonId/video -> VideoView (404 when none was requested)
+// POST /api/lessons/:lessonId/video -> VideoView: starts a build, or a rebuild of a ready or failed video
+// (409 when video lessons are off, without a key, or for a lesson that is still being written).
+// GET /api/lessons/:lessonId/video/clips/:idx -> audio/mpeg
+// The video covers every explain and worked_example step of the lesson, one chapter per step. The browser plays
+// the scenes in time with the narration clips; the timeline holds everything needed to render it to a file later.
+
+export type VideoStatus = "building" | "ready" | "failed";
+
+/** Text that appears when the narration reaches it; `at` is seconds into the video. */
+export type CuedText = { text: string; at: number };
+
+/** What a scene shows; text is inline markdown unless the field says otherwise. */
+export type VideoScreen =
+  | { kind: "intro"; heading: string; subheading: string; chapters: CuedText[] }
+  | { kind: "chapter"; number: number; heading: string }
+  | { kind: "points"; heading: string; points: CuedText[] }
+  | { kind: "statement"; text: string; note: string | null }
+  /** One block of the step body as written (code, a table, a formula), as block markdown. */
+  | { kind: "block"; heading: string; markdown: string }
+  | { kind: "figure"; heading: string; figure: PublicFigure; caption: string | null }
+  | { kind: "example"; heading: string; problem: string; lines: CuedText[] }
+  | { kind: "summary"; heading: string; points: CuedText[] };
+
+/** Seconds into the video; a scene lasts until the next one starts. */
+export type VideoScene = { screen: VideoScreen; start: number };
+
+export type VideoTimeline = {
+  duration: number;
+  scenes: VideoScene[];
+  /** Narration clips in order; `start` is where each one begins in the video. */
+  clips: { start: number; duration: number }[];
+  /** One entry per lesson step, for the chapter list and the progress bar. */
+  chapters: { title: string; start: number }[];
+  /** Subtitle lines of the narration, timed from the voice. */
+  captions: { text: string; start: number; end: number }[];
+};
+
+export type VideoView =
+  /** `done` of `total` scripts and narration clips are finished. */
+  | { status: "building"; done: number; total: number }
+  | { status: "failed"; error: string }
+  | ({ status: "ready"; clipUrls: string[] } & VideoTimeline);
+
+// Export: GET /api/lessons/:lessonId/video/export -> VideoExportView ; POST -> VideoExportView (starts rendering the
+// ready video to MP4; 409 when it is not ready or another video is rendering)
+// GET /api/lessons/:lessonId/video/export/file -> video/mp4 attachment
+
+export type VideoExportView =
+  | { status: "none" }
+  | { status: "rendering"; progress: number }
+  | { status: "ready"; url: string; sizeBytes: number }
+  | { status: "failed"; error: string };
+
 // Claude Code mode: GET /api/system -> SystemView
 // The running server and every `claude` process it controls.
 
-export type ClaudeInstanceKind = ConversationKind | "critic" | "grading" | "narration";
+export type ClaudeInstanceKind = ConversationKind | "critic" | "grading" | "narration" | "video";
 
 export type ClaudeInstance = {
   pid: number;

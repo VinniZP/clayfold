@@ -12,8 +12,8 @@ Browser (React, web/) ──HTTP + SSE──▶ Bun + Hono (server/), 127.0.0.1:
                                         ├─ /mcp                   MCP Streamable HTTP, tools in shared/tools.ts
                                         └─ SQLite data/clayfold.sqlite schema in server/db/schema.sql
           spawn per turn ──▶ claude -p … --plugin-dir plugin   (cwd data/workspaces/<slug>)
-          spawn per check ─▶ claude -p … --json-schema (critic, grading, narration script; no plugin, no tools)
-          HTTPS ───────────▶ api.elevenlabs.io (narration audio, key from the OS credential store)
+          spawn per check ─▶ claude -p … --json-schema (critic, grading, narration and video scripts; no plugin, no tools)
+          HTTPS ───────────▶ api.elevenlabs.io (narration and video audio, key from the OS credential store)
 ```
 
 ## Contracts
@@ -96,3 +96,13 @@ Published items are copied to `items` with a shuffled `display_order`. The brows
 - `POST /api/steps/:stepId/narration` voices an `explain` step when the learner presses Listen. A `runJsonPrompt` call (purpose `narration`) rewrites the body for speech as parts, each tied to a top-level markdown block. ElevenLabs `/v1/text-to-speech/{voice}/with-timestamps` speaks the joined parts, and its per-character timing gives each block a start and an end. The web app highlights the block being read.
 - `narrations` stores the audio and segments per step, for one voice and model; a change of either voices the step again on the next Listen.
 - The ElevenLabs key is kept with `Bun.secrets` (`server/secrets.ts`), not in `data/`. The browser only learns whether a key is set, and the key never enters a prompt or the environment of a `claude` process.
+
+## Video lessons
+
+- Off by default; `settings.video_enabled` turns on the lesson's Video tab. A video uses the narration key, voice and model.
+- The Video tab is a way through the lesson: the warm-up, the video in place of the explain and worked_example steps, then every question of the lesson (explain checks, practice, reflect, the exit check). The tutor panel is not on this tab.
+- `POST /api/lessons/:lessonId/video` builds in the background (`server/routes/video.ts`). Each published explain or worked_example step becomes a chapter; its source blocks are the top-level markdown blocks of the body, or the problem and every solution line.
+- Scripts are `runJsonPrompt` calls with the `video` role: one per chapter, up to four at a time, and one for the opening and the closing. Deterministic checks reject a chapter that leaves a source block uncovered, drops or invents a figure, puts markup in the narration, repeats narration word for word on screen (V3), runs a scene past 550 characters or the chapter past 5,000; the second attempt gets the list of problems.
+- Each script part is voiced by one ElevenLabs `with-timestamps` call, three at a time; clips are stored in `video_clips`. Per-character timing places each scene, each cued point at the moment its cue is spoken (the first one within 2.5 s of the scene start), and the subtitle lines. `videos.timeline` holds the result (`VideoTimeline` in `shared/api.ts`).
+- The browser plays the timeline with Remotion Player (`web/src/video/LessonVideo.tsx`, 1920×1080 at 30 fps): intro, a card per chapter, the scenes, takeaways and an end card. The composition pins the light palette and shows only text from the timeline, so the same composition can be rendered to a file. A `building` row with no build running in this process reads as failed after a restart.
+- `POST /api/lessons/:lessonId/video/export` renders the ready video to MP4 in the background (`server/video-export.ts`), one lesson at a time. Webpack bundles `web/src/video/render.tsx` once per process (StyleX with runtime injection, since Remotion inlines CSS), Remotion's headless Chrome draws the frames and fetches the narration clips from this server, and ffmpeg encodes H.264 with AAC. Remotion downloads its Chrome Headless Shell on the first render. The file goes to `data/exports/<lesson>-<video version>.mp4`; making the video again deletes it. Figure scenes hold the frame (`delayRender`) until mermaid, Vega or a widget has drawn.

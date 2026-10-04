@@ -1,5 +1,5 @@
 import * as stylex from "@stylexjs/stylex";
-import { ArrowLeft, ArrowRight, BookOpen, Check, CircleSlash, Copy, MessageCircle, NotebookText, PanelRightClose, RotateCcw, ShieldCheck, TriangleAlert } from "lucide-react";
+import { ArrowLeft, ArrowRight, BookOpen, Check, CircleSlash, Clapperboard, Copy, MessageCircle, NotebookText, PanelRightClose, RotateCcw, ShieldCheck, TriangleAlert } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { Link, useParams, useSearchParams } from "react-router";
 import type { LessonView } from "@shared/api";
@@ -15,6 +15,7 @@ import type { ItemResult } from "../components/ItemView";
 import { ProposedCards } from "../components/ProposedCards";
 import { StepView, type LineResults, type TutorHooks } from "../components/Steps";
 import { CardHead, Clay, Empty, ErrorBox, Markdown, PageLoading, Progress, Spinner } from "../components/ui";
+import { VideoLesson } from "../components/VideoLesson";
 import { api, errorText } from "../lib/api";
 import { formatDateTime, kindLabel, levelLabel } from "../lib/format";
 import { t, useLang } from "../lib/i18n";
@@ -246,7 +247,8 @@ export function LessonPage() {
   const [summary, setSummary] = useState<string | null>(null);
   const [checkResults, setCheckResults] = useState<{ item: PublicItem; result: ItemResult | undefined }[] | null>(null);
   const [tutorOpen, setTutorOpen] = useState(false);
-  const [tab, setTab] = useState<"lesson" | "cards" | "notes">("lesson");
+  const [tab, setTab] = useState<"lesson" | "cards" | "notes" | "video">("lesson");
+  const videoOn = useResource(() => api.settings(), "settings").data?.video.enabled ?? false;
   const docked = useMediaQuery("(min-width: 1281px)");
   const outlineRef = useRef<HTMLElement>(null);
   useOverlayScroll(outlineRef);
@@ -476,10 +478,13 @@ export function LessonPage() {
       {(
         [
           ["lesson", "lesson.title", <BookOpen key="i" size={20} aria-hidden="true" />],
+          ["video", "lesson.tab.video", <Clapperboard key="i" size={20} aria-hidden="true" />],
           ["cards", "lesson.tab.cards", <Copy key="i" size={20} aria-hidden="true" />],
           ["notes", "lesson.tab.notes", <NotebookText key="i" size={20} aria-hidden="true" />],
         ] as const
-      ).map(([key, label, icon]) => (
+      )
+        .filter(([key]) => key !== "video" || videoOn)
+        .map(([key, label, icon]) => (
         <button
           key={key}
           type="button"
@@ -519,6 +524,15 @@ export function LessonPage() {
               <p {...stylex.props(text.small, text.muted)}>{t("lesson.reviewCardsHint")}</p>
               {topicId ? <ProposedCards topicId={topicId} /> : <Spinner label={t("common.loading")} />}
             </>
+          ) : tab === "video" ? (
+            <VideoLesson
+              lessonId={lessonId}
+              topicId={topicId}
+              title={v.lesson.title}
+              writing={v.lesson.status === "generating"}
+              steps={v.steps}
+              itemStates={v.itemStates}
+            />
           ) : topicId ? (
             <LessonNotes topicId={topicId} lessonId={lessonId} />
           ) : (

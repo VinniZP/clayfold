@@ -1,5 +1,5 @@
 import { CLAUDE_ROLES, type Effort } from "@shared/api";
-import type { AttemptRequest, AttemptResponse, ChatMessage, ItemState, LessonView, NarrationView, NoteRequest, ReviewSession, Settings, SettingsUpdate, TodayView, TopicDetail, TopicSummary, VoiceView } from "@shared/api";
+import type { AttemptRequest, AttemptResponse, ChatMessage, ItemState, LessonView, NarrationView, NoteRequest, ReviewSession, Settings, SettingsUpdate, TodayView, TopicDetail, TopicSummary, VideoExportView, VideoView, VoiceView } from "@shared/api";
 import type { TopicEvent } from "@shared/events";
 import type { PublicStep } from "@shared/schemas";
 import { marked } from "marked";
@@ -221,8 +221,10 @@ function lessonView(id: string): LessonView | null {
 let settings: Settings = {
   language: lang(),
   narration: { keySet: false, voiceId: null, model: "eleven_v4" },
+  // On in the mock so the Video tab can be looked at; the server default is off.
+  video: { enabled: true },
   claude: Object.fromEntries(
-    CLAUDE_ROLES.map((role) => [role, { model: null, effort: null, defaultModel: ["critic", "grading", "narration"].includes(role) ? "sonnet" : "opus", defaultEffort: ({ onboard: "medium", lesson: "high", critic: "high" } as Record<string, Effort>)[role] ?? "low" }]),
+    CLAUDE_ROLES.map((role) => [role, { model: null, effort: null, defaultModel: ["critic", "grading", "narration", "video"].includes(role) ? "sonnet" : "opus", defaultEffort: ({ onboard: "medium", lesson: "high", critic: "high", video: "medium" } as Record<string, Effort>)[role] ?? "low" }]),
   ) as Settings["claude"],
 };
 
@@ -257,6 +259,12 @@ function silentWav(seconds: number): Blob {
   new Uint8Array(v.buffer, 44).fill(128);
   return new Blob([v.buffer], { type: "audio/wav" });
 }
+
+const readyVideo = (lessonId: string): VideoView => ({ status: "ready", clipUrls: fx.condVideo.clips.map((_, i) => `/api/lessons/${lessonId}/video/clips/${i}`), ...fx.condVideo });
+
+// Every mock lesson gets the same scenes; l-cond has its video already.
+const videos: Record<string, VideoView> = { "l-cond": readyVideo("l-cond") };
+const exports: Record<string, VideoExportView> = {};
 
 function narration(stepId: string): NarrationView | null {
   const step = fx.condSteps.find((st) => st.id === stepId);
@@ -464,10 +472,11 @@ async function route(method: string, path: string, body: Record<string, unknown>
   if (p === "/api/today") return json(fx.today);
   if (p === "/api/settings") {
     if (method === "PUT") {
-      const { language, voiceId, ttsModel, claudeRole } = body as SettingsUpdate;
+      const { language, voiceId, ttsModel, videoEnabled, claudeRole } = body as SettingsUpdate;
       settings = {
         language: language ?? settings.language,
         narration: { ...settings.narration, voiceId: voiceId ?? settings.narration.voiceId, model: ttsModel ?? settings.narration.model },
+        video: { enabled: videoEnabled ?? settings.video.enabled },
         claude: claudeRole
           ? { ...settings.claude, [claudeRole.role]: { ...settings.claude[claudeRole.role], model: claudeRole.model, effort: claudeRole.effort } }
           : settings.claude,
@@ -492,6 +501,31 @@ async function route(method: string, path: string, body: Record<string, unknown>
     const view = narration(m[1]!);
     return view ? new Response(silentWav(view.segments.length * SECONDS_PER_BLOCK)) : json({ error: "narration not found" }, 404);
   }
+  if ((m = p.match(/^\/api\/lessons\/([^/]+)\/video$/))) {
+    const id = m[1]!;
+    if (method === "POST") {
+      if (!settings.video.enabled) return json({ error: t("video.disabled") }, 409);
+      if (!settings.narration.keySet) return json({ error: t("video.noKey") }, 409);
+      const total = 2 * fx.condVideo.chapters.length + 3;
+      videos[id] = { status: "building", done: 0, total };
+      for (let done = 1; done <= total; done++) setTimeout(() => (videos[id] = done < total ? { status: "building", done, total } : readyVideo(id)), done * 600);
+    }
+    return videos[id] ? json(videos[id]) : json({ error: "no video for this lesson" }, 404);
+  }
+  if ((m = p.match(/^\/api\/lessons\/([^/]+)\/video\/export$/))) {
+    const id = m[1]!;
+    if (method === "POST") {
+      const steps = 8;
+      for (let k = 0; k <= steps; k++) {
+        setTimeout(() => {
+          exports[id] = k < steps ? { status: "rendering", progress: k / steps } : { status: "ready", url: `/api/lessons/${id}/video/export/file`, sizeBytes: 84_000_000 };
+        }, k * 700);
+      }
+      exports[id] = { status: "rendering", progress: 0 };
+    }
+    return json(exports[id] ?? { status: "none" });
+  }
+  if ((m = p.match(/^\/api\/lessons\/[^/]+\/video\/clips\/(\d+)$/))) return new Response(silentWav(fx.condVideo.clips[Number(m[1])]?.duration ?? 1));
   if (p === "/api/goal") {
     fx.today.goal.minutes = body.minutes as TodayView["goal"]["minutes"];
     return json(fx.today);

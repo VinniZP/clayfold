@@ -218,6 +218,120 @@
     max-width: 640px;
   }
 
+  /* Video lessons (video/LessonVideo.tsx): figures fill their card, blocks reveal row by row as --p goes 0 to 1 */
+  .video-figure > * {
+    width: 100%;
+  }
+
+  .video-figure svg {
+    width: 100% !important;
+    max-width: 100% !important;
+    height: auto;
+    max-height: 600px;
+  }
+
+  .video-prose {
+    font-size: 34px;
+    line-height: 1.45;
+  }
+
+  .video-prose table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 30px;
+  }
+
+  .video-prose th,
+  .video-prose td {
+    padding: 14px 20px;
+    border-bottom: 2px solid var(--border);
+    text-align: left;
+  }
+
+  .video-prose th {
+    color: var(--accent-text);
+  }
+
+  .video-prose tr:nth-child(1),
+  .video-prose > ul > li:nth-child(1),
+  .video-prose > ol > li:nth-child(1) {
+    opacity: clamp(0, calc(var(--p) * 12 - 0), 1);
+  }
+
+  .video-prose tr:nth-child(2),
+  .video-prose > ul > li:nth-child(2),
+  .video-prose > ol > li:nth-child(2) {
+    opacity: clamp(0, calc(var(--p) * 12 - 1), 1);
+  }
+
+  .video-prose tr:nth-child(3),
+  .video-prose > ul > li:nth-child(3),
+  .video-prose > ol > li:nth-child(3) {
+    opacity: clamp(0, calc(var(--p) * 12 - 2), 1);
+  }
+
+  .video-prose tr:nth-child(4),
+  .video-prose > ul > li:nth-child(4),
+  .video-prose > ol > li:nth-child(4) {
+    opacity: clamp(0, calc(var(--p) * 12 - 3), 1);
+  }
+
+  .video-prose tr:nth-child(5),
+  .video-prose > ul > li:nth-child(5),
+  .video-prose > ol > li:nth-child(5) {
+    opacity: clamp(0, calc(var(--p) * 12 - 4), 1);
+  }
+
+  .video-prose tr:nth-child(6),
+  .video-prose > ul > li:nth-child(6),
+  .video-prose > ol > li:nth-child(6) {
+    opacity: clamp(0, calc(var(--p) * 12 - 5), 1);
+  }
+
+  .video-prose tr:nth-child(7),
+  .video-prose > ul > li:nth-child(7),
+  .video-prose > ol > li:nth-child(7) {
+    opacity: clamp(0, calc(var(--p) * 12 - 6), 1);
+  }
+
+  .video-prose tr:nth-child(8),
+  .video-prose > ul > li:nth-child(8),
+  .video-prose > ol > li:nth-child(8) {
+    opacity: clamp(0, calc(var(--p) * 12 - 7), 1);
+  }
+
+  .video-prose tr:nth-child(9),
+  .video-prose > ul > li:nth-child(9),
+  .video-prose > ol > li:nth-child(9) {
+    opacity: clamp(0, calc(var(--p) * 12 - 8), 1);
+  }
+
+  .video-prose tr:nth-child(10),
+  .video-prose > ul > li:nth-child(10),
+  .video-prose > ol > li:nth-child(10) {
+    opacity: clamp(0, calc(var(--p) * 12 - 9), 1);
+  }
+
+  .video-prose tr:nth-child(11),
+  .video-prose > ul > li:nth-child(11),
+  .video-prose > ol > li:nth-child(11) {
+    opacity: clamp(0, calc(var(--p) * 12 - 10), 1);
+  }
+
+  .video-prose tr:nth-child(12),
+  .video-prose > ul > li:nth-child(12),
+  .video-prose > ol > li:nth-child(12) {
+    opacity: clamp(0, calc(var(--p) * 12 - 11), 1);
+  }
+
+  .video-mark strong {
+    font-weight: inherit;
+    background-image: linear-gradient(var(--mark), var(--mark));
+    background-repeat: no-repeat;
+    background-size: var(--sweep, 0%) 38%;
+    background-position: 0 88%;
+  }
+
   @media (max-width: 480px) {
     .figure-render.is-mermaid svg {
       min-width: 520px;

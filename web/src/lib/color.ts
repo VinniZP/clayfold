@@ -15,15 +15,18 @@ function toHex(color: string): string {
   return `#${[r, g, b].map((v) => v.toString(16).padStart(2, "0")).join("")}`;
 }
 
-/** Reads a bridged token (theme/themes.ts `bridge`, applied to <html> by AppRoot). */
-export function tokenHex(name: string): string {
-  const value = getComputedStyle(document.documentElement).getPropertyValue(`--${name}`).trim();
+/**
+ * Reads a bridged token (theme/themes.ts `bridge`) as `from` sees it: AppRoot sets it on <html>, and a subtree such as
+ * a lesson video can pin its own palette.
+ */
+export function tokenHex(name: string, from: Element = document.documentElement): string {
+  const value = getComputedStyle(from).getPropertyValue(`--${name}`).trim();
   return toHex(value || "#888");
 }
 
-export function tokens<K extends string>(names: readonly K[]): Record<K, string> {
+export function tokens<K extends string>(names: readonly K[], from?: Element | null): Record<K, string> {
   const out = {} as Record<K, string>;
-  for (const n of names) out[n] = tokenHex(n);
+  for (const n of names) out[n] = tokenHex(n, from ?? undefined);
   return out;
 }
 

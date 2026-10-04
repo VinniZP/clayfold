@@ -237,6 +237,21 @@ CREATE TABLE IF NOT EXISTS narrations (        -- A
   created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
 );
 
+CREATE TABLE IF NOT EXISTS videos (            -- A
+  lesson_id TEXT PRIMARY KEY REFERENCES lessons(id) ON DELETE CASCADE,
+  status TEXT NOT NULL CHECK (status IN ('building','ready','failed')),
+  timeline TEXT,                                -- JSON VideoTimeline when ready
+  error TEXT,
+  created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+);
+
+CREATE TABLE IF NOT EXISTS video_clips (       -- A
+  lesson_id TEXT NOT NULL REFERENCES videos(lesson_id) ON DELETE CASCADE,
+  idx INTEGER NOT NULL,
+  audio BLOB NOT NULL,                          -- audio/mpeg
+  PRIMARY KEY (lesson_id, idx)
+);
+
 CREATE TABLE IF NOT EXISTS hint_views (        -- A
   item_id TEXT NOT NULL REFERENCES items(id) ON DELETE CASCADE,
   level INTEGER NOT NULL,                       -- 1-based rung of the item's hint ladder
