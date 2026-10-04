@@ -19,12 +19,13 @@ const readSetting = (key: string, database: Database): unknown => {
 const writeSetting = (key: string, value: unknown, database: Database) =>
   database.query("INSERT INTO settings (key, value) VALUES (?1, ?2) ON CONFLICT (key) DO UPDATE SET value = ?2").run(key, JSON.stringify(value));
 
-export function narrationSettings(database: Database = db()): { voiceId: string | null; model: TtsModel } {
+export function narrationSettings(database: Database = db()): Omit<Settings["narration"], "keySet"> {
   const voiceId = readSetting("narration_voice", database);
   const model = readSetting("narration_model", database);
   return {
     voiceId: typeof voiceId === "string" ? voiceId : null,
     model: TTS_MODELS.includes(model as TtsModel) ? (model as TtsModel) : TTS_MODELS[0],
+    prefetch: readSetting("narration_prefetch", database) === true,
   };
 }
 
@@ -34,11 +35,19 @@ const introSeen = (database: Database = db()): IntroFeature[] => {
 };
 
 export const videoEnabled =(database: Database = db()): boolean => readSetting("video_enabled", database) === true;
+export const teachbackEnabled = (database: Database = db()): boolean => readSetting("teachback_enabled", database) === true;
+
+export const confidenceEnabled = (database: Database = db()): boolean => readSetting("confidence_enabled", database) !== false;
+
+const shortcutHints = (database: Database = db()): boolean => readSetting("shortcut_hints", database) !== false;
 
 const settingsView = async (): Promise<Settings> => ({
   language: language(),
   narration: { keySet: Boolean(await elevenLabsKey.get()), ...narrationSettings() },
   video: { enabled: videoEnabled() },
+  confidence: { enabled: confidenceEnabled() },
+  shortcuts: { hints: shortcutHints() },
+  teachback: { enabled: teachbackEnabled() },
   claude: roleSettingsView(),
   gamification: gameOn(),
   introSeen: introSeen(),
@@ -62,7 +71,11 @@ settings.put("/settings", async (c) => {
       language: z.enum(LANGS).optional(),
       voiceId: z.string().min(1).optional(),
       ttsModel: z.enum(TTS_MODELS).optional(),
+      narrationPrefetch: z.boolean().optional(),
       videoEnabled: z.boolean().optional(),
+      confidenceEnabled: z.boolean().optional(),
+      shortcutHints: z.boolean().optional(),
+      teachbackEnabled: z.boolean().optional(),
       claudeRole: z.object({ role: z.enum(CLAUDE_ROLES), model: z.enum(CLAUDE_MODELS).nullable(), effort: z.enum(EFFORTS).nullable() }).optional(),
     }),
   );
@@ -71,7 +84,11 @@ settings.put("/settings", async (c) => {
   if (body.language) setLanguage(body.language);
   if (body.voiceId) writeSetting("narration_voice", body.voiceId, db());
   if (body.ttsModel) writeSetting("narration_model", body.ttsModel, db());
+  if (body.narrationPrefetch !== undefined) writeSetting("narration_prefetch", body.narrationPrefetch, db());
   if (body.videoEnabled !== undefined) writeSetting("video_enabled", body.videoEnabled, db());
+  if (body.confidenceEnabled !== undefined) writeSetting("confidence_enabled", body.confidenceEnabled, db());
+  if (body.shortcutHints !== undefined) writeSetting("shortcut_hints", body.shortcutHints, db());
+  if (body.teachbackEnabled !== undefined) writeSetting("teachback_enabled", body.teachbackEnabled, db());
   if (body.claudeRole) {
     const { role, ...setting } = body.claudeRole;
     setRoleSetting(role, setting);

@@ -1,9 +1,13 @@
 import type { Database } from "bun:sqlite";
+import type { Confidence } from "../../shared/api";
 import type { Answer, Item, Step } from "../../shared/schemas";
 import { db } from "../db";
+import { displayLength, matchOrders, matchTargets } from "../gates/content";
 import { displayOrder, type ItemRow, type StepRow } from "./public";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
+
+const CONFIDENCE_WORDS: Record<Confidence, string> = { guess: "guessing", unsure: "unsure", sure: "sure" };
 
 function describeItem(item: Item): string {
   const lines = [`Format: ${item.format}; Bloom: ${item.bloom}; node: ${item.nodeId}`, `Prompt: ${item.prompt}`];
@@ -15,6 +19,15 @@ function describeItem(item: Item): string {
     });
   } else if (item.format === "order") {
     lines.push(`Correct order: ${item.sequence.join(" → ")}`);
+  } else if (item.format === "match") {
+    lines.push("Correct pairs:");
+    for (const p of item.pairs) lines.push(`  ${p.left} → ${p.right}${p.mistake ? ` (if paired wrongly, misconception: ${p.mistake.misconception}; feedback: ${p.mistake.feedback})` : ""}`);
+    for (const d of item.distractors ?? []) lines.push(`  Distractor, pairs with nothing: ${d.text} (misconception: ${d.misconception}; feedback: ${d.feedback})`);
+  } else if (item.format === "sort") {
+    lines.push(`Categories: ${item.categories.join(" | ")}`, "Correct placement:");
+    for (const e of item.entries) {
+      lines.push(`  ${e.text} → ${item.categories[e.category]}${e.mistake ? ` (if misplaced, misconception: ${e.mistake.misconception}; feedback: ${e.mistake.feedback})` : ""}`);
+    }
   } else if (item.format === "cloze") {
     lines.push(`Text: ${item.text}`, `Accepted answers: ${item.blanks.map((b, i) => `{{${i + 1}}} = ${b.join(" | ")}`).join("; ")}`);
   } else if (item.format === "number") {
@@ -39,6 +52,27 @@ function describeAnswer(raw: string, item: Item, row: ItemRow): string {
     }
     case "order":
       return answer.sequence.join(" → ");
+    case "match": {
+      if (item.format !== "match") return JSON.stringify(answer);
+      const { left, right } = matchOrders(item, displayOrder(row, displayLength(item)));
+      const targets = matchTargets(item);
+      return left
+        .map((pair, d) => {
+          const target = right[answer.pairs[d] ?? -1];
+          return `${item.pairs[pair]!.left} → ${target === undefined ? "?" : targets[target]} (${target === pair ? "right" : "wrong"})`;
+        })
+        .join("; ");
+    }
+    case "sort": {
+      if (item.format !== "sort") return JSON.stringify(answer);
+      return displayOrder(row, item.entries.length)
+        .map((i, d) => {
+          const entry = item.entries[i]!;
+          const pick = answer.categories[d];
+          return `${entry.text} → ${item.categories[pick ?? -1] ?? "?"} (${pick === entry.category ? "right" : "wrong"})`;
+        })
+        .join("; ");
+    }
     case "cloze":
       return answer.blanks.join(" | ");
     case "number":
@@ -59,6 +93,18 @@ function describeStep(step: Step): string {
     default:
       return `Step "${step.title}" (${step.kind})`;
   }
+}
+
+function describeAlternatives(stepId: string, database: Database): string | null {
+  const rows = database
+    .query<{ lens: string; body: string }, [string]>("SELECT lens, body FROM alternatives WHERE step_id = ? ORDER BY created_at, rowid")
+    .all(stepId);
+  const last = rows.at(-1);
+  if (!last) return null;
+  return [
+    `The learner asked for this step to be explained differently ${rows.length} time(s), with the lenses: ${[...new Set(rows.map((r) => r.lens))].join(", ")}. Its explanation did not land at first; build on the alternative they read last:`,
+    last.body,
+  ].join("\n");
 }
 
 /** The open blank of a worked-example line the learner answers through the tutor, with its answer sheet and their earlier answers. */
@@ -86,10 +132,11 @@ function describeOpenLine(stepRow: StepRow, idx: number, database: Database): st
 
 /**
  * L17 context for a tutor turn: the item with its key, misconceptions, solution and hints; the learner's
- * attempts on it; unmastered prerequisites of its node; the step text; and the last 24 h of attempts.
+ * attempts on it; unmastered prerequisites of its node; the step text and the alternative explanations the learner
+ * asked for; the last 24 h of attempts; and the passage the learner selected on the page and asks about.
  */
 export function buildTutorContext(
-  opts: { lessonId: string; itemId?: string; stepId?: string; line?: number; at?: Date },
+  opts: { lessonId: string; itemId?: string; stepId?: string; line?: number; quote?: string; at?: Date },
   database: Database = db(),
 ): string {
   const at = opts.at ?? new Date();
@@ -103,6 +150,8 @@ export function buildTutorContext(
   const stepId = opts.stepId ?? row?.step_id ?? null;
   const stepRow = stepId ? database.query<StepRow, [string]>("SELECT * FROM steps WHERE id = ?").get(stepId) : null;
   if (stepRow) parts.push(describeStep(JSON.parse(stepRow.content) as Step));
+  const alternatives = stepRow ? describeAlternatives(stepRow.id, database) : null;
+  if (alternatives) parts.push(alternatives);
   if (stepRow && opts.line !== undefined) {
     const section = describeOpenLine(stepRow, opts.line, database);
     if (section) parts.push(section);
@@ -112,8 +161,8 @@ export function buildTutorContext(
     const item = JSON.parse(row.content) as Item;
     parts.push(`Item (${row.role}); the learner does not see it in this form:\n${describeItem(item)}`);
     const attempts = database
-      .query<{ answer: string; correct: number | null; misconception: string | null; hints_used: number; gave_up: number }, [string]>(
-        "SELECT answer, correct, misconception, hints_used, gave_up FROM attempts WHERE item_id = ? ORDER BY created_at, rowid",
+      .query<{ answer: string; correct: number | null; misconception: string | null; hints_used: number; gave_up: number; confidence: Confidence | null }, [string]>(
+        "SELECT answer, correct, misconception, hints_used, gave_up, confidence FROM attempts WHERE item_id = ? ORDER BY created_at, rowid",
       )
       .all(row.id);
     parts.push(
@@ -121,7 +170,11 @@ export function buildTutorContext(
         ? `The learner's attempts on this item:\n${attempts
             .map((a, i) => {
               const verdict = a.gave_up ? "gave up" : a.correct === 1 ? "correct" : "wrong";
-              const extra = [a.misconception ? `misconception: ${a.misconception}` : "", a.hints_used ? `hints: ${a.hints_used}` : ""]
+              const extra = [
+                a.confidence ? `confidence before checking: ${CONFIDENCE_WORDS[a.confidence]}` : "",
+                a.misconception ? `misconception: ${a.misconception}` : "",
+                a.hints_used ? `hints: ${a.hints_used}` : "",
+              ]
                 .filter(Boolean)
                 .join("; ");
               return `${i + 1}. ${describeAnswer(a.answer, item, row)} — ${verdict}${extra ? ` (${extra})` : ""}`;
@@ -129,6 +182,11 @@ export function buildTutorContext(
             .join("\n")}`
         : "No attempts on this item yet.",
     );
+    if (attempts.some((a) => a.confidence === "sure" && a.correct === 0 && a.gave_up === 0)) {
+      parts.push(
+        "The learner was sure of a wrong answer on this item (L23). Name the belief that answer rests on and set it against the correct reasoning; the item returns in their review a day after their last attempt.",
+      );
+    }
 
     const node = database
       .query<{ prereqs: string }, [string, string]>("SELECT prereqs FROM nodes WHERE topic_id = ? AND id = ?")
@@ -161,5 +219,6 @@ export function buildTutorContext(
         .join("\n")}`,
     );
   }
+  if (opts.quote) parts.push(`The learner asks about this passage, selected on the page:\n"""\n${opts.quote}\n"""`);
   return parts.join("\n\n");
 }

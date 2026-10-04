@@ -1,4 +1,4 @@
-import type { ActivityDay, AuditEntry, CardView, ChatMessage, GlossaryEntry, ItemState, LessonSummary, MemoryFile, NodeView, NoteView, SourceView, SystemView, TodayView, TopicDetail, UpdateView, VideoTimeline, WeakSpot } from "@shared/api";
+import type { ActivityDay, AlternativeView, AuditEntry, CalibrationView, CardView, ChatMessage, ExplainLens, GlossaryEntry, ItemState, LessonSummary, MaterialView, MemoryFile, MistakeEntry, MistakePattern, NodeView, NoteView, SourceView, SystemView, TeachbackDebrief, TeachbackView, TodayView, TopicDetail, UpdateView, VideoTimeline, WeakSpot } from "@shared/api";
 import type { PublicCite, PublicFigure, PublicItem, PublicStep } from "@shared/schemas";
 
 // Development fixtures for VITE_MOCK=1. Content is illustrative.
@@ -14,13 +14,17 @@ export const iso = (daysAgo: number, hour = 10) => {
 
 export type Key = {
   correct: number | number[] | string[] | number | string[][] | null;
-  kind: "single" | "multi" | "order" | "cloze" | "number" | "short";
+  kind: PublicItem["format"];
   tolerance?: number;
   optionFeedback?: string[];
+  /** match and sort: feedback per entry, by display index, shown when it is placed wrong. */
+  placementFeedback?: Record<number, string>;
   feedback?: string;
   solution: string;
   correctAnswer: string;
   hints: string[];
+  /** short: what a correct answer mentions; the server grades by model instead. */
+  accept?: RegExp;
 };
 
 export const keys: Record<string, Key> = {};
@@ -257,6 +261,27 @@ Two groups get a positive result. The answer to the question is the share of the
           hints: ["The first number is 1% of 1000.", "The second is 90% of the first."],
         },
       ),
+      item(
+        "c2m",
+        {
+          format: "match",
+          prompt: "Match each probability from the test example to what it describes.",
+          bloom: "understand",
+          entries: ["P(test+ | sick)", "P(sick)", "P(test+ | healthy)", "P(sick | test+)"],
+          targets: ["The share of positives who are actually sick", "The false positive rate", "The test's sensitivity", "The prevalence of the disease", "The share of healthy people who test negative"],
+        },
+        {
+          correct: [2, 3, 1, 0],
+          placementFeedback: {
+            0: "**P(test+ | sick)**: the part after the bar names the group; this share is computed among the sick, not among the positives.",
+            2: "**P(test+ | healthy)**: a positive result in a healthy person is a false alarm, not a correct negative.",
+            3: "**P(sick | test+)**: the group here is everyone who tested positive; the question is how many of them are sick.",
+          },
+          solution: "P(test+ | sick) is the sensitivity, P(sick) the prevalence, P(test+ | healthy) the false positive rate, and P(sick | test+) the share of positives who are actually sick. The share of healthy people who test negative, P(test− | healthy), pairs with none of them.",
+          correctAnswer: "P(test+ | sick) → sensitivity; P(sick) → prevalence; P(test+ | healthy) → false positive rate; P(sick | test+) → share of positives who are sick",
+          hints: ["Read the part after the bar first: it names the group the share is computed in.", "Only one of the four is computed among the people who tested positive."],
+        },
+      ),
     ],
   },
   {
@@ -431,6 +456,34 @@ export const condSteps: PublicStep[] = [
     cites,
     checks: [
       item(
+        "cc2",
+        {
+          format: "sort",
+          prompt: "Each statement describes a probability. Is it joint or conditional?",
+          bloom: "understand",
+          entries: [
+            "Of the people with a positive test, the share who are sick",
+            "The chance that a random person is sick and tests positive",
+            "The share of chess players among the girls",
+            "The chance that a day is both cloudy and rainy",
+            "The chance of rain on a day when clouds are forecast",
+            "The share of students who are girls and play chess",
+          ],
+          categories: ["Joint: P(A and B)", "Conditional: P(A | B)"],
+        },
+        {
+          correct: [1, 0, 1, 0, 1, 0],
+          placementFeedback: {
+            1: "**The chance that a random person is sick and tests positive**: the share is taken over everyone; nothing narrows the group.",
+            2: "**The share of chess players among the girls**: “among the girls” narrows the group before the share is taken.",
+            4: "**The chance of rain on a day when clouds are forecast**: only days with a cloud forecast count.",
+          },
+          solution: "Conditional statements narrow the group first (“of the people with a positive test”, “among the girls”, “on a day when clouds are forecast”). Joint statements take both events over everyone (“sick and tests positive”, “cloudy and rainy”, “girls and play chess”).",
+          correctAnswer: "Joint: sick and positive, cloudy and rainy, girls who play chess; Conditional: sick among positives, chess players among girls, rain given a forecast",
+          hints: ["Look for words that narrow the group: “of”, “among”, “when”.", "A joint probability counts both events over everyone."],
+        },
+      ),
+      item(
         "cc1",
         { format: "short", prompt: "In your own words: what does dividing by P(B) do?", bloom: "understand" },
         { correct: null, solution: "It keeps only the cases where B happened.", correctAnswer: "", hints: ["Think about which group we keep."] },
@@ -472,6 +525,120 @@ export const condSteps: PublicStep[] = [
   },
 ];
 
+// ---------- Practice sets: items the simulated practice-set run publishes, in turn ----------
+
+export const practiceSetPool: { nodeId: string; title: string; item: PublicItem }[] = [
+  {
+    nodeId: "bayes-theorem",
+    title: "A flagged bike brake",
+    item: item(
+      "pp1",
+      {
+        format: "single",
+        prompt: "In a city, 1 in 100 bikes has a faulty brake. A quick roadside test flags 90% of faulty brakes and 10% of good ones.\n\nYour bike is **flagged**. Which is closest to the chance that its brake is faulty?",
+        bloom: "apply",
+        options: [{ text: "About 8%" }, { text: "About 90%" }, { text: "About 50%" }],
+      },
+      {
+        correct: 0,
+        optionFeedback: ["Yes: false flags on the many good bikes outnumber the true ones.", "That is the share of faulty brakes the test flags, the reverse of the question.", "The rarity of faulty brakes pulls the answer far below a coin toss."],
+        solution: "Of 1000 bikes, 10 are faulty and 9 of them are flagged. Of the 990 good ones, 99 are flagged. **9 / 108 ≈ 8%**.",
+        correctAnswer: "About 8%",
+        hints: ["Turn the percentages into a group of 1000 bikes.", "Count the flagged bikes in both groups, then take the faulty share."],
+      },
+    ),
+  },
+  {
+    nodeId: "bayes-theorem",
+    title: "Positives on a hiking trip",
+    item: item(
+      "pp2",
+      { format: "number", prompt: "Of 1,000 hikers, 20 have a rare pollen allergy. A skin test is positive for 18 of them and for 49 of the others.\n\nHow many hikers test positive in total?", bloom: "apply", unit: "hikers" },
+      { correct: 67, tolerance: 0, feedback: "Add the positives from both groups.", solution: "18 true positives plus 49 false positives: **67 hikers**.", correctAnswer: "67 hikers", hints: ["Positives come from two groups.", "Add the allergic and the non-allergic positives."] },
+    ),
+  },
+  {
+    nodeId: "priors",
+    title: "Before and after the result",
+    item: item(
+      "pp3",
+      { format: "cloze", prompt: "Which words are missing?", bloom: "understand", text: "The share of a group before any test is the {{1}}; once the result is in, it becomes the {{2}} probability.", blankCount: 2 },
+      { correct: [["prior", "base rate"], ["posterior"]], solution: "Before the test: the **prior** (base rate). After the test: the **posterior** probability.", correctAnswer: "prior; posterior", hints: ["One word means “before”.", "The other means “after”."] },
+    ),
+  },
+  {
+    nodeId: "base-rate",
+    title: "A headline about a 99% test",
+    item: item(
+      "pp4",
+      {
+        format: "multi",
+        prompt: "A headline says: “The test is 99% accurate, so a positive result means you are almost surely ill.”\n\nSelect all that apply: what do you need to judge the claim?",
+        bloom: "analyze",
+        options: [{ text: "How common the illness is" }, { text: "How often healthy people test positive" }, { text: "How many labs run the test" }],
+      },
+      { correct: [0, 1], solution: "The answer depends on the **base rate** and the **false-positive rate**; the number of labs changes nothing.", correctAnswer: "The base rate and the false-positive rate", hints: ["Think about the two groups that can test positive.", "What decides how large each group is?"] },
+    ),
+  },
+  {
+    nodeId: "bayes-theorem",
+    title: "Steps of a frequency tree",
+    item: item(
+      "pp5",
+      {
+        format: "order",
+        prompt: "In what order do you find P(ill | positive) with natural frequencies?",
+        bloom: "apply",
+        entries: ["Divide the true positives by all positives", "Pick a group of 1,000 people", "Apply the hit rate and the false-alarm rate", "Split the group by the base rate"],
+      },
+      {
+        correct: ["Pick a group of 1,000 people", "Split the group by the base rate", "Apply the hit rate and the false-alarm rate", "Divide the true positives by all positives"],
+        solution: "Group → split by base rate → apply both test rates → true positives over all positives.",
+        correctAnswer: "Group, base rate, test rates, divide",
+        hints: ["You need people before you can split them.", "The division comes last."],
+      },
+    ),
+  },
+  {
+    nodeId: "base-rate",
+    title: "Two clinics, one test",
+    item: item(
+      "pp6",
+      {
+        format: "single",
+        prompt: "Two clinics use the same test. Clinic A sees mostly patients with symptoms; clinic B screens the general public.\n\nWhere does a positive result say more about illness?",
+        bloom: "analyze",
+        options: [{ text: "Clinic A, because more of its patients are ill" }, { text: "Clinic B, because it tests far more people" }, { text: "Both alike, because the test is the same" }],
+      },
+      {
+        correct: 0,
+        optionFeedback: ["Yes: a higher base rate means more of the positives are true.", "More people tested does not change the share of true positives.", "The same test gives different answers when the base rates differ."],
+        solution: "In clinic A the base rate is higher, so true positives make up a larger share of all positives.",
+        correctAnswer: "Clinic A",
+        hints: ["What differs between the two groups of patients?", "How does the base rate change the share of true positives?"],
+      },
+    ),
+  },
+  {
+    nodeId: "priors",
+    title: "Updating the odds",
+    item: item(
+      "pp7",
+      { format: "number", prompt: "The prior odds of a fault are 1 : 4. A warning light is 6 times as likely with a fault as without one.\n\nWhat are the posterior odds of a fault, as a single number?", bloom: "apply" },
+      { correct: 1.5, tolerance: 0.01, feedback: "Multiply the prior odds by the likelihood ratio.", solution: "Posterior odds = prior odds × likelihood ratio = 0.25 × 6 = **1.5**.", correctAnswer: "1.5", hints: ["Write the prior odds as one number.", "Multiply by how much more likely the light is with a fault."] },
+    ),
+  },
+  {
+    nodeId: "bayes-theorem",
+    title: "A positive doping test",
+    item: item(
+      "pp8",
+      { format: "short", prompt: "A friend says a 95%-accurate doping test proves that an athlete who tested positive doped.\n\nAnswer in 1–2 sentences: what would you ask first, and why?", bloom: "evaluate" },
+      { correct: null, solution: "Ask how common doping is **among** the athletes tested: with a low base rate, many positives are false alarms.", correctAnswer: "", hints: ["Which number does the friend leave out?", "Think about the false alarms among clean athletes."] },
+    ),
+  },
+];
+
 // ---------- Topics ----------
 
 const node = (id: string, title: string, prereqs: string[], mastery: NodeView["mastery"], kind: NodeView["kind"] = "knowledge", placement: NodeView["placement"] = null): NodeView => ({
@@ -504,15 +671,21 @@ const gitNodes: NodeView[] = [
 ];
 
 const bayesLessons: LessonSummary[] = [
-  { id: "l-cond", topicId: "t-bayes", title: "Conditional probability", objective: "Tell P(A | B) apart from P(A and B) and compute conditional probability from a table.", level: "novice", nodeIds: ["cond-prob"], status: "finished", createdAt: iso(9), stepsReady: 4, stepsTotal: 4, sourcesStale: true, supersededBy: null, learnerStatus: "in_progress", video: "ready" },
-  { id: "l-bayes", topicId: "t-bayes", title: "Bayes' theorem through a medical test", objective: "Compute the probability of disease after a positive test using natural frequencies.", level: "novice", nodeIds: ["bayes-theorem"], status: "generating", createdAt: iso(0, 9), stepsReady: 3, stepsTotal: 10, sourcesStale: false, supersededBy: null, learnerStatus: "in_progress", video: null },
-  { id: "l-bayes-v1", topicId: "t-bayes", title: "Bayes' theorem through a medical test", objective: "Compute the probability of disease after a positive test using natural frequencies.", level: "novice", nodeIds: ["bayes-theorem"], status: "finished", createdAt: iso(5), stepsReady: 8, stepsTotal: 8, sourcesStale: false, supersededBy: "l-bayes", learnerStatus: "completed", video: null },
+  { id: "l-cond", topicId: "t-bayes", title: "Conditional probability", objective: "Tell P(A | B) apart from P(A and B) and compute conditional probability from a table.", level: "novice", nodeIds: ["cond-prob"], status: "finished", createdAt: iso(9), stepsReady: 4, stepsTotal: 4, sourcesStale: true, supersededBy: null, learnerStatus: "completed", video: "ready", practice: null },
+  { id: "l-bayes", topicId: "t-bayes", title: "Bayes' theorem through a medical test", objective: "Compute the probability of disease after a positive test using natural frequencies.", level: "novice", nodeIds: ["bayes-theorem"], status: "generating", createdAt: iso(0, 9), stepsReady: 3, stepsTotal: 10, sourcesStale: false, supersededBy: null, learnerStatus: "in_progress", video: null, practice: null },
+  { id: "l-bayes-v1", topicId: "t-bayes", title: "Bayes' theorem through a medical test", objective: "Compute the probability of disease after a positive test using natural frequencies.", level: "novice", nodeIds: ["bayes-theorem"], status: "finished", createdAt: iso(5), stepsReady: 8, stepsTotal: 8, sourcesStale: false, supersededBy: "l-bayes", learnerStatus: "completed", video: null, practice: null },
 ];
 
 const bayesSources: SourceView[] = [
   { id: "s1", url: "https://allendowney.github.io/ThinkBayes2/", title: "Think Bayes, 2nd edition", kind: "book", note: "chapters 1–4", status: "ok" },
   { id: "s2", url: "https://doi.org/10.1037/0033-295X.102.4.684", title: "Gigerenzer & Hoffrage, How to improve Bayesian reasoning", kind: "article", note: "natural frequencies", status: "ok" },
   { id: "s3", url: "https://example.org/stats-course", title: "Statistics course (page unavailable)", kind: "course", note: "", status: "failed" },
+];
+
+const bayesMaterials: MaterialView[] = [
+  { id: "m1", title: "Lecture 4: Conditional probability and Bayes", kind: "pdf", url: null, bytes: 2_412_000, chars: 41_260, addedAt: iso(20), cited: true },
+  { id: "m2", title: "Course syllabus, spring term", kind: "text", url: null, bytes: 3_180, chars: 3_102, addedAt: iso(20), cited: false },
+  { id: "m3", title: "Seeing Theory: Bayesian inference", kind: "link", url: "https://seeing-theory.brown.edu/bayesian-inference/", bytes: null, chars: 9_870, addedAt: iso(3), cited: false },
 ];
 
 const convs = (prefix: string, days: number[]) =>
@@ -525,13 +698,15 @@ const convs = (prefix: string, days: number[]) =>
 
 export const topicDetails: Record<string, TopicDetail> = {
   "t-bayes": {
-    topic: { id: "t-bayes", slug: "bayes", title: "Bayesian statistics", createdAt: iso(20), dueCards: 3, nodesMastered: 1, nodesTotal: bayesNodes.length, running: false, kind: "topic", goalId: null, plan: null },
+    topic: { id: "t-bayes", slug: "bayes", title: "Bayesian statistics", createdAt: iso(20), dueCards: 3, nodesMastered: 1, nodesTotal: bayesNodes.length, running: false, kind: "topic", goalId: null, plan: null, final: null },
     nodes: bayesNodes,
     plan: [],
     goal: null,
     goalNotes: [],
+    teachbacks: [],
     lessons: bayesLessons,
     sources: bayesSources,
+    materials: bayesMaterials,
     conversations: [{ id: "c-onb-bayes", kind: "onboard", lessonId: null, createdAt: iso(20) }, ...convs("cb", [1, 2, 2, 4, 6, 8, 9, 11, 13, 15, 16, 22, 27, 30]).slice(1)],
     onboarding: [
       { key: "interview", label: "Interview", status: "done", detail: "goal: A/B tests at work" },
@@ -542,15 +717,17 @@ export const topicDetails: Record<string, TopicDetail> = {
     ],
   },
   "t-git": {
-    topic: { id: "t-git", slug: "git", title: "Git basics", createdAt: iso(40), dueCards: 2, nodesMastered: 2, nodesTotal: gitNodes.length, running: false, kind: "topic", goalId: "t-goal", plan: null },
+    topic: { id: "t-git", slug: "git", title: "Git basics", createdAt: iso(40), dueCards: 2, nodesMastered: 2, nodesTotal: gitNodes.length, running: false, kind: "topic", goalId: "t-goal", plan: null, final: null },
     nodes: gitNodes,
     plan: [],
     goal: { id: "t-goal", title: "Workout tracking app", why: "Keep every version of the app and roll back a change that broke it." },
     goalNotes: [],
-    lessons: [{ id: "l-git", topicId: "t-git", title: "Branching and merging", objective: "Create branches, merge them and resolve a simple conflict.", level: "intermediate", nodeIds: ["merge"], status: "ready", createdAt: iso(3), stepsReady: 1, stepsTotal: 1, sourcesStale: false, supersededBy: null, learnerStatus: "not_started", video: null },
-      { id: "l-git-rebase", topicId: "t-git", title: "Rebase", objective: "Move a branch onto a new base and resolve conflicts along the way.", level: "intermediate", nodeIds: ["rebase"], status: "failed", createdAt: iso(1), stepsReady: 1, stepsTotal: 4, sourcesStale: false, supersededBy: null, learnerStatus: "not_started", video: null },
+    teachbacks: [],
+    lessons: [{ id: "l-git", topicId: "t-git", title: "Branching and merging", objective: "Create branches, merge them and resolve a simple conflict.", level: "intermediate", nodeIds: ["merge"], status: "ready", createdAt: iso(3), stepsReady: 1, stepsTotal: 1, sourcesStale: false, supersededBy: null, learnerStatus: "not_started", video: null, practice: null },
+      { id: "l-git-rebase", topicId: "t-git", title: "Rebase", objective: "Move a branch onto a new base and resolve conflicts along the way.", level: "intermediate", nodeIds: ["rebase"], status: "failed", createdAt: iso(1), stepsReady: 1, stepsTotal: 4, sourcesStale: false, supersededBy: null, learnerStatus: "not_started", video: null, practice: null },
     ],
     sources: [{ id: "g1", url: "https://git-scm.com/book/en/v2", title: "Pro Git", kind: "book", note: "chapters 2–3", status: "ok" }],
+    materials: [],
     conversations: convs("cg", [0, 3, 5, 10, 17, 24, 33, 38]),
     onboarding: [
       { key: "interview", label: "Interview", status: "done", detail: "goal: working in a team" },
@@ -561,13 +738,15 @@ export const topicDetails: Record<string, TopicDetail> = {
     ],
   },
   "t-stretch": {
-    topic: { id: "t-stretch", slug: "stretch", title: "Back stretches", createdAt: iso(0, 8), dueCards: 0, nodesMastered: 0, nodesTotal: 0, running: true, kind: "topic", goalId: null, plan: null },
+    topic: { id: "t-stretch", slug: "stretch", title: "Back stretches", createdAt: iso(0, 8), dueCards: 0, nodesMastered: 0, nodesTotal: 0, running: true, kind: "topic", goalId: null, plan: null, final: null },
     nodes: [],
     plan: [],
     goal: null,
     goalNotes: [],
+    teachbacks: [],
     lessons: [],
     sources: [],
+    materials: [],
     conversations: [{ id: "c-onb-stretch", kind: "onboard", lessonId: null, createdAt: iso(0, 8) }],
     onboarding: [
       { key: "interview", label: "Interview", status: "done", detail: "goal: relieve lower back pain" },
@@ -578,13 +757,15 @@ export const topicDetails: Record<string, TopicDetail> = {
     ],
   },
   "t-goal": {
-    topic: { id: "t-goal", slug: "goal", title: "Workout tracking app", createdAt: iso(41), dueCards: 0, nodesMastered: 0, nodesTotal: 0, running: false, kind: "goal", goalId: null, plan: { total: 0, opened: 0 } },
+    topic: { id: "t-goal", slug: "goal", title: "Workout tracking app", createdAt: iso(41), dueCards: 0, nodesMastered: 0, nodesTotal: 0, running: false, kind: "goal", goalId: null, plan: { total: 0, opened: 0 }, final: null },
     nodes: [],
     plan: [],
     goal: null,
     goalNotes: [],
+    teachbacks: [],
     lessons: [],
     sources: [],
+    materials: [],
     conversations: [{ id: "c-goal", kind: "onboard", lessonId: null, createdAt: iso(41) }],
     onboarding: [
       { key: "interview", label: "Interview", status: "done", detail: "I log a workout in under a minute" },
@@ -709,9 +890,118 @@ export const cards: CardView[] = [
 
 export const reviewItems: PublicItem[] = [
   item(
+    "r2",
+    { format: "single", prompt: "A test's sensitivity is 90%. Which probability equals 90%?", bloom: "understand", options: [{ text: "P(sick | test+)" }, { text: "P(test+ | sick)" }, { text: "P(sick)" }] },
+    { correct: 1, optionFeedback: ["That is the inverse probability: the chance of disease given a positive result.", "Correct.", "That is the prevalence."], solution: "Sensitivity is computed among the sick: P(test+ | sick).", correctAnswer: "P(test+ | sick)", hints: [] },
+  ),
+  item(
     "r1",
     { format: "single", prompt: "Besides the test's characteristics, which number do you need to find P(sick | test+)?", bloom: "remember", options: [{ text: "Prevalence of the disease" }, { text: "Number of people tested" }, { text: "Price of the test" }] },
     { correct: 0, optionFeedback: ["Correct.", "The number of people tested scales every group equally.", "The price does not affect the probability."], solution: "You need the prior probability, which is the prevalence.", correctAnswer: "Prevalence of the disease", hints: [] },
+  ),
+];
+
+/** Review items that return because the learner was sure of a wrong answer to them; listed first, as the server does. */
+export const reviewRetests = ["r2"];
+
+// ---------- Practice test pool: graded items of the finished Bayes lessons ----------
+
+export type PracticeSource = { item: PublicItem; nodeId: string; lessonId: string };
+
+const practiceItem = (id: string, nodeId: string, lessonId: string, pub: Omit<PublicItem, "id" | "hintCount">, key: Omit<Key, "kind" | "hints">): PracticeSource => ({
+  item: item(id, pub, { ...key, hints: [] }),
+  nodeId,
+  lessonId,
+});
+
+export const practicePool: PracticeSource[] = [
+  practiceItem(
+    "pt1",
+    "prob-basics",
+    "l-cond",
+    { format: "single", prompt: "A fair die is rolled once. What is the probability of an even number?", bloom: "apply", options: [{ text: "1/6" }, { text: "1/2" }, { text: "1/3" }] },
+    { correct: 1, optionFeedback: ["That is the chance of one particular face.", "Yes: 3 of the 6 equally likely faces are even.", "That would be two faces out of six."], solution: "Even faces are 2, 4 and 6: **3 / 6 = 1/2**.", correctAnswer: "1/2" },
+  ),
+  practiceItem(
+    "pt2",
+    "prob-basics",
+    "l-cond",
+    { format: "number", prompt: "Two fair coins are tossed. What is the probability that both land heads? Give a decimal.", bloom: "apply" },
+    { correct: 0.25, tolerance: 0.001, solution: "The tosses are independent: 0.5 × 0.5 = **0.25**.", correctAnswer: "0.25" },
+  ),
+  practiceItem(
+    "pt3",
+    "prob-basics",
+    "l-cond",
+    { format: "cloze", prompt: "Fill in the blanks.", bloom: "remember", text: "A probability is never below {{1}} and never above {{2}}.", blankCount: 2 },
+    { correct: [["0", "zero"], ["1", "one"]], solution: "Probabilities run from **0** (impossible) to **1** (certain).", correctAnswer: "1: 0; 2: 1" },
+  ),
+  practiceItem(
+    "pt4",
+    "cond-prob",
+    "l-cond",
+    { format: "single", prompt: "Of 200 employees, 80 work remotely and 20 of the remote workers are managers. What is P(manager | remote)?", bloom: "apply", options: [{ text: "20/200" }, { text: "20/80" }, { text: "80/200" }] },
+    { correct: 1, optionFeedback: ["That is the joint probability over all employees.", "Yes: the condition narrows the group to the 80 remote workers.", "That is the share of remote workers."], solution: "The condition \"remote\" leaves 80 people, 20 of them managers: **20/80 = 0.25**.", correctAnswer: "20/80" },
+  ),
+  practiceItem(
+    "pt5",
+    "cond-prob",
+    "l-cond",
+    { format: "multi", prompt: "Which statements about P(A | B) are true?", bloom: "understand", options: [{ text: "It is P(A and B) divided by P(B)" }, { text: "It always equals P(B | A)" }, { text: "It only looks at cases where B happened" }] },
+    { correct: [0, 2], solution: "Conditioning on B keeps the cases where B happened; P(A | B) and P(B | A) differ in general.", correctAnswer: "1 and 3" },
+  ),
+  practiceItem(
+    "pt6",
+    "cond-prob",
+    "l-cond",
+    { format: "short", prompt: "In your own words: why is P(sick | positive) not the same as P(positive | sick)?", bloom: "understand" },
+    { correct: null, accept: /group|among|condition/i, solution: "They condition on different groups: one counts the sick **among people who tested positive**, the other the positives **among the sick**.", correctAnswer: "They count within different groups: the positives versus the sick." },
+  ),
+  practiceItem(
+    "pt7",
+    "bayes-theorem",
+    "l-bayes-v1",
+    { format: "order", prompt: "Put the steps of a natural-frequency calculation in order.", bloom: "apply", entries: ["Count the positives among the healthy", "Picture 1000 people", "Divide true positives by all positives", "Count the sick and their positives"] },
+    {
+      correct: ["Picture 1000 people", "Count the sick and their positives", "Count the positives among the healthy", "Divide true positives by all positives"],
+      solution: "Start from a concrete group, split it by the condition, count each kind of positive, then take the share.",
+      correctAnswer: "Picture 1000 → sick positives → healthy positives → divide",
+    },
+  ),
+  practiceItem(
+    "pt8",
+    "bayes-theorem",
+    "l-bayes-v1",
+    { format: "number", prompt: "Of 1000 people, 10 are sick; the test detects 9 of them and fires for 89 healthy people. What share of positives are sick, in percent?", bloom: "apply", unit: "%" },
+    { correct: 9.2, tolerance: 0.3, solution: "9 true positives out of 9 + 89 = 98 positives: **9 / 98 ≈ 9.2%**.", correctAnswer: "≈ 9.2 %" },
+  ),
+  practiceItem(
+    "pt9",
+    "bayes-theorem",
+    "l-bayes-v1",
+    { format: "single", prompt: "Which term of Bayes' formula is the prior?", bloom: "remember", options: [{ text: "P(sick)" }, { text: "P(positive | sick)" }, { text: "P(sick | positive)" }] },
+    { correct: 0, optionFeedback: ["Yes: the probability before the test result.", "That is the likelihood of the result.", "That is the posterior, what we compute."], solution: "The prior is the probability before the evidence: **P(sick)**, the prevalence.", correctAnswer: "P(sick)" },
+  ),
+  practiceItem(
+    "pt10",
+    "base-rate",
+    "l-bayes-v1",
+    { format: "single", prompt: "A screening test is used in a population where the disease becomes ten times more common. What happens to P(sick | positive)?", bloom: "analyze", options: [{ text: "It rises" }, { text: "It stays the same" }, { text: "It falls" }] },
+    { correct: 0, optionFeedback: ["Yes: true positives grow while false alarms among the healthy barely change.", "The test is the same, but the groups it sorts are not.", "More sick people means more true positives, not fewer."], solution: "With a higher base rate, true positives make up a larger share of all positives, so the posterior **rises**.", correctAnswer: "It rises" },
+  ),
+  practiceItem(
+    "pt11",
+    "base-rate",
+    "l-bayes-v1",
+    { format: "cloze", prompt: "Fill in the blank.", bloom: "understand", text: "Ignoring how common a condition is when judging a positive result is the {{1}} fallacy.", blankCount: 1 },
+    { correct: [["base rate", "base-rate"]], solution: "It is the **base rate fallacy**: the prevalence is left out of the judgement.", correctAnswer: "base rate" },
+  ),
+  practiceItem(
+    "pt12",
+    "base-rate",
+    "l-bayes-v1",
+    { format: "multi", prompt: "Which numbers do you need to find P(sick | positive)?", bloom: "apply", options: [{ text: "Prevalence" }, { text: "Sensitivity" }, { text: "False positive rate" }, { text: "Price of the test" }] },
+    { correct: [0, 1, 2], solution: "Prevalence, sensitivity and the false positive rate fix all four groups; the price plays no part.", correctAnswer: "1, 2 and 3" },
   ),
 ];
 
@@ -778,6 +1068,31 @@ export const audit: AuditEntry[] = [
       { stage: "critic", rule: "L16", pass: false, message: "The problem context is not tied to the interests in MISSION (A/B tests); skipped on resubmission" },
     ],
   },
+  {
+    itemId: "c2m",
+    topicTitle: "Bayesian statistics",
+    item: {
+      format: "match",
+      prompt: "Match each probability from the test example to what it describes.",
+      bloom: "understand",
+      pairs: [
+        { left: "P(test+ | sick)", right: "The test's sensitivity", mistake: { misconception: "Reads the bar backwards: takes the share among the positives", feedback: "The part after the bar names the group; this share is computed among the sick." } },
+        { left: "P(sick)", right: "The prevalence of the disease" },
+        { left: "P(test+ | healthy)", right: "The false positive rate" },
+        { left: "P(sick | test+)", right: "The share of positives who are actually sick", mistake: { misconception: "Confuses forward and inverse probability", feedback: "The group here is everyone who tested positive." } },
+      ],
+      distractors: [{ text: "The share of healthy people who test negative", misconception: "Confuses the false positive rate with specificity", feedback: "A positive result in a healthy person is a false alarm, not a correct negative." }],
+      solution: "P(test+ | sick) is the sensitivity, P(sick) the prevalence, P(test+ | healthy) the false positive rate, and P(sick | test+) the share of positives who are actually sick.",
+      hints: ["Read the part after the bar first.", "Only one of the four is computed among the positives."],
+    },
+    gate: [
+      { stage: "schema", rule: "S1", pass: true, message: "" },
+      { stage: "deterministic", rule: "Q1", pass: true, message: "ok" },
+      { stage: "deterministic", rule: "Q4", pass: true, message: "ok" },
+      { stage: "critic", rule: "Q1", pass: true, message: "Blind solve agrees with the key" },
+      { stage: "critic", rule: "L8", pass: true, message: "items.1.distractors.0: The distractor fits no entry and names a common confusion" },
+    ],
+  },
 ];
 
 // ---------- Learner progress, activity, weak spots ----------
@@ -791,6 +1106,7 @@ export const itemStates: Record<string, ItemState> = {
     gaveUp: false,
     hints: [],
     lastFeedback: "Close to intuition, but the rarity of the disease pulls the answer down.",
+    lastConfidence: null,
     solution: "Of 1000 people, 10 are sick and the test detects 9. Of the 990 healthy, the test wrongly fires for 89. That makes 98 positives, 9 of them sick: **9 / 98 ≈ 9%**.",
     correctAnswer: "About 9%",
   },
@@ -801,10 +1117,35 @@ export const itemStates: Record<string, ItemState> = {
     gaveUp: false,
     hints: ["Sensitivity describes the test, not the patient holding a result."],
     lastFeedback: "That is the inverse probability: it is what we are looking for, and it does not equal the sensitivity.",
+    lastConfidence: "sure",
   },
 };
 
 export const revealedLines: Record<string, { idx: number; text: string }[]> = {};
+
+/** Canned "Explain differently" answers; a lens asked again gets its next variant. */
+export const alternativeBodies: Record<ExplainLens, string[]> = {
+  simpler: [
+    "We only look at the cases where the condition is true, and ask how often the event happens **among them**.\n\nThat is all [[conditional probability|Conditional probability]] means: shrink the world to the condition, then count again.",
+  ],
+  analogy: [
+    "Think of an online shop's purchase funnel.\n\n- All visitors are the whole world: P(A and B) counts visitors who **both** opened the cart (B) **and** paid (A), out of everyone.\n- P(A | B) asks a different question: of the visitors who opened the cart, what share paid? You divide by the cart visitors only.\n\nThe analogy stops fitting when the condition is not something you can watch happen first, like a hidden illness behind a test result.",
+    "Picture a newsletter: of 1,000 subscribers, 200 open an email and 50 of those click a link.\n\nThe share of **all** subscribers who opened and clicked is 50 / 1,000, a [[joint probability|Joint probability]]. The share of **openers** who clicked is 50 / 200: you changed who counts as everyone.\n\nThe picture breaks down when the groups overlap in ways a funnel does not show.",
+  ],
+  steps: [
+    "1. Write down the condition B: the group you are told about.\n2. Keep only the cases inside B; the rest no longer matter.\n3. Among those, find the cases where A also happens: that is P(A and B).\n4. Divide by the size of the group you kept, P(B).\n5. The result, P(A | B), answers \"how often A, given B\".",
+  ],
+  example: [
+    "Over 100 days, 30 were rainy, and on 12 of the rainy days your bus was late.\n\nAsked \"on what share of all days was it rainy and the bus late?\", you divide by every day: 12 / 100.\n\nAsked \"on what share of the rainy days was the bus late?\", the rainy days become your whole world: 12 / 30.\n\nThe second question is a [[conditional probability|Conditional probability]]: the condition decides what you divide by.",
+  ],
+  precise: [
+    "For events A and B with P(B) > 0, [[conditional probability|Conditional probability]] is defined as P(A | B) = P(A and B) / P(B).\n\n- The numerator is the [[joint probability|Joint probability]] of A and B.\n- Dividing by P(B) rescales the probabilities inside B so that they add up to 1: B becomes the new sample space.\n- When P(B) = 0 the ratio is undefined, which is why the condition must be possible.",
+  ],
+};
+
+export const alternatives: Record<string, AlternativeView[]> = {
+  "cs-1": [{ id: "alt-seed", lens: "simpler", body: alternativeBodies.simpler[0]!, createdAt: iso(9) }],
+};
 
 /** Minutes per day for the last `days` days, oldest first; a fixed pattern with rest days. */
 export function activity(days: number): ActivityDay[] {
@@ -829,6 +1170,17 @@ export const today: TodayView = {
   goal: { minutes: 10, done: 7 },
   advanced: [{ topicId: "t-bayes", nodeId: "cond-prob", title: "Conditional probability", mastery: "exit_passed" }],
   nextReview: { date: localDay(-1), cards: 6 },
+  mistakes: { open: 4, ready: 3 },
+};
+
+const level = (confidence: "guess" | "unsure" | "sure", correct: number, attempts: number) => ({ confidence, correct, attempts });
+
+export const calibration: CalibrationView = {
+  overall: [level("guess", 8, 20), level("unsure", 17, 28), level("sure", 45, 50)],
+  topics: [
+    { topicId: "t-bayes", title: "Bayesian statistics", levels: [level("guess", 7, 17), level("unsure", 13, 22), level("sure", 34, 37)] },
+    { topicId: "t-git", title: "Git basics", levels: [level("guess", 1, 3), level("unsure", 4, 6), level("sure", 11, 13)] },
+  ],
 };
 
 export const weak: WeakSpot[] = [
@@ -844,6 +1196,77 @@ export const weak: WeakSpot[] = [
     lastMisconception: "only the positives among the sick in the denominator",
   },
   { kind: "card", cardId: "cd4", topicId: "t-git", nodeId: "merge", front: "What does git merge --no-ff do?", lapses: 4 },
+];
+
+// ---------- Mistakes notebook ----------
+
+function bayesItem(id: string): PublicItem {
+  for (const st of bayesSteps) {
+    const list = !st ? [] : st.kind === "explain" ? st.checks : st.kind === "practice" ? [st.item] : st.kind === "activate" || st.kind === "check" ? st.items : [];
+    const found = list.find((i) => i.id === id);
+    if (found) return found;
+  }
+  throw new Error(`no mock item ${id}`);
+}
+
+const gitMergeItem = item(
+  "gm1",
+  {
+    format: "single",
+    prompt: "You run `git merge feature` and get a conflict in `app.js`. What state is the repository in?",
+    bloom: "understand",
+    options: [{ text: "The merge is paused until you resolve the conflict and commit" }, { text: "Git has already made the merge commit, with conflict markers in it" }, { text: "The merge was cancelled and nothing changed" }],
+  },
+  {
+    correct: 0,
+    optionFeedback: ["Right: Git waits for you to resolve the conflict and finish with a commit.", "Git makes no merge commit while a conflict is unresolved.", "The merge is not cancelled: the files with conflicts wait for you."],
+    solution: "A conflict pauses the merge: the conflicting files carry markers, `git status` lists them, and the merge ends with your commit (or `git merge --abort`).",
+    correctAnswer: "The merge is paused until you resolve the conflict and commit",
+    hints: [],
+  },
+);
+
+const bayesEntry = (itemId: string, nodeId: string, nodeTitle: string, stepIdx: number) => ({
+  itemId,
+  topicId: "t-bayes",
+  topicTitle: "Bayesian statistics",
+  nodeId,
+  nodeTitle,
+  lessonId: "l-bayes",
+  lessonTitle: "Bayes' theorem through a medical test",
+  stepIdx,
+  item: bayesItem(itemId),
+});
+
+/** Newest first, as the server sends them. */
+export const mistakes: MistakeEntry[] = [
+  { ...bayesEntry("p2", "bayes-theorem", "Bayes' theorem", 6), answer: "95 %", misconception: null, gaveUp: false, at: iso(0, 9), retries: 0, readyAt: iso(-1, 9), resolvedAt: null },
+  { ...bayesEntry("k1", "bayes-theorem", "Bayes' theorem", 9), answer: "99%", misconception: "Takes the test's sensitivity for the probability of disease", gaveUp: false, at: iso(2), retries: 0, readyAt: iso(1), resolvedAt: null },
+  { ...bayesEntry("c1", "cond-prob", "Conditional probability", 1), answer: "P(sick | test+)", misconception: "Confuses forward and inverse probability", gaveUp: false, at: iso(3), retries: 1, readyAt: iso(1, 9), resolvedAt: null },
+  {
+    itemId: "gm1",
+    topicId: "t-git",
+    topicTitle: "Git basics",
+    nodeId: "merge",
+    nodeTitle: "Merging and conflicts",
+    lessonId: "l-git",
+    lessonTitle: "Branching and merging",
+    stepIdx: null,
+    item: gitMergeItem,
+    answer: "Git has already made the merge commit, with conflict markers in it",
+    misconception: "Thinks Git commits a merge before its conflicts are resolved",
+    gaveUp: false,
+    at: iso(4),
+    retries: 0,
+    readyAt: iso(3),
+    resolvedAt: null,
+  },
+  { ...bayesEntry("p1", "base-rate", "Base rate fallacy", 4), answer: null, misconception: null, gaveUp: true, at: iso(6), retries: 2, readyAt: iso(4), resolvedAt: iso(4, 12) },
+];
+
+/** Confirmed misconceptions; the mock shows those whose entry is still open. */
+export const mistakePatterns: MistakePattern[] = [
+  { itemId: "c1", topicId: "t-bayes", nodeTitle: "Conditional probability", option: "P(sick | test+)", misconception: "Confuses forward and inverse probability", times: 2 },
 ];
 
 const secondsAgo = (s: number) => new Date(Date.now() - s * 1000).toISOString();
@@ -964,3 +1387,82 @@ export const condVideo: VideoTimeline = (() => {
     ],
   };
 })();
+
+// ---------- Teach-back ----------
+
+/** The novice's lines in order: the opening, the follow-ups, then the closing that ends the teach-back. */
+export const teachbackScript = [
+  "Hi, I'm Sam! I've never studied probability. Could you explain to me what **conditional probability** is, as if I were hearing it for the first time?",
+  "Oh, so we only look at some of the cases? Why do we divide by P(B), though? What would go wrong if we didn't?",
+  "I think I get it. Is P(A | B) the same as P(B | A)? They look almost the same to me.",
+  "Thank you, that really helped me see it! Let's look at how your explanation went.",
+];
+
+export function teachbackDebrief(): TeachbackDebrief {
+  return {
+    summary: "You explained clearly why the condition narrows the group of cases. Revisit how the order inside P(A | B) changes its meaning.",
+    ideas: [
+      {
+        stepId: "cs-1",
+        stepIdx: 1,
+        title: "Joint and conditional probability",
+        verdict: "covered",
+        evidence: "you only count the cases where B happened and divide by how likely B is",
+        correction: null,
+      },
+      {
+        stepId: "cs-1-order",
+        stepIdx: 1,
+        title: "P(A | B) and P(B | A) differ",
+        verdict: "wrong",
+        evidence: "they are basically the same thing",
+        correction: "P(A | B) counts A within the cases of B; P(B | A) counts B within the cases of A. The two groups differ in size, so the probabilities usually differ.",
+      },
+      {
+        stepId: "cs-1-table",
+        stepIdx: 1,
+        title: "Reading conditional probability from a table",
+        verdict: "missing",
+        evidence: null,
+        correction: "In a table, take the row or column of the condition and divide the cell where both happen by that row's or column's total.",
+      },
+    ],
+    next: [
+      { kind: "reread", stepId: "cs-1-order", stepIdx: 1, title: "P(A | B) and P(B | A) differ" },
+      { kind: "reread", stepId: "cs-1-table", stepIdx: 1, title: "Reading conditional probability from a table" },
+      { kind: "practice", stepId: "cs-2", stepIdx: 2, title: "Choosing a pattern (dense text)" },
+    ],
+  };
+}
+
+export const teachbacks: Record<string, TeachbackView> = {
+  "tb-1": {
+    id: "tb-1",
+    topicId: "t-bayes",
+    nodeId: "cond-prob",
+    nodeTitle: "Conditional probability",
+    lessonId: "l-cond",
+    lessonTitle: "Conditional probability",
+    conversationId: "c-tb-1",
+    status: "done",
+    createdAt: iso(2, 18),
+    finishedAt: iso(2, 18),
+    score: { covered: 1, total: 3 },
+    debrief: teachbackDebrief(),
+    error: null,
+  },
+};
+
+conversations["c-tb-1"] = {
+  topicId: "t-bayes",
+  kind: "teachback",
+  messages: [
+    { id: "tb1-0", role: "assistant", text: teachbackScript[0]!, createdAt: iso(2, 18) },
+    { id: "tb1-1", role: "user", text: "It's the probability of A when you already know B happened: you only count the cases where B happened and divide by how likely B is.", createdAt: iso(2, 18) },
+    { id: "tb1-2", role: "assistant", text: teachbackScript[1]!, createdAt: iso(2, 18) },
+    { id: "tb1-3", role: "user", text: "Without dividing you'd get the joint probability, which is smaller because it counts everyone.", createdAt: iso(2, 18) },
+    { id: "tb1-4", role: "assistant", text: teachbackScript[2]!, createdAt: iso(2, 18) },
+    { id: "tb1-5", role: "user", text: "I think they are basically the same thing, just written the other way round.", createdAt: iso(2, 18) },
+    { id: "tb1-6", role: "assistant", text: teachbackScript[3]!, createdAt: iso(2, 18) },
+  ],
+};

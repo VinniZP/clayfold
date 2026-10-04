@@ -1,31 +1,52 @@
 import type {
   ActivityDay,
+  AlternativeView,
+  AnkiFormat,
   AttemptRequest,
   AttemptResponse,
   AuditEntry,
   AuditVerdict,
+  CalibrationView,
   CardView,
   ConversationView,
   CreateTopicResponse,
   CrownsView,
+  FinalExamView,
   GameBackfillView,
   GameView,
+  ExplainLens,
   GiveUpResponse,
   GlossaryEntry,
   GoalMinutes,
   HintResponse,
   LessonView,
+  MaterialView,
   MemoryFile,
+  MistakeSolution,
+  MistakesView,
   NarrationView,
   NoteRequest,
   NoteView,
+  PastedMaterial,
+  PracticeAnswerUpdate,
+  PracticeFrom,
+  PracticeRequest,
+  PracticeResults,
+  PracticeScope,
+  PracticeTestOverview,
+  PracticeTestRequest,
+  PracticeTestView,
   ReportRequest,
   ReviewRating,
+  RetryRequest,
+  RetryResponse,
   ReviewSession,
+  SearchResults,
   Settings,
   SettingsUpdate,
   StartLessonResponse,
   SystemView,
+  TeachbackView,
   TodayView,
   TopicDetail,
   TopicSummary,
@@ -50,43 +71,109 @@ export class ApiFailure extends Error {
   }
 }
 
-async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
-  let res: Response;
+async function send(method: string, path: string, body?: unknown): Promise<Response> {
   try {
-    res = await fetch(path, {
+    return await fetch(path, {
       method,
-      headers: body === undefined ? undefined : { "content-type": "application/json" },
-      body: body === undefined ? undefined : JSON.stringify(body),
+      headers: body === undefined || body instanceof FormData ? undefined : { "content-type": "application/json" },
+      body: body === undefined ? undefined : body instanceof FormData ? body : JSON.stringify(body),
     });
   } catch {
     throw new ApiFailure(t("error.offline"), 0);
   }
-  const text = await res.text();
-  let data: unknown = undefined;
-  if (text) {
+}
+
+function parseJson(text: string): unknown {
+  if (!text) return undefined;
+  try {
+    return JSON.parse(text);
+  } catch {
+    return undefined;
+  }
+}
+
+function failure(res: Response, data: unknown): ApiFailure {
+  const message =
+    data && typeof data === "object" && "error" in data && typeof data.error === "string"
+      ? data.error
+      : t("error.server", { status: res.status });
+  return new ApiFailure(message, res.status);
+}
+
+async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
+  const res = await send(method, path, body);
+  const data = parseJson(await res.text());
+  if (!res.ok) throw failure(res, data);
+  return data as T;
+}
+
+export type DownloadedFile = { blob: Blob; name: string };
+
+/** The file name from Content-Disposition, preferring the UTF-8 `filename*`. */
+function fileName(res: Response, path: string): string {
+  const header = res.headers.get("content-disposition") ?? "";
+  const utf8 = /filename\*=UTF-8''([^;]+)/i.exec(header)?.[1];
+  if (utf8) {
     try {
-      data = JSON.parse(text);
+      return decodeURIComponent(utf8);
     } catch {
-      data = undefined;
+      // A malformed encoding falls back to the ASCII name.
     }
   }
-  if (!res.ok) {
-    const message =
-      data && typeof data === "object" && "error" in data && typeof data.error === "string"
-        ? data.error
-        : t("error.server", { status: res.status });
-    throw new ApiFailure(message, res.status);
-  }
-  return data as T;
+  return /filename="([^"]+)"/i.exec(header)?.[1] ?? path.split("?")[0]!.split("/").pop()!;
+}
+
+/** GET of an attachment route; a failure arrives as ApiFailure, as from the JSON routes. */
+async function file(path: string): Promise<DownloadedFile> {
+  const res = await send("GET", path);
+  if (!res.ok) throw failure(res, parseJson(await res.text()));
+  return { blob: await res.blob(), name: fileName(res, path) };
+}
+
+// Revoking the object URL right after the click can cancel the download in some browsers.
+const REVOKE_AFTER_MS = 40_000;
+
+/** Hands the file to the browser's download. */
+export function saveFile({ blob, name }: DownloadedFile) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = name;
+  document.body.append(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), REVOKE_AFTER_MS);
 }
 
 const get = <T>(path: string) => request<T>("GET", path);
 const post = <T>(path: string, body: unknown = {}) => request<T>("POST", path, body);
 const e = encodeURIComponent;
 
+/** A material the learner picked and has not sent yet. */
+export type MaterialDraft = { kind: "file"; file: File } | { kind: "text"; title: string; text: string } | { kind: "link"; url: string };
+
+function materialsForm(drafts: MaterialDraft[], form = new FormData()): FormData {
+  for (const d of drafts) {
+    if (d.kind === "file") form.append("file", d.file, d.file.name);
+    else if (d.kind === "text") form.append("text", JSON.stringify({ title: d.title, text: d.text } satisfies PastedMaterial));
+    else form.append("link", d.url);
+  }
+  return form;
+}
+
+function newTopicForm(request: string, kind: TopicSummary["kind"], drafts: MaterialDraft[]): FormData {
+  const form = new FormData();
+  form.append("request", request);
+  form.append("kind", kind);
+  return materialsForm(drafts, form);
+}
+
 export const api = {
   topics: () => get<TopicSummary[]>("/api/topics"),
-  createTopic: (text: string, kind: TopicSummary["kind"] = "topic") => post<CreateTopicResponse>("/api/topics", { request: text, kind }),
+  createTopic: (text: string, kind: TopicSummary["kind"] = "topic", materials: MaterialDraft[] = []) =>
+    post<CreateTopicResponse>("/api/topics", materials.length > 0 ? newTopicForm(text, kind, materials) : { request: text, kind }),
+  addMaterials: (topicId: string, drafts: MaterialDraft[]) => post<MaterialView[]>(`/api/topics/${e(topicId)}/materials`, materialsForm(drafts)),
+  removeMaterial: (topicId: string, id: string) => request<unknown>("DELETE", `/api/topics/${e(topicId)}/materials/${e(id)}`),
   glossary: () => get<GlossaryEntry[]>("/api/glossary"),
   discussGoalNotes: (goalId: string) => post<{ conversationId: string }>(`/api/topics/${e(goalId)}/notes/discuss`),
   openPlanEntry: (goalId: string, entryId: string) => post<CreateTopicResponse>(`/api/topics/${e(goalId)}/plan/${e(entryId)}/open`),
@@ -97,6 +184,9 @@ export const api = {
   lesson: (id: string) => get<LessonView>(`/api/lessons/${e(id)}`),
   rebuildLesson: (id: string) => post<StartLessonResponse>(`/api/lessons/${e(id)}/rebuild`),
   resumeLesson: (id: string) => post<StartLessonResponse>(`/api/lessons/${e(id)}/resume`),
+  practiceScope: (from: PracticeFrom) => get<PracticeScope>(`/api/practice/scope?${new URLSearchParams(from)}`),
+  startPractice: (body: PracticeRequest) => post<StartLessonResponse>("/api/practice", body),
+  practiceResults: (lessonId: string) => get<PracticeResults>(`/api/lessons/${e(lessonId)}/practice`),
 
   conversation: (id: string) => get<ConversationView>(`/api/conversations/${e(id)}`),
   sendMessage: (id: string, text: string) => post<{ accepted: boolean }>(`/api/conversations/${e(id)}/messages`, { text }),
@@ -110,20 +200,42 @@ export const api = {
     post<WorkedLineResponse>(`/api/worked/${e(stepId)}/lines/${idx}`, { answer }),
   reflect: (stepId: string, text: string) => post<unknown>(`/api/steps/${e(stepId)}/reflect`, { text }),
   tutor: (lessonId: string, body: TutorRequest) => post<{ conversationId: string }>(`/api/lessons/${e(lessonId)}/tutor`, body),
+  startTeachback: (topicId: string, nodeId: string, lessonId?: string) =>
+    post<TeachbackView>(`/api/topics/${e(topicId)}/teachbacks`, lessonId ? { nodeId, lessonId } : { nodeId }),
+  teachback: (id: string) => get<TeachbackView>(`/api/teachbacks/${e(id)}`),
+  finishTeachback: (id: string) => post<TeachbackView>(`/api/teachbacks/${e(id)}/finish`),
 
   review: (topicId?: string) => get<ReviewSession>(`/api/review${topicId ? `?topicId=${e(topicId)}` : ""}`),
   reviewCard: (cardId: string, rating: ReviewRating, durationMs?: number) =>
     post<{ due: string }>(`/api/cards/${e(cardId)}/review`, { rating, durationMs }),
+  mistakes: () => get<MistakesView>("/api/mistakes"),
+  mistakeSolution: (itemId: string) => get<MistakeSolution>(`/api/mistakes/${e(itemId)}/solution`),
+  retryMistake: (itemId: string, body: RetryRequest) => post<RetryResponse>(`/api/mistakes/${e(itemId)}/retry`, body),
   cards: (topicId: string, status: CardView["status"]) => get<CardView[]>(`/api/topics/${e(topicId)}/cards?status=${status}`),
   cardAction: (cardId: string, action: "accept" | "suspend" | "reject") => post<unknown>(`/api/cards/${e(cardId)}/${action}`),
   editCard: (cardId: string, front: string, back: string) => request<unknown>("PATCH", `/api/cards/${e(cardId)}`, { front, back }),
 
+  practiceTests: (topicId: string) => get<PracticeTestOverview>(`/api/topics/${e(topicId)}/tests`),
+  startPracticeTest: (topicId: string, body: PracticeTestRequest) => post<PracticeTestView>(`/api/topics/${e(topicId)}/tests`, body),
+  practiceTest: (testId: string) => get<PracticeTestView>(`/api/tests/${e(testId)}`),
+  savePracticeAnswer: (testId: string, idx: number, body: PracticeAnswerUpdate) =>
+    request<unknown>("PATCH", `/api/tests/${e(testId)}/questions/${idx}`, body),
+  submitPracticeTest: (testId: string) => post<PracticeTestView>(`/api/tests/${e(testId)}/submit`),
+  regradePracticeTest: (testId: string) => post<PracticeTestView>(`/api/tests/${e(testId)}/regrade`),
+  discardPracticeTest: (testId: string) => request<unknown>("DELETE", `/api/tests/${e(testId)}`),
+  finalExam: (topicId: string) => get<FinalExamView>(`/api/topics/${e(topicId)}/final`),
+  startFinal: (topicId: string) => post<PracticeTestView>(`/api/topics/${e(topicId)}/final`),
+
+  search: (q: string) => get<SearchResults>(`/api/search?q=${e(q)}`),
+
   notes: (topicId: string) => get<NoteView[]>(`/api/topics/${e(topicId)}/notes`),
-  addNote: (body: NoteRequest) => post<unknown>("/api/notes", body),
+  addNote: (body: NoteRequest) => post<NoteView>("/api/notes", body),
+  editNote: (noteId: string, text: string) => request<unknown>("PATCH", `/api/notes/${e(noteId)}`, { text }),
   report: (body: ReportRequest) => post<unknown>("/api/reports", body),
 
   activity: (days: number, topicId?: string) =>
     get<ActivityDay[]>(`/api/stats/activity?days=${days}${topicId ? `&topicId=${e(topicId)}` : ""}`),
+  calibration: () => get<CalibrationView>("/api/stats/calibration"),
   today: () => get<TodayView>("/api/today"),
   setGoal: (minutes: GoalMinutes) => request<TodayView>("PUT", "/api/goal", { minutes }),
   weak: (limit = 10, topicId?: string) => get<WeakSpot[]>(`/api/weak?limit=${limit}${topicId ? `&topicId=${e(topicId)}` : ""}`),
@@ -138,6 +250,11 @@ export const api = {
   videoExport: (lessonId: string) => get<VideoExportView>(`/api/lessons/${e(lessonId)}/video/export`),
   startVideoExport: (lessonId: string) => post<VideoExportView>(`/api/lessons/${e(lessonId)}/video/export`),
   narrate: (stepId: string) => post<NarrationView>(`/api/steps/${e(stepId)}/narration`),
+  explainDifferently: (stepId: string, lens: ExplainLens) => post<AlternativeView>(`/api/steps/${e(stepId)}/alternatives`, { lens }),
+
+  /** Accepted cards of the topic, or of every topic when topicId is null. */
+  ankiExport: (topicId: string | null, format: AnkiFormat) => file(`/api/export/anki?format=${format}${topicId ? `&topicId=${e(topicId)}` : ""}`),
+  courseBook: (topicId: string) => file(`/api/topics/${e(topicId)}/book`),
 
   auditSample: (n = 10) => get<AuditEntry[]>(`/api/audit/sample?n=${n}`),
   audit: (itemId: string, body: AuditVerdict) => post<unknown>(`/api/audit/${e(itemId)}`, body),

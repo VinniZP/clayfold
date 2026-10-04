@@ -1,23 +1,28 @@
 import * as stylex from "@stylexjs/stylex";
 import { Check, CircleCheck, CircleX, ExternalLink, Flag, MessageCircle, NotebookPen, Quote, ShieldCheck, X } from "lucide-react";
-import { useId, useRef, useState, type RefObject } from "react";
-import type { ItemState } from "@shared/api";
+import { useId, useRef, useState, type ReactNode, type RefObject } from "react";
+import type { AlternativeView, ItemState } from "@shared/api";
 import type { PublicCite, PublicItem, PublicStep } from "@shared/schemas";
 import { api, errorText } from "../lib/api";
 import { gameProgress } from "../lib/game";
 import type { MessageKey } from "@shared/i18n";
 import { t, useLang } from "../lib/i18n";
+import { ExplainDifferently } from "./ExplainDifferently";
+import { isTypingTarget } from "../lib/keys";
+import { isCurrent, submitOnModEnter, useShortcuts } from "../lib/shortcuts";
 import { FigureView } from "./Figure";
 import { ItemView, restoredResponse, type ItemResult } from "./ItemView";
 import { NarratedBody } from "./Narration";
-import { bp, color, font, motion, radius } from "../theme/tokens.stylex";
+import { clipQuote } from "./SelectionActions";
+import { KeyHint } from "./Shortcuts";
+import { bp, color, font, motion, radius, reading } from "../theme/tokens.stylex";
 import { banner, btn, chip, field, layout, text } from "../theme/ui";
 import { Markdown, Spinner } from "./ui";
 
 const s = stylex.create({
   step: { display: "grid", gap: 22 },
   title: { fontFamily: font.display, fontSize: { default: 30, [bp.mobile]: 24 }, fontWeight: 800, letterSpacing: "-0.02em", lineHeight: 1.15, outline: "none" },
-  body: { fontSize: 17 },
+  body: { fontSize: `calc(17px * ${reading.scale})` },
   items: { display: "grid", gap: 32 },
   checks: { display: "grid", gap: 16, paddingTop: 22, borderTopWidth: 1, borderTopStyle: "solid", borderTopColor: color.border },
   checksTitle: { fontFamily: font.display, fontSize: { default: 26, [bp.mobile]: 22 }, fontWeight: 800, letterSpacing: "-0.02em" },
@@ -49,7 +54,7 @@ const s = stylex.create({
   citeCount: { fontSize: 12, fontWeight: 650, color: color.textMuted },
   citeQuote: { display: "block", marginTop: { default: 0, ":not(:first-child)": 8 } },
   citeLink: { display: "grid", placeItems: "center", width: 28, height: 28, borderRadius: "50%", color: color.accentText, backgroundColor: { default: "transparent", ":hover": color.lilacSoft } },
-  problem: { paddingBlock: 18, paddingInline: 20, borderRadius: radius.inner, backgroundColor: color.lilacSoft, fontSize: 16, fontWeight: 500 },
+  problem: { paddingBlock: 18, paddingInline: 20, borderRadius: radius.inner, backgroundColor: color.lilacSoft, fontSize: `calc(16px * ${reading.scale})`, fontWeight: 500 },
   lines: { display: "grid", gap: 10, margin: 0, padding: 0, listStyle: "none" },
   line: { display: "grid", gridTemplateColumns: "30px minmax(0, 1fr)", gap: 14, alignItems: "start", paddingBlock: 10, paddingInline: 12 },
   lineFaded: { borderWidth: 1.5, borderStyle: "dashed", borderColor: color.borderStrong, borderRadius: radius.field },
@@ -62,7 +67,7 @@ const s = stylex.create({
   fadedPrompt: { fontWeight: 650 },
   fadedRow: { display: "flex", gap: 8, maxWidth: "52ch" },
   reflect: { display: "grid", gap: 12, maxWidth: "66ch" },
-  reflectPrompt: { fontSize: 18, fontWeight: 550 },
+  reflectPrompt: { fontSize: `calc(18px * ${reading.scale})`, fontWeight: 550 },
   checkFoot: { display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: 12, paddingBlock: 14, paddingInline: 18, borderRadius: radius.inner, backgroundColor: color.surface2 },
   summary: { display: "flex", flexWrap: "wrap", alignItems: "center", gap: 18, paddingBlock: 18, paddingInline: 22, borderRadius: radius.inner, backgroundColor: color.pistachioSoft },
   score: { fontFamily: font.display, fontSize: 44, fontWeight: 800, letterSpacing: "-0.03em", lineHeight: 1, whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums" },
@@ -71,6 +76,9 @@ const s = stylex.create({
   toolForm: { display: "grid", gap: 8, maxWidth: "62ch", padding: 16, borderRadius: radius.inner, backgroundColor: color.surface2 },
   quote: { display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 8, paddingBlock: 8, paddingInline: 12, borderRadius: 12, backgroundColor: color.surface, fontSize: 14, fontStyle: "italic", color: color.textMuted },
 });
+
+/** Retrieval checks of an explain step, where the lesson player sends the learner after the explanation. */
+export const checksId = (stepId: string) => `checks-${stepId}`;
 
 export type TutorHooks = {
   onOfferTutor: (itemId: string, stepId: string, reason: "wrong_twice" | "idle") => void;
@@ -90,25 +98,42 @@ type StepProps = {
   /** Without it the step offers no tutor, as on a page that has no tutor panel. */
   tutor?: TutorHooks;
   onCheckResults?: (stepId: string, results: { item: PublicItem; result: ItemResult | undefined }[]) => void;
+  /** Asks for a practice set like a practice item the learner got wrong. */
+  onPractiseMore?: (itemId: string) => void;
+  /** An answer to one of an explain step's retrieval checks. */
+  onExplainCheck?: (itemId: string, result: ItemResult) => void;
   itemStates: Record<string, ItemState>;
   revealedLines: { idx: number; text: string }[];
   lineResults?: LineResults;
+  /** Stored alternative explanations of the step; without it the step offers none. */
+  alternatives?: AlternativeView[];
 };
 
-export function StepView({ step, topicId, lessonId, active, tutor, onCheckResults, itemStates, revealedLines, lineResults }: StepProps) {
+export function StepView({ step, topicId, lessonId, active, tutor, onCheckResults, itemStates, revealedLines, lineResults, alternatives, onPractiseMore, onExplainCheck }: StepProps) {
   const ref = useRef<HTMLElement>(null);
   return (
-    <article ref={ref} aria-labelledby={`step-title-${step.id}`} {...stylex.props(s.step)}>
+    <article ref={ref} data-shortcut-scope="step" aria-labelledby={`step-title-${step.id}`} {...stylex.props(s.step)}>
       <h2 id={`step-title-${step.id}`} tabIndex={-1} {...stylex.props(s.title)}>
         {step.title}
       </h2>
-      <StepBody step={step} active={active} tutor={tutor} onCheckResults={onCheckResults} itemStates={itemStates} revealedLines={revealedLines} lineResults={lineResults} />
-      <StepTools step={step} topicId={topicId} lessonId={lessonId} container={ref} />
+      <StepBody
+        step={step}
+        active={active}
+        tutor={tutor}
+        onCheckResults={onCheckResults}
+        itemStates={itemStates}
+        revealedLines={revealedLines}
+        lineResults={lineResults}
+        alternatives={alternatives}
+        onPractiseMore={onPractiseMore}
+        onExplainCheck={onExplainCheck}
+      />
+      <StepTools step={step} topicId={topicId} lessonId={lessonId} active={active} container={ref} />
     </article>
   );
 }
 
-function StepBody({ step, active, tutor, onCheckResults, itemStates, revealedLines, lineResults }: Omit<StepProps, "topicId" | "lessonId">) {
+function StepBody({ step, active, tutor, onCheckResults, itemStates, revealedLines, lineResults, alternatives, onPractiseMore, onExplainCheck }: Omit<StepProps, "topicId" | "lessonId">) {
   useLang();
   const offer = tutor && ((itemId: string, reason: "wrong_twice" | "idle") => tutor.onOfferTutor(itemId, step.id, reason));
   const ask = tutor && ((itemId: string) => tutor.onAskTutor(itemId, step.id));
@@ -127,11 +152,12 @@ function StepBody({ step, active, tutor, onCheckResults, itemStates, revealedLin
     case "explain":
       return (
         <>
-          <NarratedBody stepId={step.id} body={step.body} xstyle={s.body} />
+          <NarratedBody stepId={step.id} body={step.body} active={active} xstyle={s.body} />
           {step.figure && <FigureView figure={step.figure} />}
+          {alternatives && <ExplainDifferently stepId={step.id} kind="explain" initial={alternatives} />}
           <Citations cites={step.cites} />
           {step.checks.length > 0 && (
-            <section aria-label={t("steps.selfCheck")} {...stylex.props(s.checks)}>
+            <section id={checksId(step.id)} aria-label={t("steps.selfCheck")} {...stylex.props(s.checks)}>
               <h3 {...stylex.props(s.checksTitle)}>{t("steps.selfCheck")}</h3>
               <div {...stylex.props(s.items)}>
                 {step.checks.map((item, i) => (
@@ -143,8 +169,10 @@ function StepBody({ step, active, tutor, onCheckResults, itemStates, revealedLin
                     active={active}
                     number={step.checks.length > 1 ? i + 1 : undefined}
                     initial={itemStates[item.id]}
+                    onResult={onExplainCheck}
                     onOfferTutor={offer}
                     onAskTutor={ask}
+                    onPractiseMore={onPractiseMore}
                   />
                 ))}
               </div>
@@ -153,10 +181,27 @@ function StepBody({ step, active, tutor, onCheckResults, itemStates, revealedLin
         </>
       );
     case "worked_example":
-      return <WorkedExample step={step} revealedLines={revealedLines} lineResults={lineResults} onAnswerLine={(line) => tutor?.onAnswerLine(step.id, line)} />;
+      return (
+        <WorkedExample
+          step={step}
+          revealedLines={revealedLines}
+          lineResults={lineResults}
+          onAnswerLine={(line) => tutor?.onAnswerLine(step.id, line)}
+          explainDifferently={alternatives && <ExplainDifferently stepId={step.id} kind="worked_example" initial={alternatives} />}
+        />
+      );
     case "practice":
       return (
-        <ItemView item={step.item} mode="practice" context="practice" active={active} initial={itemStates[step.item.id]} onOfferTutor={offer} onAskTutor={ask} />
+        <ItemView
+          item={step.item}
+          mode="practice"
+          context="practice"
+          active={active}
+          initial={itemStates[step.item.id]}
+          onOfferTutor={offer}
+          onAskTutor={ask}
+          onPractiseMore={onPractiseMore}
+        />
       );
     case "reflect":
       return <Reflect step={step} />;
@@ -213,11 +258,13 @@ function WorkedExample({
   revealedLines,
   lineResults,
   onAnswerLine,
+  explainDifferently,
 }: {
   step: WorkedStep;
   revealedLines: { idx: number; text: string }[];
   lineResults?: LineResults;
   onAnswerLine: (line: number) => void;
+  explainDifferently?: ReactNode;
 }) {
   useLang();
   const [own, setRevealed] = useState<Record<number, Revealed>>(() =>
@@ -290,6 +337,7 @@ function WorkedExample({
           {t("steps.moreLines", { count: step.lines.length - visible.length })}
         </p>
       )}
+      {explainDifferently}
       <Citations cites={step.cites} />
     </>
   );
@@ -391,6 +439,7 @@ function Reflect({ step }: { step: Extract<PublicStep, { kind: "reflect" }> }) {
   return (
     <form
       {...stylex.props(s.reflect)}
+      onKeyDown={submitOnModEnter}
       onSubmit={async (e) => {
         e.preventDefault();
         setState("busy");
@@ -451,10 +500,28 @@ function CheckStep({
   });
   // A check answered in full before a reload opens with its results.
   const [revealed, setRevealed] = useState(() => step.items.every((i) => results[i.id]));
+  const summaryRef = useRef<HTMLDivElement>(null);
   const answered = step.items.filter((i) => results[i.id]).length;
   const correct = step.items.filter((i) => results[i.id]?.response.correct === true).length;
   const pending = step.items.filter((i) => results[i.id] && results[i.id]!.response.correct === null).length;
   const wrong = answered - correct - pending;
+
+  const finish = () => {
+    setRevealed(true);
+    onResults?.(step.id, step.items.map((item) => ({ item, result: results[item.id] })));
+    requestAnimationFrame(() => summaryRef.current?.focus());
+  };
+
+  useShortcuts(
+    "step",
+    (a) => {
+      if (a.name !== "submit" || answered < step.items.length) return false;
+      finish();
+      return true;
+    },
+    active && !revealed,
+  );
+
   return (
     <>
       <p {...stylex.props(banner.base, banner.ink)}>
@@ -484,16 +551,13 @@ function CheckStep({
             type="button"
             disabled={answered < step.items.length}
             {...stylex.props(btn.base, btn.primary)}
-            onClick={() => {
-              setRevealed(true);
-              onResults?.(step.id, step.items.map((item) => ({ item, result: results[item.id] })));
-            }}
+            onClick={finish}
           >
-            {t("steps.finishCheck")}
+            {t("steps.finishCheck")} <KeyHint>↵</KeyHint>
           </button>
         </div>
       ) : (
-        <div role="status" {...stylex.props(s.summary)}>
+        <div ref={summaryRef} tabIndex={-1} role="status" {...stylex.props(s.summary)}>
           <p {...stylex.props(s.score)}>
             {correct} <span {...stylex.props(s.scoreOf)}>{t("steps.scoreOf", { total: step.items.length })}</span>
           </p>
@@ -511,11 +575,13 @@ function StepTools({
   step,
   topicId,
   lessonId,
+  active,
   container,
 }: {
   step: PublicStep;
   topicId: string | null;
   lessonId: string;
+  active: boolean;
   container: RefObject<HTMLElement | null>;
 }) {
   useLang();
@@ -526,11 +592,14 @@ function StepTools({
   const [done, setDone] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const id = useId();
+  const noteButton = useRef<HTMLButtonElement>(null);
+  const reportButton = useRef<HTMLButtonElement>(null);
+  const formRef = useRef<HTMLFormElement>(null);
 
   const captureSelection = () => {
     const sel = window.getSelection();
     const picked = sel?.toString().trim() ?? "";
-    if (picked && sel?.anchorNode && container.current?.contains(sel.anchorNode)) setQuote(picked.slice(0, 600));
+    if (picked && sel?.anchorNode && container.current?.contains(sel.anchorNode)) setQuote(clipQuote(picked));
   };
 
   const toggle = (which: "note" | "report") => {
@@ -540,6 +609,28 @@ function StepTools({
     if (which === "report") setQuote("");
     setOpen((o) => (o === which ? null : which));
   };
+
+  useShortcuts(
+    "step",
+    (a, e) => {
+      if (!isCurrent(container.current, "step")) return false;
+      if (a.name === "note") {
+        if (open === "note") formRef.current?.querySelector("textarea")?.focus();
+        else {
+          captureSelection();
+          toggle("note");
+        }
+        return true;
+      }
+      if (a.name === "escape" && open && (formRef.current?.contains(e.target as Node) || !isTypingTarget(e.target))) {
+        setOpen(null);
+        (open === "note" ? noteButton : reportButton).current?.focus();
+        return true;
+      }
+      return false;
+    },
+    active,
+  );
 
   const submit = async () => {
     setBusy(true);
@@ -564,9 +655,10 @@ function StepTools({
   };
 
   return (
-    <footer {...stylex.props(s.tools)}>
+    <footer data-print="hide" {...stylex.props(s.tools)}>
       <div {...stylex.props(layout.row)}>
         <button
+          ref={noteButton}
           type="button"
           {...stylex.props(btn.base, btn.ghost, btn.sm)}
           aria-expanded={open === "note"}
@@ -576,7 +668,7 @@ function StepTools({
         >
           <NotebookPen size={16} aria-hidden="true" /> {t("steps.note")}
         </button>
-        <button type="button" aria-expanded={open === "report"} onClick={() => toggle("report")} {...stylex.props(btn.base, btn.ghost, btn.sm)}>
+        <button ref={reportButton} type="button" aria-expanded={open === "report"} onClick={() => toggle("report")} {...stylex.props(btn.base, btn.ghost, btn.sm)}>
           <Flag size={16} aria-hidden="true" /> {t("steps.reportProblem")}
         </button>
         {done && (
@@ -587,7 +679,9 @@ function StepTools({
       </div>
       {open && (
         <form
+          ref={formRef}
           {...stylex.props(s.toolForm)}
+          onKeyDown={submitOnModEnter}
           onSubmit={(e) => {
             e.preventDefault();
             void submit();
@@ -612,7 +706,7 @@ function StepTools({
             </p>
           )}
           <div {...stylex.props(layout.actions)}>
-            <button type="submit" disabled={!note.trim() || busy} {...stylex.props(btn.base, btn.primary, btn.sm)}>
+            <button type="submit" disabled={!(note.trim() || (open === "note" && quote)) || busy} {...stylex.props(btn.base, btn.primary, btn.sm)}>
               {busy && <Spinner />} {t(open === "note" ? "steps.saveNote" : "cards.send")}
             </button>
             <button type="button" onClick={() => setOpen(null)} {...stylex.props(btn.base, btn.ghost, btn.sm)}>

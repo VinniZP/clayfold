@@ -3,7 +3,9 @@ import { z } from "zod";
 import type { ChatMessage, ConversationKind, ConversationView } from "../../shared/api";
 import { cancel, isRunning, runInfo, runTurn } from "../claude/runner";
 import { db } from "../db";
+import { t } from "../i18n";
 import { fail, parseJson, readBody } from "./http";
+import { teachbackOpen } from "./teachback";
 
 type MessageRow = { id: string; role: ChatMessage["role"]; text: string; meta: string | null; created_at: string };
 
@@ -16,13 +18,14 @@ export function conversationView(id: string): ConversationView {
     .query<MessageRow, [string]>("SELECT id, role, text, meta, created_at FROM messages WHERE conversation_id = ? ORDER BY rowid")
     .all(id)
     .map((m): ChatMessage => {
-      const meta = parseJson<{ options?: ChatMessage["options"]; multi?: boolean; allowFree?: boolean; doneText?: string }>(m.meta);
+      const meta = parseJson<{ options?: ChatMessage["options"]; multi?: boolean; allowFree?: boolean; doneText?: string; quote?: string }>(m.meta);
       return {
         id: m.id,
         role: m.role,
         text: m.text,
         ...(m.role === "ask" && meta?.options ? { options: meta.options, multi: meta.multi ?? false, allowFree: meta.allowFree ?? true } : {}),
         ...(m.role === "activity" && meta?.doneText ? { doneText: meta.doneText } : {}),
+        ...(m.role === "user" && meta?.quote ? { quote: meta.quote } : {}),
         createdAt: m.created_at,
       };
     });
@@ -37,6 +40,7 @@ conversations.post("/:id/messages", async (c) => {
   const id = c.req.param("id");
   if (!db().query("SELECT 1 FROM conversations WHERE id = ?").get(id)) fail(404, "conversation not found");
   const { text } = await readBody(c, z.object({ text: z.string().trim().min(1).max(8000) }));
+  if (!teachbackOpen(id)) fail(409, t("teachback.closed"));
   runTurn({ conversationId: id, text });
   return c.json({ accepted: true }, 202);
 });

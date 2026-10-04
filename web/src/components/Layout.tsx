@@ -1,7 +1,7 @@
 import * as stylex from "@stylexjs/stylex";
-import { ArrowLeft, Bell, BookA, Brain, CircleArrowUp, House, Layers, Menu, Moon, PawPrint, Repeat2, Search, Settings, ShieldCheck, Snowflake, SquareTerminal, Sun, X } from "lucide-react";
-import { useCallback, useEffect, useId, useRef, useState, type ReactNode } from "react";
-import { Link, NavLink, Outlet, useLocation, useNavigate } from "react-router";
+import { ArrowLeft, Bell, BookA, Brain, CircleArrowUp, House, Layers, Menu, Moon, NotebookPen, PawPrint, Repeat2, Settings, ShieldCheck, Snowflake, SquareTerminal, Sun, X } from "lucide-react";
+import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
+import { Link, NavLink, Outlet, useLocation } from "react-router";
 import type { TodayView, TopicSummary, UpdateMode, UpdateView } from "@shared/api";
 import { LANGS, translate, type Lang, type MessageKey } from "@shared/i18n";
 import { api, errorText } from "../lib/api";
@@ -14,9 +14,11 @@ import { bp, color, font, motion, radius } from "../theme/tokens.stylex";
 import { btn, layout, shadow, text } from "../theme/ui";
 import { AppRoot } from "./AppRoot";
 import { ClaudePanel } from "./ClaudePanel";
+import { CommandPalette } from "./CommandPalette";
 import { Celebrations } from "./meerkat/Celebrations";
 import { HeaderProvider, type HeaderInfo } from "./header";
 import { Intro } from "./Intro";
+import { ShortcutSheet } from "./Shortcuts";
 import { Clay } from "./ui";
 
 const pulse = stylex.keyframes({
@@ -48,6 +50,7 @@ const s = stylex.create({
     backgroundColor: color.frame,
     boxShadow: `0 30px 80px -40px ${color.shadowStrong}`,
   },
+  frameFocus: { gridTemplateColumns: "minmax(0, 1fr)" },
   railCol: {
     display: { default: "block", [bp.mobile]: "none" },
     borderRightWidth: 1,
@@ -167,21 +170,6 @@ const s = stylex.create({
     display: { default: "block", [bp.mobile]: "none" },
   },
   topTools: { display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", justifyContent: "flex-end", width: { default: "auto", [bp.mobile]: "100%" } },
-  search: { position: "relative", flexGrow: { default: 0, [bp.mobile]: 1 } },
-  searchIcon: { position: "absolute", left: 16, top: "50%", transform: "translateY(-50%)", color: color.textMuted, pointerEvents: "none" },
-  searchInput: {
-    width: { default: 260, [bp.mobile]: "100%" },
-    height: 46,
-    paddingInline: "44px 18px",
-    borderWidth: 1.5,
-    borderStyle: "solid",
-    borderColor: { default: color.border, ":hover": color.borderStrong, ":focus-visible": color.focus },
-    borderRadius: radius.pill,
-    backgroundColor: color.surface,
-    color: color.text,
-    outline: { default: null, ":focus-visible": "none" },
-    boxShadow: { default: null, ":focus-visible": `0 0 0 3px ${color.lilacSoft}` },
-  },
   popover: {
     position: "absolute",
     zIndex: 30,
@@ -198,8 +186,6 @@ const s = stylex.create({
     margin: 0,
   },
   popNote: { paddingBlock: 10, paddingInline: 12, color: color.textMuted, fontSize: 14 },
-  option: { display: "flex", justifyContent: "space-between", gap: 12, paddingBlock: 10, paddingInline: 12, borderRadius: 12, cursor: "pointer", backgroundColor: { default: "transparent", ":hover": color.lilacSoft } },
-  optionOn: { backgroundColor: color.lilacSoft },
   rel: { position: "relative" },
   dot: { position: "absolute", top: 10, right: 11, width: 9, height: 9, borderRadius: "50%", backgroundColor: color.chart2, boxShadow: `0 0 0 2px ${color.surface2}` },
   notifPop: { width: 300 },
@@ -342,6 +328,7 @@ const NAV: { to: string; label: MessageKey; icon: ReactNode; end?: boolean; due?
   { to: "/", label: "nav.home", icon: <House size={22} />, end: true },
   { to: "/topics", label: "nav.topics", icon: <Layers size={22} /> },
   { to: "/review", label: "nav.review", icon: <Repeat2 size={22} />, due: true },
+  { to: "/mistakes", label: "nav.mistakes", icon: <NotebookPen size={22} /> },
   { to: "/memory", label: "nav.memory", icon: <Brain size={22} /> },
   { to: "/glossary", label: "nav.glossary", icon: <BookA size={22} /> },
   { to: "/meerkat", label: "nav.meerkat", icon: <PawPrint size={22} />, game: true },
@@ -356,7 +343,7 @@ function Rail({ due }: { due: number }) {
   const theme = useTheme();
   const { on: game } = useGame();
   return (
-    <aside {...stylex.props(s.railCol)}>
+    <aside data-print="hide" {...stylex.props(s.railCol)}>
       <div {...stylex.props(s.rail)}>
       <Link to="/" aria-label={t("nav.homeLink")}>
         <LogoMark />
@@ -402,98 +389,16 @@ function Rail({ due }: { due: number }) {
   );
 }
 
-function SearchBox() {
-  useLang();
-  const [query, setQuery] = useState("");
-  const [topics, setTopics] = useState<TopicSummary[] | null>(null);
-  const [open, setOpen] = useState(false);
-  const [active, setActive] = useState(0);
-  const navigate = useNavigate();
-  const listId = useId();
-  const q = query.trim().toLowerCase();
-  const results = q && topics ? topics.filter((t) => t.title.toLowerCase().includes(q)).slice(0, 6) : [];
-
-  const go = (t: TopicSummary) => {
-    setOpen(false);
-    setQuery("");
-    navigate(`/topics/${t.id}`);
-  };
-
-  return (
-    <div {...stylex.props(s.search)} onBlur={(e) => !e.currentTarget.contains(e.relatedTarget) && setOpen(false)}>
-      <Search size={18} aria-hidden="true" {...stylex.props(s.searchIcon)} />
-      <input
-        type="search"
-        role="combobox"
-        aria-label={t("search.label")}
-        aria-expanded={open && q.length > 0}
-        aria-controls={listId}
-        aria-activedescendant={results[active] ? `${listId}-${active}` : undefined}
-        placeholder={t("search.label")}
-        value={query}
-        {...stylex.props(s.searchInput)}
-        onFocus={() => {
-          if (topics === null) api.topics().then(setTopics, () => setTopics([]));
-          setOpen(true);
-        }}
-        onChange={(e) => {
-          setQuery(e.target.value);
-          setActive(0);
-          setOpen(true);
-        }}
-        onKeyDown={(e) => {
-          if (e.key === "ArrowDown") {
-            e.preventDefault();
-            setActive((a) => Math.min(a + 1, results.length - 1));
-          } else if (e.key === "ArrowUp") {
-            e.preventDefault();
-            setActive((a) => Math.max(a - 1, 0));
-          } else if (e.key === "Enter" && results[active]) {
-            e.preventDefault();
-            go(results[active]);
-          } else if (e.key === "Escape") {
-            setOpen(false);
-          }
-        }}
-      />
-      {open && q && (
-        <ul id={listId} role="listbox" aria-label={t("search.results")} {...stylex.props(s.popover, shadow.pop)}>
-          {topics === null ? (
-            <li {...stylex.props(s.popNote)}>{t("search.searching")}</li>
-          ) : results.length === 0 ? (
-            <li {...stylex.props(s.popNote)}>{t("search.nothing")}</li>
-          ) : (
-            results.map((t, i) => (
-              <li
-                key={t.id}
-                id={`${listId}-${i}`}
-                role="option"
-                aria-selected={i === active}
-                {...stylex.props(s.option, i === active && s.optionOn)}
-                onMouseDown={(e) => {
-                  e.preventDefault();
-                  go(t);
-                }}
-              >
-                <span>{t.title}</span>
-                <span {...stylex.props(text.muted, text.tnum)}>
-                  {t.nodesMastered}/{t.nodesTotal}
-                </span>
-              </li>
-            ))
-          )}
-        </ul>
-      )}
-    </div>
-  );
-}
-
 /** Closes an open popover on a pointer press outside `ref` or on Escape. */
 function useDismiss(open: boolean, ref: React.RefObject<HTMLElement | null>, close: () => void) {
   useEffect(() => {
     if (!open) return;
     const onDown = (e: PointerEvent) => !ref.current?.contains(e.target as Node) && close();
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && close();
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      e.preventDefault();
+      close();
+    };
     document.addEventListener("pointerdown", onDown);
     document.addEventListener("keydown", onKey);
     return () => {
@@ -851,7 +756,7 @@ export function Layout() {
   useLang();
   const [header, setHeader] = useState<HeaderInfo>({ title: "" });
   const [due, setDue] = useState(0);
-  const [streak, setStreak] = useState<TodayView["streak"] | null>(null);
+  const [today, setToday] = useState<TodayView | null>(null);
   const location = useLocation();
   const drawer = useRef<HTMLDialogElement>(null);
   const onHeader = useCallback((info: HeaderInfo) => setHeader(info), []);
@@ -859,6 +764,7 @@ export function Layout() {
   const [update, setUpdate] = useUpdate();
   const claudeMode = useClaudeMode();
   const { on: game } = useGame();
+  const focus = header.focus === true;
   useOverlayScroll(drawer);
 
   useEffect(() => {
@@ -867,10 +773,7 @@ export function Layout() {
       (r) => setDue(r.cards.length + r.items.length),
       () => setDue(0),
     );
-    api.today().then(
-      (t) => setStreak(t.streak),
-      () => setStreak(null),
-    );
+    api.today().then(setToday, () => setToday(null));
   }, [location.pathname]);
 
   useEffect(() => {
@@ -879,22 +782,24 @@ export function Layout() {
 
   return (
     <AppRoot>
-      <a href="#main" {...stylex.props(s.skip)}>
+      <a href="#main" data-print="hide" {...stylex.props(s.skip)}>
         {t("nav.skipToContent")}
       </a>
-      <div {...stylex.props(s.frame)}>
-        <Rail due={due} />
+      <div data-print="flow" {...stylex.props(s.frame, focus && s.frameFocus)}>
+        {!focus && <Rail due={due} />}
 
-        <div {...stylex.props(s.mobileBar)}>
-          <Link to="/" {...stylex.props(s.mobileWord)}>
-            Clayfold
-          </Link>
-          <WorkingPill topics={running} compact />
-          <UpdatePill view={update} onChange={setUpdate} compact />
-          <button type="button" aria-label={t("nav.openMenu")} onClick={() => drawer.current?.showModal()} {...stylex.props(btn.base, btn.icon)}>
-            <Menu size={20} aria-hidden="true" />
-          </button>
-        </div>
+        {!focus && (
+          <div data-print="hide" {...stylex.props(s.mobileBar)}>
+            <Link to="/" {...stylex.props(s.mobileWord)}>
+              Clayfold
+            </Link>
+            <WorkingPill topics={running} compact />
+            <UpdatePill view={update} onChange={setUpdate} compact />
+            <button type="button" aria-label={t("nav.openMenu")} onClick={() => drawer.current?.showModal()} {...stylex.props(btn.base, btn.icon)}>
+              <Menu size={20} aria-hidden="true" />
+            </button>
+          </div>
+        )}
         <dialog ref={drawer} aria-label={t("nav.menu")} onClick={(e) => e.target === e.currentTarget && e.currentTarget.close()} {...stylex.props(s.drawer)}>
           <div {...stylex.props(s.drawerInner)}>
             <div {...stylex.props(s.drawerHead)}>
@@ -927,7 +832,7 @@ export function Layout() {
                 ))}
               </ul>
             </nav>
-            <StreakPill streak={streak} />
+            <StreakPill streak={today?.streak ?? null} />
             <ClaudeModeSwitch />
             <ThemeSwitch />
             <LangSwitch />
@@ -935,40 +840,51 @@ export function Layout() {
         </dialog>
 
         <main id="main" tabIndex={-1} {...stylex.props(s.main)}>
-          <div {...stylex.props(s.top)}>
-            <Link to="/" {...stylex.props(s.wordmark)}>
-              Clayfold
-            </Link>
-            <div {...stylex.props(s.topTools)}>
-              <SearchBox />
-              <UpdatePill view={update} onChange={setUpdate} />
-              <WorkingPill topics={running} />
-              <StreakPill streak={streak} />
-              <Notifications due={due} />
-            </div>
-          </div>
-
-          <header {...stylex.props(s.head)}>
-            <div {...stylex.props(s.headText)}>
-              {header.back && (
-                <Link to={header.back.to} {...stylex.props(s.back)}>
-                  <ArrowLeft size={20} aria-hidden="true" /> {header.back.label}
+          {focus ? (
+            <h1 {...stylex.props(layout.srOnly)}>{header.title}</h1>
+          ) : (
+            <>
+              <div data-print="hide" {...stylex.props(s.top)}>
+                <Link to="/" {...stylex.props(s.wordmark)}>
+                  Clayfold
                 </Link>
-              )}
-              <h1 {...stylex.props(text.display, s.h1)}>{header.title}</h1>
-              {header.sub && <p {...stylex.props(s.sub)}>{header.sub}</p>}
-            </div>
-            {header.art && <Clay name={header.art} size={168} xstyle={s.headArt} eager />}
-          </header>
+                <div {...stylex.props(s.topTools)}>
+                  <CommandPalette due={due} goal={today?.goal ?? null} />
+                  <UpdatePill view={update} onChange={setUpdate} />
+                  <WorkingPill topics={running} />
+                  <StreakPill streak={today?.streak ?? null} />
+                  <Notifications due={due} />
+                </div>
+              </div>
+
+              <header {...stylex.props(s.head)}>
+                <div {...stylex.props(s.headText)}>
+                  {header.back && (
+                    <Link to={header.back.to} {...stylex.props(s.back)}>
+                      <ArrowLeft size={20} aria-hidden="true" /> {header.back.label}
+                    </Link>
+                  )}
+                  <h1 {...stylex.props(text.display, s.h1)}>{header.title}</h1>
+                  {header.sub && <p {...stylex.props(s.sub)}>{header.sub}</p>}
+                </div>
+                {header.art && <Clay name={header.art} size={168} xstyle={s.headArt} eager />}
+              </header>
+            </>
+          )}
 
           <HeaderProvider onChange={onHeader}>
             <Outlet />
           </HeaderProvider>
         </main>
       </div>
-      {claudeMode && <ClaudePanel />}
+      {claudeMode && (
+        <div data-print="hide">
+          <ClaudePanel />
+        </div>
+      )}
       <Intro />
       <Celebrations />
+      <ShortcutSheet />
     </AppRoot>
   );
 }

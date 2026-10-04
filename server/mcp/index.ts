@@ -15,13 +15,18 @@ import { goalNote, goalPlanSet } from "./tools/goal";
 import { graphSet, placementRecord } from "./tools/graph";
 import { askLearner, getLearnerState } from "./tools/learner";
 import { lessonFinish, lessonPlan, stepSubmit } from "./tools/lessons";
+import { practiceBriefTool } from "./tools/practice";
 import { itemReplace } from "./tools/replace";
+import { materialList, materialRead } from "./tools/materials";
 import { sourceAdd, sourceSearch } from "./tools/sources";
+import { teachbackFinish } from "./tools/teachback";
 
 export const TOOLS: ToolDef<any>[] = [
   askLearner,
   sourceAdd,
   sourceSearch,
+  materialList,
+  materialRead,
   graphSet,
   placementRecord,
   lessonPlan,
@@ -32,8 +37,10 @@ export const TOOLS: ToolDef<any>[] = [
   goalNote,
   glossarySet,
   workedLineRecord,
+  teachbackFinish,
   getLearnerState,
   itemReplace,
+  practiceBriefTool,
 ];
 
 export type McpDeps = Partial<Omit<ToolContext, "topicId" | "db" | "publish">> & {

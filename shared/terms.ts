@@ -1,6 +1,8 @@
 // Glossary term marks in model-written text: [[surface|Term]] shows `surface` and links it to the
 // glossary entry `Term`; [[Term]] shows the term as written.
 
+import { foldLetters } from "./i18n";
+
 export const TERM_MARK = /\[\[([^[\]|]+?)(?:\|([^[\]|]+?))?\]\]/g;
 
 export type TermMark = { surface: string; term: string };
@@ -10,6 +12,12 @@ export function termMarks(text: string): TermMark[] {
 }
 
 export const termKey = (term: string) => term.trim().toLowerCase();
+
+/** Key that matches text a reader selected to a term: case, letter variants, spacing and surrounding punctuation do not count. */
+export const looseTermKey = (text: string) =>
+  foldLetters(text.normalize("NFKC").toLowerCase())
+    .replace(/\s+/g, " ")
+    .replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, "");
 
 /** The text as the reader sees it, with every mark replaced by its surface. */
 export function stripTermMarks(text: string): string {

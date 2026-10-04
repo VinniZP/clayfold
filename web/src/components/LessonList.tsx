@@ -9,6 +9,7 @@ import { bp, color, radius, space } from "../theme/tokens.stylex";
 import { chip, text } from "../theme/ui";
 import { StaleSources, readyLine } from "./LessonStatus";
 import { LessonBadges } from "./meerkat/Crowns";
+import { FOCUS_LABEL } from "./Practice";
 import { Spinner } from "./ui";
 
 type Learner = LessonSummary["learnerStatus"];
@@ -160,7 +161,7 @@ export function LessonList({ lessons }: { lessons: LessonSummary[] }) {
                   <LessonBadges lessonId={l.id} />
                 </div>
                 <span {...stylex.props(text.small, text.muted)}>
-                  {levelLabel(l.level)} · {formatDate(l.createdAt)}
+                  {l.practice ? t(FOCUS_LABEL[l.practice.focus]) : levelLabel(l.level)} · {formatDate(l.createdAt)}
                 </span>
               </div>
             </div>

@@ -3,6 +3,7 @@ import type { AttemptRequest, AttemptResponse, GiveUpResponse, HintResponse, Wor
 import { isOpenBlank, type Answer, type Blank, type Item } from "../../shared/schemas";
 import { runJsonPrompt, type OneShotResult } from "../claude/oneshot";
 import { db, newId } from "../db";
+import { displayLength, matchOrders, type MatchItem } from "../gates/content";
 import { t } from "../i18n";
 import { updateMasteryAfterAttempt } from "../review/mastery";
 import { applyItemSignals } from "../review/signals";
@@ -17,7 +18,14 @@ export class GradingError extends Error {
   }
 }
 
-export type Grade = { correct: boolean; chosenOption: number | null; misconception: string | null; feedback: string | null };
+export type Grade = {
+  correct: boolean;
+  chosenOption: number | null;
+  misconception: string | null;
+  feedback: string | null;
+  /** match and sort: per entry in display order, whether it was placed right. */
+  marks?: boolean[];
+};
 
 export const normalize = (s: string) => s.trim().replace(/\s+/g, " ").toLowerCase();
 
@@ -26,6 +34,52 @@ const sameSet = (a: number[], b: number[]) => {
   const y = new Set(b);
   return x.size === y.size && [...x].every((v) => y.has(v));
 };
+
+type Misplaced = { entry: string; mistake: { misconception: string; feedback: string } | undefined };
+
+/** Correct only when every entry is placed right; the feedback counts the right ones and adds each wrong placement's own feedback. */
+function placementGrade(marks: boolean[], misplaced: Misplaced[]): Grade {
+  if (misplaced.length === 0) return { correct: true, chosenOption: null, misconception: null, feedback: null, marks };
+  const named = misplaced.filter((m) => m.mistake);
+  const count = t("grading.placedRight", { right: marks.filter(Boolean).length, total: marks.length });
+  return {
+    correct: false,
+    chosenOption: null,
+    misconception: named[0]?.mistake!.misconception ?? null,
+    feedback: [count, ...(named.length ? [named.map((m) => `- **${m.entry}**: ${m.mistake!.feedback}`).join("\n")] : [])].join("\n\n"),
+    marks,
+  };
+}
+
+/** `picks[d]` is the right entry, by display position, chosen for the left entry at display position d. */
+function gradeMatch(item: MatchItem, order: number[], picks: number[]): Grade {
+  const { left, right } = matchOrders(item, order);
+  if (picks.length !== left.length || picks.some((d) => right[d] === undefined)) throw new GradingError("pairs out of range");
+  const misplaced: Misplaced[] = [];
+  const marks = left.map((pair, d) => {
+    const target = right[picks[d]!]!;
+    if (target === pair) return true;
+    const distractor = item.distractors?.[target - item.pairs.length];
+    misplaced.push({ entry: item.pairs[pair]!.left, mistake: distractor ?? item.pairs[pair]!.mistake });
+    return false;
+  });
+  return placementGrade(marks, misplaced);
+}
+
+/** `picks[d]` is the category chosen for the entry at display position d. */
+function gradeSort(item: Extract<Item, { format: "sort" }>, order: number[], picks: number[]): Grade {
+  if (picks.length !== order.length || picks.some((c) => !Number.isInteger(c) || c < 0 || c >= item.categories.length)) {
+    throw new GradingError("categories out of range");
+  }
+  const misplaced: Misplaced[] = [];
+  const marks = order.map((i, d) => {
+    const entry = item.entries[i]!;
+    if (picks[d] === entry.category) return true;
+    misplaced.push({ entry: entry.text, mistake: entry.mistake });
+    return false;
+  });
+  return placementGrade(marks, misplaced);
+}
 
 /** Grades every format except `short`. `order` maps display positions to authoring indices. */
 export function gradeClosed(item: Item, order: number[], answer: Answer): Grade {
@@ -45,6 +99,8 @@ export function gradeClosed(item: Item, order: number[], answer: Answer): Grade 
   if (item.format === "order" && answer.format === "order") {
     return plain(answer.sequence.length === item.sequence.length && answer.sequence.every((s, i) => s === item.sequence[i]));
   }
+  if (item.format === "match" && answer.format === "match") return gradeMatch(item, order, answer.pairs);
+  if (item.format === "sort" && answer.format === "sort") return gradeSort(item, order, answer.categories);
   if (item.format === "cloze" && answer.format === "cloze") {
     return plain(
       answer.blanks.length === item.blanks.length &&
@@ -55,6 +111,11 @@ export function gradeClosed(item: Item, order: number[], answer: Answer): Grade 
     return plain(Number.isFinite(answer.value) && Math.abs(answer.value - item.answer) <= item.tolerance);
   }
   throw new GradingError(`format ${item.format} is not graded here`);
+}
+
+/** Grades a closed answer to an item shown in the row's display order. */
+export function gradeClosedItem(row: Pick<ItemRow, "display_order">, item: Item, answer: Answer): Grade {
+  return gradeClosed(item, displayOrder(row, displayLength(item)), answer);
 }
 
 export type JsonPromptRunner = <T>(opts: { prompt: string; schema: object; purpose: "grading" }) => Promise<OneShotResult<T>>;
@@ -103,6 +164,10 @@ export function correctAnswerText(item: Item): string {
       return item.correct.map((i) => item.options[i]!.text).join("; ");
     case "order":
       return item.sequence.join(" → ");
+    case "match":
+      return item.pairs.map((p) => `${p.left} → ${p.right}`).join("; ");
+    case "sort":
+      return item.categories.map((c, i) => `${c}: ${item.entries.filter((e) => e.category === i).map((e) => e.text).join(", ")}`).join("; ");
     case "cloze":
       return item.blanks.map((accepted, i) => `${i + 1}: ${accepted[0]}`).join("; ");
     case "number":
@@ -142,6 +207,15 @@ export function takeHint(itemId: string, requested: number, database: Database =
   return { level, hint: item.hints[level - 1]!, hintCount: item.hints.length };
 }
 
+/** Grades an answer in display order; `short` answers go to the model. */
+export async function gradeAnswer(row: ItemRow, item: Item, answer: Answer, runPrompt?: JsonPromptRunner): Promise<Grade> {
+  if (item.format === "short") {
+    if (answer.format !== "short") throw new GradingError(`answer format ${answer.format} does not match item format short`);
+    return gradeShort(item, answer.text, runPrompt);
+  }
+  return gradeClosedItem(row, item, answer);
+}
+
 export const genericFeedback = (correct: boolean) => t(correct ? "grading.right" : "grading.wrong");
 
 export async function submitAttempt(
@@ -152,21 +226,15 @@ export async function submitAttempt(
   const database = opts.database ?? db();
   const at = opts.at ?? new Date();
   const { row, item } = loadItem(itemId, database);
-  let grade: Grade;
-  if (item.format === "short") {
-    if (req.answer.format !== "short") throw new GradingError(`answer format ${req.answer.format} does not match item format short`);
-    grade = await gradeShort(item, req.answer.text, opts.runPrompt);
-  } else {
-    const length = item.format === "single" || item.format === "multi" ? item.options.length : item.format === "order" ? item.sequence.length : 0;
-    grade = gradeClosed(item, displayOrder(row, length), req.answer);
-  }
+  const grade = await gradeAnswer(row, item, req.answer, opts.runPrompt);
 
   const hintsUsed = Math.max(Math.trunc(req.hintsUsed) || 0, openHintLevel(itemId, database));
+  const confidence = row.role === "activate" ? null : (req.confidence ?? null);
   const attemptId = newId("at");
   database
     .query(
-      `INSERT INTO attempts (id, item_id, answer, correct, chosen_option, misconception, hints_used, gave_up, duration_ms, context, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?)`,
+      `INSERT INTO attempts (id, item_id, answer, correct, chosen_option, misconception, hints_used, gave_up, duration_ms, context, confidence, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?)`,
     )
     .run(
       attemptId,
@@ -178,6 +246,7 @@ export async function submitAttempt(
       hintsUsed,
       Number.isFinite(req.durationMs) ? Math.round(req.durationMs) : null,
       req.context,
+      confidence,
       at.toISOString(),
     );
   updateMasteryAfterAttempt(attemptId, database);
@@ -185,10 +254,11 @@ export async function submitAttempt(
 
   const attemptNo = database.query<{ n: number }, [string]>("SELECT count(*) AS n FROM attempts WHERE item_id = ?").get(itemId)!.n;
   const feedback = grade.feedback ?? genericFeedback(grade.correct);
+  const marks = grade.marks ? { marks: grade.marks } : {};
 
   // L2: prequestions are ungraded for the learner and show the answer at once.
   if (row.role === "activate") {
-    return { attemptId, correct: null, feedback, solution: item.solution, correctAnswer: correctAnswerText(item), attemptNo, offerTutor: false };
+    return { attemptId, correct: null, confidence, feedback, ...marks, solution: item.solution, correctAnswer: correctAnswerText(item), attemptNo, offerTutor: false };
   }
   let offerTutor = false;
   if (!grade.correct && (row.role === "practice" || row.role === "explain_check") && req.context !== "review") {
@@ -202,7 +272,9 @@ export async function submitAttempt(
   return {
     attemptId,
     correct: grade.correct,
+    confidence,
     feedback,
+    ...marks,
     ...(grade.correct ? { solution: item.solution, correctAnswer: correctAnswerText(item) } : {}),
     attemptNo,
     offerTutor,

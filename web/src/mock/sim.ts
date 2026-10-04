@@ -1,6 +1,7 @@
-import type { NodeView, OnboardingPhase, SourceView, TopicDetail } from "@shared/api";
+import type { ItemState, LessonSummary, NodeView, OnboardingPhase, SourceView, TopicDetail } from "@shared/api";
 import type { TopicEvent } from "@shared/events";
-import type { PublicStep } from "@shared/schemas";
+import type { PracticeFocus, PublicStep } from "@shared/schemas";
+import { t } from "../lib/i18n";
 import * as fx from "./fixtures";
 
 // Simulated Claude runs for the dev mock: event bus, per-conversation run state,
@@ -63,6 +64,7 @@ const PAST: [RegExp, string][] = [
   [/^Choosing /, "Chose "],
   [/^Planning /, "Planned "],
   [/^Looking /, "Looked "],
+  [/^Ending /, "Ended "],
 ];
 
 /** Past-tense form of a mock activity label; labels already in the past stay as they are. */
@@ -120,6 +122,36 @@ export function reply(topicId: string, convId: string, text: string, activities:
     }
     await say(topicId, convId, text);
   });
+}
+
+// ---------- Teach-back ----------
+
+/** The novice's next line by how many times the learner has written; after the last follow-up it ends the teach-back. */
+export function teachbackTurn(topicId: string, convId: string, teachbackId: string) {
+  const said = conv(convId, topicId, "teachback").messages.filter((m) => m.role === "user").length;
+  const last = fx.teachbackScript.length - 1;
+  startRun(topicId, convId);
+  script(topicId, convId, async () => {
+    await pause(convId, 900);
+    await say(topicId, convId, fx.teachbackScript[Math.min(said, last)]!);
+    if (said >= last) {
+      activity(topicId, convId, "Ending the conversation");
+      finishTeachback(teachbackId);
+    }
+  });
+}
+
+/** Writes the mock debrief after a pause, as the server's judge would. */
+export function finishTeachback(teachbackId: string) {
+  const tb = fx.teachbacks[teachbackId];
+  if (!tb) return;
+  tb.status = "debriefing";
+  emit(tb.topicId, { type: "teachback.updated", teachbackId, status: "debriefing" });
+  setTimeout(() => {
+    const debrief = fx.teachbackDebrief();
+    Object.assign(tb, { status: "done", debrief, finishedAt: now(), score: { covered: debrief.ideas.filter((i) => i.verdict === "covered").length, total: debrief.ideas.length } });
+    emit(tb.topicId, { type: "teachback.updated", teachbackId, status: "done" });
+  }, 2500);
 }
 
 // ---------- Onboarding ----------
@@ -376,6 +408,142 @@ export function runLessonGeneration() {
     emit(topicId, { type: "cards.proposed", cardIds: ["pc1", "pc2", "pc3"] });
   });
 }
+
+// ---------- Practice sets ----------
+
+type StepState = (typeof lessonState.status)[number];
+
+export type PracticeSim = {
+  lesson: LessonSummary;
+  convId: string;
+  outline: { kind: string; title: string }[];
+  status: StepState[];
+  steps: (PublicStep | null)[];
+  summary: string | null;
+  /** First pool entry this set takes; sets started later take later items. */
+  offset: number;
+};
+
+export const practiceSets = new Map<string, PracticeSim>();
+let poolCursor = 0;
+
+/** A practice set as POST /api/practice creates it: an outline of placeholder items, all pending. */
+export function createPracticeSet(topicId: string, convId: string, nodes: { id: string; title: string }[], size: number, focus: PracticeFocus, title?: string): PracticeSim {
+  const id = `l-practice-${++seq}`;
+  const offset = poolCursor;
+  poolCursor = (poolCursor + size) % fx.practiceSetPool.length;
+  const lesson: LessonSummary = {
+    id,
+    topicId,
+    title: title ?? t("practiceSet.setTitle", { nodes: nodes.map((n) => n.title).join(", ") }),
+    objective: t(`practiceSet.objective.${focus}`, { count: size }),
+    level: "novice",
+    nodeIds: nodes.map((n) => n.id),
+    status: "generating",
+    createdAt: now(),
+    stepsReady: 0,
+    stepsTotal: size,
+    sourcesStale: false,
+    supersededBy: null,
+    learnerStatus: "not_started",
+    video: null,
+    practice: { size, focus },
+  };
+  const set: PracticeSim = {
+    lesson,
+    convId,
+    outline: Array.from({ length: size }, (_, i) => ({ kind: "practice", title: t("practiceSet.itemTitle", { n: i + 1 }) })),
+    status: Array.from({ length: size }, () => "pending"),
+    steps: Array.from({ length: size }, () => null),
+    summary: null,
+    offset,
+  };
+  practiceSets.set(id, set);
+  fx.topicDetails[topicId]?.lessons.push(lesson);
+  return set;
+}
+
+/** The pool item for index `idx`, under ids of its own so every set keeps separate progress. */
+function practiceStep(set: PracticeSim, idx: number): PublicStep {
+  const entry = fx.practiceSetPool[(set.offset + idx) % fx.practiceSetPool.length]!;
+  const itemId = `${set.lesson.id}-i${idx}`;
+  fx.keys[itemId] = fx.keys[entry.item.id]!;
+  return { id: `${set.lesson.id}-s${idx}`, idx, kind: "practice", title: entry.title, item: { ...entry.item, id: itemId } };
+}
+
+function setPracticeStatus(set: PracticeSim, idx: number, status: StepState) {
+  set.status[idx] = status;
+  set.lesson.stepsReady = set.status.filter((st) => st === "published" || st === "dropped").length;
+}
+
+/** Writes and checks the set's pending items one by one; the second item of a fresh set is sent back once. */
+export function runPracticeGeneration(set: PracticeSim) {
+  const topicId = set.lesson.topicId;
+  const convId = set.convId;
+  const lessonId = set.lesson.id;
+  conv(convId, topicId);
+  startRun(topicId, convId);
+  set.lesson.status = "generating";
+  let reworked = false;
+  script(topicId, convId, async () => {
+    activity(topicId, convId, "Reading what to practise");
+    await pause(convId, 1500);
+    for (let idx = 0; idx < set.status.length; idx++) {
+      if (set.status[idx] === "published" || set.status[idx] === "dropped") continue;
+      const n = idx + 1;
+      activity(topicId, convId, `Writing step ${n}`);
+      await pause(convId, 1800);
+      activity(topicId, convId, `Checking step ${n}`);
+      setPracticeStatus(set, idx, "checking");
+      emit(topicId, { type: "step.status", lessonId, idx, status: "checking", violations: [] });
+      await pause(convId, 2600);
+      if (idx === 1 && !reworked) {
+        reworked = true;
+        stepDone(topicId, convId, idx, `Step ${n} sent back for revision`);
+        emit(topicId, { type: "step.status", lessonId, idx, status: "rejected", violations: [{ rule: "Q7", message: "this item nearly duplicates an existing item of the topic; test the idea from a different angle" }] });
+        activity(topicId, convId, `Reworking step ${n}`);
+        await pause(convId, 2200);
+        emit(topicId, { type: "step.status", lessonId, idx, status: "checking", violations: [] });
+        await pause(convId, 2000);
+      }
+      const step = practiceStep(set, idx);
+      set.steps[idx] = step;
+      setPracticeStatus(set, idx, "published");
+      stepDone(topicId, convId, idx, `Step ${n} published`);
+      emit(topicId, { type: "step.published", lessonId, step });
+    }
+    await pause(convId, 1200);
+    set.summary = "Fresh cases on reading a positive result: each one turns on the base rate before the test.";
+    set.lesson.status = "finished";
+    emit(topicId, { type: "lesson.finished", lessonId, summary: set.summary });
+  });
+}
+
+/** A stopped run leaves its set failed, as the runner does for a cancelled lesson run. */
+export function failPracticeRun(convId: string) {
+  for (const set of practiceSets.values()) {
+    if (set.convId !== convId || set.lesson.status !== "generating") continue;
+    set.lesson.status = "failed";
+    set.status.forEach((st, idx) => st === "checking" && setPracticeStatus(set, idx, "pending"));
+  }
+}
+
+/** A finished set on conditional probability, so the topic page lists one before any is started. */
+function seedPracticeSet() {
+  const set = createPracticeSet("t-bayes", "cb-practice", [{ id: "cond-prob", title: "Conditional probability" }], 3, "same");
+  set.lesson.createdAt = fx.iso(2);
+  set.outline.forEach((_, idx) => {
+    set.steps[idx] = practiceStep(set, idx);
+    setPracticeStatus(set, idx, "published");
+  });
+  set.summary = "Three cases of reading a test result as a share of a group.";
+  set.lesson.status = "finished";
+  set.lesson.learnerStatus = "completed";
+  const firstTry: ItemState = { attempts: 1, wrongAttempts: 0, solved: true, gaveUp: false, hints: [], lastFeedback: null, lastConfidence: null };
+  const secondTry: ItemState = { ...firstTry, attempts: 2, wrongAttempts: 1 };
+  [firstTry, secondTry, firstTry].forEach((state, idx) => (fx.itemStates[`${set.lesson.id}-i${idx}`] = { ...state }));
+}
+seedPracticeSet();
 
 // ---------- Stream hooks ----------
 

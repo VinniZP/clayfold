@@ -82,17 +82,27 @@ export function updateMasteryAfterAttempt(attemptId: string, database: Database 
   return current.mastery;
 }
 
+/** L12: a delayed retrieval at `at` masters an exit-passed node when the exit check passed at least a day earlier. */
+function masterIfDelayed(database: Database, topicId: string, nodeId: string, at: Date): Mastery | null {
+  const current = node(database, topicId, nodeId);
+  if (!current) return null;
+  if (current.mastery === "exit_passed" && delayed(current.exit_passed_at, at)) {
+    setMastery(database, topicId, nodeId, "mastered", at);
+    return "mastered";
+  }
+  return current.mastery;
+}
+
 /** L12: a card of an exit-passed node rated Good or Easy at least a day after the exit check masters the node. */
 export function updateMasteryAfterCardReview(cardId: string, rating: number, at: Date, database: Database = db()): Mastery | null {
   const card = database
     .query<{ topic_id: string; node_id: string }, [string]>("SELECT topic_id, node_id FROM cards WHERE id = ?")
     .get(cardId);
   if (!card) return null;
-  const current = node(database, card.topic_id, card.node_id);
-  if (!current) return null;
-  if (current.mastery === "exit_passed" && rating >= 3 && delayed(current.exit_passed_at, at)) {
-    setMastery(database, card.topic_id, card.node_id, "mastered", at);
-    return "mastered";
-  }
-  return current.mastery;
+  return rating >= 3 ? masterIfDelayed(database, card.topic_id, card.node_id, at) : (node(database, card.topic_id, card.node_id)?.mastery ?? null);
+}
+
+/** L12, L20: a correct practice-test answer is unaided, so one given at least a day after the exit check masters the node. */
+export function updateMasteryAfterTestAnswer(topicId: string, nodeId: string, answeredAt: Date, database: Database = db()): Mastery | null {
+  return masterIfDelayed(database, topicId, nodeId, answeredAt);
 }

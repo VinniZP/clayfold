@@ -1,18 +1,19 @@
 import * as stylex from "@stylexjs/stylex";
-import { FileText, NotebookPen } from "lucide-react";
-import { useEffect, useState } from "react";
+import { Download, FileText, NotebookPen, TriangleAlert } from "lucide-react";
+import { useEffect, useId, useState } from "react";
 import { Navigate, useNavigate, useParams } from "react-router";
-import type { MemoryFile, NoteView } from "@shared/api";
+import { ANKI_FORMATS, type AnkiFormat, type MemoryFile, type NoteView } from "@shared/api";
 import type { MessageKey } from "@shared/i18n";
 import { useHeader } from "../components/header";
-import { CardHead, Empty, ErrorBox, Markdown, PageLoading } from "../components/ui";
+import { CardHead, Empty, ErrorBox, Markdown, PageLoading, Spinner } from "../components/ui";
 import { api } from "../lib/api";
 import { formatDateTime } from "../lib/format";
 import { t, useLang } from "../lib/i18n";
 import { useTopicStream } from "../lib/stream";
+import { useDownload } from "../lib/useDownload";
 import { useResource } from "../lib/useResource";
-import { bp, color, radius } from "../theme/tokens.stylex";
-import { card, field, text } from "../theme/ui";
+import { bp, color, radius, reading } from "../theme/tokens.stylex";
+import { btn, card, field, layout, readable, text } from "../theme/ui";
 
 const s = stylex.create({
   page: { display: "grid", gridTemplateColumns: "repeat(12, minmax(0, 1fr))", gap: 24, alignItems: "start" },
@@ -41,9 +42,53 @@ const s = stylex.create({
   note: { display: "grid", gap: 6, paddingBlock: 14, paddingInline: 18, borderRadius: radius.inner, backgroundColor: color.surface2 },
   quote: { paddingBlock: 8, paddingInline: 12, borderRadius: 12, backgroundColor: color.surface, fontStyle: "italic", color: color.textMuted, fontSize: 14 },
   meta: { marginBottom: 16 },
-  doc: { fontSize: 16 },
+  doc: { fontSize: `calc(16px * ${reading.scale})` },
   select: { height: 44, paddingBlock: 0 },
+  anki: { display: "grid", gap: 12, paddingTop: 16, borderTopWidth: 1, borderTopStyle: "solid", borderTopColor: color.border },
 });
+
+const FORMAT_LABEL: Record<AnkiFormat, MessageKey> = { apkg: "anki.apkg", txt: "anki.txt" };
+
+function AnkiExport({ topicId, allCourses }: { topicId: string; allCourses: boolean }) {
+  useLang();
+  const [format, setFormat] = useState<AnkiFormat>("apkg");
+  const download = useDownload();
+  const titleId = useId();
+  return (
+    <section aria-labelledby={titleId} {...stylex.props(s.anki)}>
+      <h2 id={titleId} {...stylex.props(text.h3)}>
+        {t("anki.title")}
+      </h2>
+      <p {...stylex.props(text.small, text.muted)}>{t("anki.body")}</p>
+      <label {...stylex.props(field.stack)}>
+        <span {...stylex.props(field.label)}>{t("anki.format")}</span>
+        <select {...stylex.props(field.input, field.select, s.select)} value={format} onChange={(e) => setFormat(e.target.value as AnkiFormat)}>
+          {ANKI_FORMATS.map((f) => (
+            <option key={f} value={f}>
+              {t(FORMAT_LABEL[f])}
+            </option>
+          ))}
+        </select>
+      </label>
+      {format === "txt" && <p {...stylex.props(text.xs, text.muted)}>{t("anki.txtHint")}</p>}
+      <div {...stylex.props(layout.actions)}>
+        <button type="button" disabled={download.busy !== null} onClick={() => download.run("topic", () => api.ankiExport(topicId, format))} {...stylex.props(btn.base, btn.primary, btn.sm)}>
+          {download.busy === "topic" ? <Spinner /> : <Download size={14} aria-hidden="true" />} {t("anki.thisCourse")}
+        </button>
+        {allCourses && (
+          <button type="button" disabled={download.busy !== null} onClick={() => download.run("all", () => api.ankiExport(null, format))} {...stylex.props(btn.base, btn.ghost, btn.sm)}>
+            {download.busy === "all" ? <Spinner /> : <Download size={14} aria-hidden="true" />} {t("anki.allCourses")}
+          </button>
+        )}
+      </div>
+      {download.error && (
+        <p role="alert" {...stylex.props(text.error)}>
+          <TriangleAlert size={14} aria-hidden="true" /> {download.error}
+        </p>
+      )}
+    </section>
+  );
+}
 
 const ORDER = ["MISSION.md", "GLOSSARY.md", "NOTES.md", "RESOURCES.md"];
 const TITLES: Record<string, MessageKey> = {
@@ -164,6 +209,7 @@ export function MemoryPage() {
             </li>
           </ul>
         )}
+        <AnkiExport topicId={topicId} allCourses={(topics.data?.length ?? 0) > 1} />
       </aside>
 
       <section {...stylex.props(card.base, s.body)} role="tabpanel" aria-label={tab === NOTES_TAB ? t("memory.myNotes") : active ? fileTitle(active.path) : t("memory.file")}>
@@ -177,13 +223,13 @@ export function MemoryPage() {
             ) : notes.data!.length === 0 ? (
               <Empty title={t("memory.noNotesTitle")}>{t("memory.noNotesBody")}</Empty>
             ) : (
-              <ul {...stylex.props(s.notes)}>
+              <ul {...stylex.props(s.notes, readable.surface)}>
                 {[...notes.data!]
                   .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
                   .map((n) => (
                     <li key={n.id} {...stylex.props(s.note)}>
                       {n.quote && <blockquote {...stylex.props(s.quote)}>{n.quote}</blockquote>}
-                      <p>{n.text}</p>
+                      {n.text && <p>{n.text}</p>}
                       <p {...stylex.props(text.xs, text.muted)}>{formatDateTime(n.createdAt)}</p>
                     </li>
                   ))}
@@ -195,7 +241,7 @@ export function MemoryPage() {
             <p {...stylex.props(s.meta, text.small, text.muted)}>
               <code>{active.path}</code> · {t("memory.updated", { date: formatDateTime(active.updatedAt) })}
             </p>
-            <Markdown src={active.content || t("memory.emptyFile")} xstyle={s.doc} />
+            <Markdown src={active.content || t("memory.emptyFile")} xstyle={[readable.surface, s.doc]} />
           </>
         ) : files.data && sorted.length === 0 ? (
           <Empty title={t("memory.noFilesTitle")}>{t("memory.noFilesBody")}</Empty>

@@ -1,7 +1,7 @@
-import { isPhraseAnswer, type Blank, type Bloom, type Card, type GraphNode, type Item, type LessonPlan, type Step } from "../../shared/schemas";
+import { isPhraseAnswer, type Blank, type Bloom, type Card, type GraphNode, type Item, type LessonPlan, type PracticeFocus, type Step } from "../../shared/schemas";
 import { CONTENT_RULES, foldLetters } from "../../shared/i18n";
 import type { RuleId, Violation } from "../../shared/rules";
-import { itemSurface, stepBodyText, stepFigure, stepItems, type ItemRole } from "./content";
+import { itemSurface, matchTargets, stepBodyText, stepFigure, stepItems, type ItemRole, type MatchItem } from "./content";
 import { checkFigure } from "./figures";
 import { jaccard, sentenceSpans, trigrams, words } from "./text";
 
@@ -63,6 +63,12 @@ export function checkItem(item: Item, path: string, role: ItemRole, r: Report): 
       });
       break;
     }
+    case "match":
+      checkMatch(item, path, r);
+      break;
+    case "sort":
+      checkSort(item, path, r);
+      break;
     case "cloze": {
       r.check("S1");
       const found = [...item.text.matchAll(/\{\{(\d+)\}\}/g)].map((m) => Number(m[1]));
@@ -112,19 +118,76 @@ function checkSingleCues(item: Extract<Item, { format: "single" }>, path: string
     r.fail("Q4", `the key (${key.text.length} chars) is much longer than the distractors (mean ${Math.round(mean)}); balance option lengths`, `${path}.options.${item.correct}.text`);
   }
 
-  const keyWords = new Set(words(key.text));
-  const distractorWords = new Set(distractors.flatMap((o) => words(o.text)));
-  const cues = [...new Set(words(item.prompt))].filter(
-    (w) => w.length >= 6 && /^\p{L}+$/u.test(w) && keyWords.has(w) && !distractorWords.has(w),
-  );
+  const cues = sharedCues(item.prompt, key.text, distractors.map((o) => o.text));
   if (cues.length > 0) {
-    r.fail("Q4", `the stem and only the key share the word(s) ${cues.map((w) => `"${w}"`).join(", ")}, which points to the key`, `${path}.options.${item.correct}.text`);
+    r.fail("Q4", `the stem and only the key share the word(s) ${quoted(cues)}, which points to the key`, `${path}.options.${item.correct}.text`);
   }
 
   const hasAbsolute = (t: string) => words(t).some((w) => ABSOLUTES.has(w));
   if (distractors.every((o) => hasAbsolute(o.text)) && !hasAbsolute(key.text)) {
     r.fail("Q4", "every distractor contains an absolute word (always/never) and the key does not", `${path}.options`);
   }
+}
+
+/** Long words `text` shares with `own` and with none of `others`: they point to `own` without the knowledge the item tests (Q4). */
+function sharedCues(text: string, own: string, others: string[]): string[] {
+  const ownWords = new Set(words(own));
+  const otherWords = new Set(others.flatMap(words));
+  return [...new Set(words(text))].filter((w) => w.length >= 6 && /^\p{L}+$/u.test(w) && ownWords.has(w) && !otherWords.has(w));
+}
+
+const quoted = (ws: string[]) => ws.map((w) => `"${w}"`).join(", ");
+
+/** Q1: an entry written twice gives the item more than one correct answer. */
+function checkRepeats(texts: string[], what: string, pathOf: (i: number) => string, r: Report): void {
+  const seen = new Set<string>();
+  texts.forEach((text, i) => {
+    const key = foldLetters(text.toLowerCase()).replace(/\s+/g, " ").trim();
+    if (seen.has(key)) r.fail("Q1", `${what} "${text}" appears twice, so more than one answer is correct`, pathOf(i));
+    seen.add(key);
+  });
+}
+
+function checkMatch(item: MatchItem, path: string, r: Report): void {
+  r.check("Q1");
+  r.check("L8");
+  r.check("Q4");
+  const n = item.pairs.length;
+  const targets = matchTargets(item);
+  checkRepeats(item.pairs.map((p) => p.left), "left entry", (i) => `${path}.pairs.${i}.left`, r);
+  checkRepeats(targets, "right entry", (i) => (i < n ? `${path}.pairs.${i}.right` : `${path}.distractors.${i - n}.text`), r);
+  if (!item.pairs.some((p) => p.mistake) && !item.distractors?.length) {
+    r.fail("L8", "name the likeliest wrong pairing: give a pair a mistake, or add a distractor with its misconception", `${path}.pairs`);
+  }
+  item.pairs.forEach((p, i) => {
+    const cues = sharedCues(p.left, p.right, targets.filter((_, j) => j !== i));
+    if (cues.length > 0) r.fail("Q4", `the left and right entry share the word(s) ${quoted(cues)} that no other right entry has, which pairs them without knowledge`, `${path}.pairs.${i}`);
+  });
+  item.distractors?.forEach((d, i) => {
+    if (catchAllOption(d.text)) r.fail("Q4", `"${d.text}": all/none-of-the-above entries are not allowed`, `${path}.distractors.${i}.text`);
+  });
+}
+
+function checkSort(item: Extract<Item, { format: "sort" }>, path: string, r: Report): void {
+  r.check("Q1");
+  r.check("L8");
+  r.check("Q4");
+  r.check("S1");
+  checkRepeats(item.categories, "category", (i) => `${path}.categories.${i}`, r);
+  checkRepeats(item.entries.map((e) => e.text), "entry", (i) => `${path}.entries.${i}.text`, r);
+  item.entries.forEach((e, i) => {
+    const own = item.categories[e.category];
+    if (own === undefined) {
+      r.fail("S1", `category ${e.category} is out of range for ${item.categories.length} categories`, `${path}.entries.${i}.category`);
+      return;
+    }
+    const cues = sharedCues(e.text, own, item.categories.filter((_, k) => k !== e.category));
+    if (cues.length > 0) r.fail("Q4", `the entry shares the word(s) ${quoted(cues)} with its category name only, which places it without knowledge`, `${path}.entries.${i}.text`);
+  });
+  item.categories.forEach((c, k) => {
+    if (!item.entries.some((e) => e.category === k)) r.fail("S1", `category "${c}" holds no entry; every category holds at least one`, `${path}.categories.${k}`);
+  });
+  if (!item.entries.some((e) => e.mistake)) r.fail("L8", "name the likeliest wrong placement: give at least one entry a mistake", `${path}.entries`);
 }
 
 export function checkCaption(step: Step, r: Report): void {
@@ -160,13 +223,36 @@ export function checkDuplicates(items: { item: Item; path: string }[], existing:
 }
 
 /** Q5 across a lesson: share of apply-or-higher items among its published items plus the check step. */
-export function checkBloomShare(blooms: Bloom[], r: Report, path = "items"): void {
+export function checkBloomShare(blooms: Bloom[], r: Report, path = "items", fix = "raise the level of check items"): void {
   r.check("Q5");
   if (blooms.length === 0) return;
   const share = blooms.filter((b) => HIGHER_BLOOM.has(b)).length / blooms.length;
   if (share < APPLY_SHARE_MIN) {
-    r.fail("Q5", `only ${Math.round(share * 100)}% of the lesson's items are apply or higher (${blooms.length} items); at least ${APPLY_SHARE_MIN * 100}% required — raise the level of check items`, path);
+    r.fail("Q5", `only ${Math.round(share * 100)}% of the lesson's items are apply or higher (${blooms.length} items); at least ${APPLY_SHARE_MIN * 100}% required — ${fix}`, path);
   }
+}
+
+const CHOICE_FORMATS = new Set<Item["format"]>(["single", "multi"]);
+
+/**
+ * A practice set has no check step, so its last index closes it: Q5 across the set and L13's mix of recall
+ * and choice. A "harder" set asks apply or higher of every item.
+ */
+export function checkPracticeSet(step: Step, practice: { focus: PracticeFocus; closing: boolean }, earlier: Item[], r: Report): void {
+  const all = [...earlier, ...stepItems(step).map((i) => i.item)];
+  if (practice.focus === "harder") {
+    r.check("Q5");
+    for (const { item, path } of stepItems(step)) {
+      if (!HIGHER_BLOOM.has(item.bloom)) r.fail("Q5", `a harder practice set asks apply or higher of every item; this one is '${item.bloom}'`, `${path}.bloom`);
+    }
+  } else if (practice.closing) {
+    checkBloomShare(all.map((i) => i.bloom), r, "item.bloom", "make this item apply or higher");
+  }
+  if (!practice.closing || all.length < 2) return;
+  r.check("L13");
+  const choice = all.filter((i) => CHOICE_FORMATS.has(i.format)).length;
+  if (choice === 0) r.fail("L13", "every item of the set is a recall item; make this one a single or multi choice item", "item.format");
+  if (choice === all.length) r.fail("L13", "every item of the set is a choice item; make this one a cloze, number, short or order item", "item.format");
 }
 
 export type StepContext = {

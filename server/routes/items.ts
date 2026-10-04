@@ -1,16 +1,18 @@
 import { Hono } from "hono";
 import { z } from "zod";
-import type { AttemptResponse, WorkedLineResponse } from "../../shared/api";
+import { CONFIDENCE_LEVELS, type AttemptResponse, type WorkedLineResponse } from "../../shared/api";
 import { db, newId } from "../db";
 import { publish } from "../hub";
 import { fail, readBody } from "./http";
 import { answerWorkedLine, giveUp, GradingError, revealWorkedLine, submitAttempt, takeHint } from "./grading";
 import type { StepRow } from "./public";
 
-const AnswerSchema = z.discriminatedUnion("format", [
+export const AnswerSchema = z.discriminatedUnion("format", [
   z.object({ format: z.literal("single"), choice: z.number().int().min(0) }),
   z.object({ format: z.literal("multi"), choices: z.array(z.number().int().min(0)).max(5) }),
   z.object({ format: z.literal("order"), sequence: z.array(z.string()).max(7) }),
+  z.object({ format: z.literal("match"), pairs: z.array(z.number().int().min(0)).max(6) }),
+  z.object({ format: z.literal("sort"), categories: z.array(z.number().int().min(0)).max(8) }),
   z.object({ format: z.literal("cloze"), blanks: z.array(z.string().max(200)).max(4) }),
   z.object({ format: z.literal("number"), value: z.number() }),
   z.object({ format: z.literal("short"), text: z.string().trim().min(1).max(3000) }),
@@ -21,6 +23,7 @@ const AttemptSchema = z.object({
   hintsUsed: z.number().int().min(0).default(0),
   durationMs: z.number().min(0).default(0),
   context: z.enum(["activate", "check", "practice", "explain", "review"]),
+  confidence: z.enum(CONFIDENCE_LEVELS).optional(),
 });
 
 function guard<T>(fn: () => T): T {

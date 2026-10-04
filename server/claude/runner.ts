@@ -118,11 +118,12 @@ export function isTopicRunning(topicId: string): boolean {
  * Sends `text` to Claude in the conversation. One process runs per conversation; a turn sent while
  * one runs waits in a queue. `display` is the user message stored in the chat: the text itself by
  * default, other text (e.g. the learner's words without the tutor context), or null for none.
+ * `quote`, the passage the learner asks about, is stored with that message.
  */
-export function runTurn(opts: { conversationId: string; text: string; display?: string | null }): void {
+export function runTurn(opts: { conversationId: string; text: string; display?: string | null; quote?: string }): void {
   const conv = loadConversation(opts.conversationId);
   const display = opts.display === undefined ? opts.text : opts.display;
-  if (display !== null) storeMessage(conv.id, { id: newId("m"), role: "user", text: display });
+  if (display !== null) storeMessage(conv.id, { id: newId("m"), role: "user", text: display, meta: opts.quote ? { quote: opts.quote } : undefined });
   const turn: Turn = { text: opts.text, learnerText: display };
   const active = runs.get(conv.id);
   if (active) {

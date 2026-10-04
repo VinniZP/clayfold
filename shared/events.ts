@@ -1,3 +1,4 @@
+import type { TeachbackStatus } from "./api";
 import type { PublicStep } from "./schemas";
 import type { Violation } from "./rules";
 
@@ -36,6 +37,7 @@ export type TopicEvent =
   | { type: "onboarding.updated" }
   | { type: "sources.updated" }
   | { type: "memory.updated" }
-  | { type: "tutor.offer"; lessonId: string; itemId: string; reason: "wrong_twice" | "idle" };
+  | { type: "tutor.offer"; lessonId: string; itemId: string; reason: "wrong_twice" | "idle" }
+  | { type: "teachback.updated"; teachbackId: string; status: TeachbackStatus };
 
 export type TopicEventType = TopicEvent["type"];

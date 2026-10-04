@@ -29,7 +29,7 @@ CREATE TABLE IF NOT EXISTS goal_plan (         -- B writes entries; A sets topic
 CREATE TABLE IF NOT EXISTS conversations (     -- A
   id TEXT PRIMARY KEY,
   topic_id TEXT NOT NULL REFERENCES topics(id) ON DELETE CASCADE,
-  kind TEXT NOT NULL CHECK (kind IN ('onboard','lesson','tutor','review')),
+  kind TEXT NOT NULL CHECK (kind IN ('onboard','lesson','tutor','review','teachback')),
   lesson_id TEXT,
   session_id TEXT,                              -- Claude Code session for --resume
   created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
@@ -60,21 +60,24 @@ CREATE TABLE IF NOT EXISTS nodes (             -- B writes graph; A writes maste
   PRIMARY KEY (topic_id, id)
 );
 
-CREATE TABLE IF NOT EXISTS sources (           -- B
+CREATE TABLE IF NOT EXISTS sources (           -- B (A adds and removes learner materials through gates/materials.ts)
   id TEXT PRIMARY KEY,
   topic_id TEXT NOT NULL REFERENCES topics(id) ON DELETE CASCADE,
-  url TEXT NOT NULL,
+  url TEXT NOT NULL,                            -- learner file or pasted text: material:<id>
   title TEXT NOT NULL,
-  kind TEXT NOT NULL,
+  kind TEXT NOT NULL,                           -- web: genre from source_add; learner: MaterialKind
   note TEXT NOT NULL,
   text TEXT,                                    -- extracted readable text; quotes are verified against it
   status TEXT NOT NULL CHECK (status IN ('ok','failed')),
   error TEXT,
   fetched_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+  origin TEXT NOT NULL DEFAULT 'web' CHECK (origin IN ('web','learner')),
+  bytes INTEGER,                                -- learner file or pasted text: its size
+  headings TEXT,                                -- learner: JSON [{text, offset}] into text
   UNIQUE (topic_id, url)
 );
 
-CREATE TABLE IF NOT EXISTS lessons (           -- B (A sets status 'failed' when a run dies)
+CREATE TABLE IF NOT EXISTS lessons (           -- B (A creates practice sets and sets status 'failed' when a run dies)
   id TEXT PRIMARY KEY,
   topic_id TEXT NOT NULL REFERENCES topics(id) ON DELETE CASCADE,
   title TEXT NOT NULL,
@@ -89,7 +92,8 @@ CREATE TABLE IF NOT EXISTS lessons (           -- B (A sets status 'failed' when
   planned_sources TEXT,                         -- JSON source ids from lesson_plan (Q8)
   sources_at_plan INTEGER,                      -- ok sources of the topic when the lesson was planned
   announced_sources TEXT,                       -- JSON source ids the lesson author has been told about
-  challenge_idx INTEGER                         -- outline index of the challenge step (gamification, G1)
+  challenge_idx INTEGER,                        -- outline index of the challenge step (gamification, G1)
+  practice TEXT                                 -- JSON {focus, seedItemId} for a practice set; NULL for a lesson
 );
 
 CREATE TABLE IF NOT EXISTS steps (             -- B
@@ -113,7 +117,7 @@ CREATE TABLE IF NOT EXISTS items (             -- B inserts on publish; A update
   node_id TEXT NOT NULL,
   format TEXT NOT NULL,
   content TEXT NOT NULL,                        -- JSON authoring Item
-  display_order TEXT,                           -- JSON permutation for options/entries (Q3)
+  display_order TEXT,                           -- JSON permutation for options/entries (Q3); match: left, then right
   status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active','flagged','retired')),
   created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
 );
@@ -129,7 +133,8 @@ CREATE TABLE IF NOT EXISTS attempts (          -- A
   gave_up INTEGER NOT NULL DEFAULT 0,
   duration_ms INTEGER,
   context TEXT NOT NULL,
-  created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+  created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+  confidence TEXT CHECK (confidence IN ('guess','unsure','sure'))  -- learner's rating before the check (L23)
 );
 
 CREATE TABLE IF NOT EXISTS cards (             -- B inserts proposals; A owns review state
@@ -253,6 +258,14 @@ CREATE TABLE IF NOT EXISTS video_clips (       -- A
   PRIMARY KEY (lesson_id, idx)
 );
 
+CREATE TABLE IF NOT EXISTS alternatives (      -- A
+  id TEXT PRIMARY KEY,
+  step_id TEXT NOT NULL REFERENCES steps(id) ON DELETE CASCADE,
+  lens TEXT NOT NULL,                           -- ExplainLens
+  body TEXT NOT NULL,                           -- Markdown; term marks name terms of the topic glossary
+  created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+);
+
 CREATE TABLE IF NOT EXISTS hint_views (        -- A
   item_id TEXT NOT NULL REFERENCES items(id) ON DELETE CASCADE,
   level INTEGER NOT NULL,                       -- 1-based rung of the item's hint ladder
@@ -305,9 +318,111 @@ CREATE TABLE IF NOT EXISTS focus_runs (        -- A
   created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
 );
 
+CREATE TABLE IF NOT EXISTS retries (           -- A; mistakes-notebook retries, kept out of attempts (L22)
+  id TEXT PRIMARY KEY,
+  item_id TEXT NOT NULL REFERENCES items(id) ON DELETE CASCADE,
+  answer TEXT NOT NULL,                         -- JSON Answer
+  correct INTEGER NOT NULL,
+  chosen_option INTEGER,                        -- authoring index for single choice
+  duration_ms INTEGER,
+  created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+);
+
+CREATE TABLE IF NOT EXISTS practice_tests (    -- A
+  id TEXT PRIMARY KEY,
+  topic_id TEXT NOT NULL REFERENCES topics(id) ON DELETE CASCADE,  -- a topic, or a goal: the test then spans the goal's topics
+  kind TEXT NOT NULL DEFAULT 'practice' CHECK (kind IN ('practice','final')),  -- final: the closing test of a completed topic
+  status TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open','grading','done')),
+  time_limit_min INTEGER,                       -- NULL: untimed
+  created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+  submitted_at TEXT
+);
+
+CREATE TABLE IF NOT EXISTS practice_test_items ( -- A
+  test_id TEXT NOT NULL REFERENCES practice_tests(id) ON DELETE CASCADE,
+  idx INTEGER NOT NULL,
+  item_id TEXT NOT NULL,                        -- items.id; content and display order are copies, so item_replace leaves a test as taken
+  topic_id TEXT NOT NULL,
+  lesson_id TEXT,
+  node_id TEXT NOT NULL,
+  content TEXT NOT NULL,                        -- JSON authoring Item
+  display_order TEXT,
+  answer TEXT,                                  -- JSON Answer; NULL while unanswered
+  answered_at TEXT,
+  flagged INTEGER NOT NULL DEFAULT 0,
+  duration_ms INTEGER NOT NULL DEFAULT 0,
+  correct INTEGER,                              -- NULL until graded
+  feedback TEXT,
+  grade_error TEXT,                             -- the grader failed; the learner can grade again
+  PRIMARY KEY (test_id, idx)
+);
+
+-- Search (GET /api/search): server/search.ts.
+
+-- No constraints: a conflict clause inside a trigger gives way to the outer statement's, so an upsert would fail on a
+-- queued duplicate. syncSearch reads the rows distinct.
+CREATE TABLE IF NOT EXISTS search_queue (      -- the triggers below; A empties it when it indexes
+  kind TEXT NOT NULL,                           -- SearchKind
+  ref TEXT NOT NULL                             -- row id; for a term, topic_id || '/' || key
+);
+
+CREATE TABLE IF NOT EXISTS search_entries (    -- A: what a hit shows, only text the browser may see (L7)
+  id INTEGER PRIMARY KEY,                       -- rowid of search_index
+  kind TEXT NOT NULL,
+  ref TEXT NOT NULL,
+  topic_id TEXT NOT NULL,
+  lesson_id TEXT,
+  step_id TEXT,
+  title TEXT NOT NULL,
+  body TEXT NOT NULL,
+  UNIQUE (kind, ref)
+);
+
+-- A: title and body of search_entries, folded by foldForSearch (shared/search.ts); trigrams match inside words.
+CREATE VIRTUAL TABLE IF NOT EXISTS search_index USING fts5(title, body, tokenize = 'trigram');
+
+CREATE TRIGGER IF NOT EXISTS search_topic_ins AFTER INSERT ON topics BEGIN INSERT INTO search_queue VALUES ('topic', new.id); END;
+CREATE TRIGGER IF NOT EXISTS search_topic_upd AFTER UPDATE OF title, request ON topics BEGIN INSERT INTO search_queue VALUES ('topic', new.id); END;
+CREATE TRIGGER IF NOT EXISTS search_topic_del AFTER DELETE ON topics BEGIN INSERT INTO search_queue VALUES ('topic', old.id); END;
+CREATE TRIGGER IF NOT EXISTS search_lesson_ins AFTER INSERT ON lessons BEGIN INSERT INTO search_queue VALUES ('lesson', new.id); END;
+CREATE TRIGGER IF NOT EXISTS search_lesson_upd AFTER UPDATE OF title, objective ON lessons BEGIN INSERT INTO search_queue VALUES ('lesson', new.id); END;
+CREATE TRIGGER IF NOT EXISTS search_lesson_del AFTER DELETE ON lessons BEGIN INSERT INTO search_queue VALUES ('lesson', old.id); END;
+CREATE TRIGGER IF NOT EXISTS search_step_ins AFTER INSERT ON steps BEGIN INSERT INTO search_queue VALUES ('step', new.id); END;
+CREATE TRIGGER IF NOT EXISTS search_step_upd AFTER UPDATE OF content, status ON steps BEGIN INSERT INTO search_queue VALUES ('step', new.id); END;
+CREATE TRIGGER IF NOT EXISTS search_step_del AFTER DELETE ON steps BEGIN INSERT INTO search_queue VALUES ('step', old.id); END;
+CREATE TRIGGER IF NOT EXISTS search_term_ins AFTER INSERT ON glossary_terms BEGIN INSERT INTO search_queue VALUES ('term', new.topic_id || '/' || new.key); END;
+CREATE TRIGGER IF NOT EXISTS search_term_upd AFTER UPDATE ON glossary_terms BEGIN
+  INSERT INTO search_queue VALUES ('term', old.topic_id || '/' || old.key), ('term', new.topic_id || '/' || new.key);
+END;
+CREATE TRIGGER IF NOT EXISTS search_term_del AFTER DELETE ON glossary_terms BEGIN INSERT INTO search_queue VALUES ('term', old.topic_id || '/' || old.key); END;
+CREATE TRIGGER IF NOT EXISTS search_note_ins AFTER INSERT ON notes BEGIN INSERT INTO search_queue VALUES ('note', new.id); END;
+CREATE TRIGGER IF NOT EXISTS search_note_upd AFTER UPDATE ON notes BEGIN INSERT INTO search_queue VALUES ('note', new.id); END;
+CREATE TRIGGER IF NOT EXISTS search_note_del AFTER DELETE ON notes BEGIN INSERT INTO search_queue VALUES ('note', old.id); END;
+CREATE TRIGGER IF NOT EXISTS search_card_ins AFTER INSERT ON cards BEGIN INSERT INTO search_queue VALUES ('card', new.id); END;
+CREATE TRIGGER IF NOT EXISTS search_card_upd AFTER UPDATE OF content, status ON cards BEGIN INSERT INTO search_queue VALUES ('card', new.id); END;
+CREATE TRIGGER IF NOT EXISTS search_card_del AFTER DELETE ON cards BEGIN INSERT INTO search_queue VALUES ('card', old.id); END;
+
+CREATE TABLE IF NOT EXISTS teachbacks (        -- A
+  id TEXT PRIMARY KEY,
+  topic_id TEXT NOT NULL REFERENCES topics(id) ON DELETE CASCADE,
+  node_id TEXT NOT NULL,
+  lesson_id TEXT NOT NULL REFERENCES lessons(id) ON DELETE CASCADE,  -- the lesson whose steps are the key ideas
+  conversation_id TEXT NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+  status TEXT NOT NULL DEFAULT 'talking' CHECK (status IN ('talking','debriefing','done','failed')),
+  debrief TEXT,                                 -- JSON TeachbackDebrief when done
+  error TEXT,
+  created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+  finished_at TEXT
+);
+
 CREATE INDEX IF NOT EXISTS idx_messages_conv ON messages(conversation_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_attempts_item ON attempts(item_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_cards_due ON cards(status, due);
 CREATE INDEX IF NOT EXISTS idx_items_topic ON items(topic_id, status);
 CREATE INDEX IF NOT EXISTS idx_hint_views_item ON hint_views(item_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_worked_answers_step ON worked_answers(step_id);
+CREATE INDEX IF NOT EXISTS idx_alternatives_step ON alternatives(step_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_retries_item ON retries(item_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_practice_tests_topic ON practice_tests(topic_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_practice_test_items_item ON practice_test_items(item_id);
+CREATE INDEX IF NOT EXISTS idx_teachbacks_topic ON teachbacks(topic_id, created_at);

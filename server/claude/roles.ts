@@ -6,12 +6,13 @@ import { db } from "../db";
 const KEY = "claude_roles";
 const ONE_SHOT: readonly ClaudeInstanceKind[] = ["critic", "grading", "narration", "video", "game"];
 
-// Lesson authoring is the long agentic run and the critic is the quality check; the learner waits on tutor, review and grading turns.
+// Lesson authoring is the long agentic run and the critic is the quality check; the learner waits on tutor, review, teach-back and grading turns.
 const DEFAULT_EFFORT: Record<ClaudeInstanceKind, Effort> = {
   onboard: "medium",
   lesson: "high",
   tutor: "low",
   review: "low",
+  teachback: "low",
   critic: "high",
   grading: "low",
   narration: "low",

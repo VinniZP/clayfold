@@ -18,14 +18,19 @@ import type {
 } from "../../shared/api";
 import type { TopicEvent } from "../../shared/events";
 import type { Card } from "../../shared/schemas";
+import { FINAL_PASS_SHARE } from "../../shared/api";
 import { isTopicRunning, runTurn } from "../claude/runner";
 import { db, newId, now } from "../db";
+import { materialViews, storeMaterials, type Material } from "../gates/materials";
 import { t } from "../i18n";
 import { publish, subscribe } from "../hub";
+import { bestFinalShare } from "../review/practice-test";
 import { createWorkspace, listMemory, uniqueSlug, watchWorkspace } from "../workspace";
-import { fail, readBody } from "./http";
+import { fail, parseBody, readBody } from "./http";
 import { lessonSummary, type LessonRow } from "./lesson-summary";
+import { extractMaterials, materialsBodyLimit, readForm } from "./materials";
 import { deriveGoalPhases, derivePhases, onboardingFacts } from "./onboarding";
+import { teachbackSummaries } from "./teachback";
 
 type TopicRow = { id: string; slug: string; title: string; created_at: string; kind: TopicSummary["kind"]; goal_id: string | null };
 
@@ -36,6 +41,8 @@ export function topicRow(topicId: string): TopicRow {
   if (!row) fail(404, "topic not found");
   return row;
 }
+
+const finalSummary = (best: number | null): TopicSummary["final"] => (best === null ? null : { percent: Math.round(best * 100), passed: best >= FINAL_PASS_SHARE });
 
 function summary(t: TopicRow): TopicSummary {
   const counts = db()
@@ -64,6 +71,7 @@ function summary(t: TopicRow): TopicSummary {
     kind: t.kind,
     goalId: t.goal_id,
     plan,
+    final: finalSummary(bestFinalShare(t.id)),
   };
 }
 
@@ -99,12 +107,22 @@ function startOnboarding(topicId: string, kind: TopicSummary["kind"], request: s
   return conversationId;
 }
 
-topics.post("/", async (c) => {
-  const { request, kind } = await readBody(
-    c,
-    z.object({ request: z.string().trim().min(3).max(2000), kind: z.enum(["topic", "goal"]).default("topic") }),
-  );
+const NewTopic = z.object({ request: z.string().trim().min(3).max(2000), kind: z.enum(["topic", "goal"]).default("topic") });
+
+topics.post("/", materialsBodyLimit, async (c) => {
+  let topic: z.infer<typeof NewTopic>;
+  let found: Material[] = [];
+  if (c.req.header("content-type")?.startsWith("multipart/form-data")) {
+    const form = await readForm(c);
+    topic = parseBody(NewTopic, { request: form.get("request") ?? undefined, kind: form.get("kind") ?? undefined });
+    if (topic.kind === "goal" && ["file", "text", "link"].some((part) => form.has(part))) fail(400, t("material.error.goal"));
+    found = await extractMaterials(form);
+  } else {
+    topic = await readBody(c, NewTopic);
+  }
+  const { request, kind } = topic;
   const topicId = insertTopic({ title: request, request, kind });
+  storeMaterials(db(), topicId, found);
   const conversationId = startOnboarding(topicId, kind, request);
   return c.json({ topicId, conversationId } satisfies CreateTopicResponse, 201);
 });
@@ -174,11 +192,11 @@ topics.get("/:topicId", (c) => {
     .all(t.id)
     .map((l) => lessonSummary(l));
   const sources = db()
-    .query<SourceView, [string]>("SELECT id, url, title, kind, note, status FROM sources WHERE topic_id = ? ORDER BY fetched_at")
+    .query<SourceView, [string]>("SELECT id, url, title, kind, note, status FROM sources WHERE topic_id = ? AND origin = 'web' ORDER BY fetched_at")
     .all(t.id);
   const conversations = db()
     .query<{ id: string; kind: ConversationKind; lessonId: string | null; createdAt: string }, [string]>(
-      "SELECT id, kind, lesson_id AS lessonId, created_at AS createdAt FROM conversations WHERE topic_id = ? ORDER BY created_at",
+      "SELECT id, kind, lesson_id AS lessonId, created_at AS createdAt FROM conversations WHERE topic_id = ? AND kind != 'teachback' ORDER BY created_at",
     )
     .all(t.id);
   const facts = onboardingFacts(t);
@@ -202,7 +220,9 @@ topics.get("/:topicId", (c) => {
        FROM goal_notes n JOIN topics t ON t.id = n.topic_id WHERE n.goal_id = ? AND n.seen_at IS NULL ORDER BY n.created_at`,
     )
     .all(t.id);
-  return c.json({ topic: summary(t), nodes, lessons, sources, conversations, onboarding, plan, goal, goalNotes } satisfies TopicDetail);
+  const materials = materialViews(db(), t.id);
+  const teachbacks = teachbackSummaries(t.id);
+  return c.json({ topic: summary(t), nodes, lessons, sources, materials, conversations, onboarding, plan, goal, goalNotes, teachbacks } satisfies TopicDetail);
 });
 
 topics.get("/:topicId/memory", async (c) => {

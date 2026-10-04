@@ -135,7 +135,7 @@ A blank comes in two kinds:
 
 ## practice
 
-Exactly one `item`. The six item formats follow, each as a practice step.
+Exactly one `item`. The eight item formats follow, each as a practice step.
 
 `single`: 3 options, at most 4 (L13); one key.
 
@@ -186,6 +186,77 @@ Exactly one `item`. The six item formats follow, each as a practice step.
 ```
 
 `order`: 3–7 entries in the correct `sequence`; the server shuffles them. See the activate example above.
+
+`match`: 3–6 `pairs` of `{ "left", "right", "mistake"? }` as the key, plus up to 2 `distractors` (`{ "text", "misconception", "feedback" }`), right entries that fit no left entry. `mistake` is `{ "misconception", "feedback" }`, shown when the learner pairs that left entry wrongly. The server shuffles both sides (Q3).
+
+```json
+{
+  "kind": "practice",
+  "title": "Which command does what",
+  "item": {
+    "format": "match",
+    "prompt": "You are tidying up your thesis repository and run three commands, one after another.\n\nWhat does each command do?",
+    "bloom": "understand",
+    "pairs": [
+      {
+        "left": "git add chapter2.md",
+        "right": "Puts the current version of the file into the index",
+        "mistake": { "misconception": "Confuses staging a change with recording it in history", "feedback": "This command only prepares the next commit; the history does not change yet." }
+      },
+      { "left": "git commit -m \"Draft\"", "right": "Saves the contents of the index as a new snapshot" },
+      {
+        "left": "git status",
+        "right": "Lists staged and unstaged changes without changing them",
+        "mistake": { "misconception": "Thinks git status records or resets the state it reports", "feedback": "This command only reads the state of the files; it changes nothing." }
+      }
+    ],
+    "distractors": [
+      { "text": "Sends the new snapshot to the server", "misconception": "Thinks a local command publishes the work", "feedback": "None of these commands talks to a server; publishing is a separate step." }
+    ],
+    "solution": "1. `git add chapter2.md` puts the current version of the chapter into the index.\n2. `git commit` saves the index as a new snapshot in the local history.\n3. `git status` reports which changes are staged and which are not.\nNone of the three sends anything to a server.",
+    "hints": ["Which of the three commands changes the history, and which only prepare or report?", "The index sits between the working directory and the history: which command fills it?"],
+    "cites": [{ "sourceId": "src_progit_basics", "quote": "The staging area is a file, generally contained in your Git directory, that stores information about what will go into your next commit." }],
+    "nodeId": "staging-area"
+  }
+}
+```
+
+`sort`: 2–4 `categories` and 4–8 `entries` of `{ "text", "category", "mistake"? }`, where `category` is the index in `categories`; every category holds at least one entry. `mistake` is shown when the learner puts that entry in a wrong category. The server shuffles the entries.
+
+```json
+{
+  "kind": "practice",
+  "title": "Where each change is",
+  "item": {
+    "format": "sort",
+    "prompt": "You edited `README.md` and `app.js`, created `notes.txt`, ran `git add README.md`, and then edited `README.md` once more.\n\nWhere is each change now?",
+    "bloom": "apply",
+    "categories": ["Only in the working directory", "In the index"],
+    "entries": [
+      { "text": "The first edit to README.md", "category": 1 },
+      {
+        "text": "The edit to app.js",
+        "category": 0,
+        "mistake": { "misconception": "Thinks git add stages every modified file", "feedback": "git add took only the file it was given; the other edits stay where they were made." }
+      },
+      {
+        "text": "The new file notes.txt",
+        "category": 0,
+        "mistake": { "misconception": "Thinks Git tracks a new file as soon as it exists", "feedback": "A new file stays untracked until it is added." }
+      },
+      {
+        "text": "The second edit to README.md",
+        "category": 0,
+        "mistake": { "misconception": "Thinks the index follows the file as it changes", "feedback": "The index keeps the version from the moment of git add; a later edit has to be added again." }
+      }
+    ],
+    "solution": "Only the first edit to `README.md` went through `git add`, so only it is in the index. `app.js` was not added, `notes.txt` is untracked, and the second edit to `README.md` came after `git add`, so all three are only in the working directory.",
+    "hints": ["Which file names did git add receive, and when?", "The index keeps the version of a file from the moment it was added."],
+    "cites": [{ "sourceId": "src_progit_recording", "quote": "It turns out that Git stages a file exactly as it is when you run the git add command." }],
+    "nodeId": "staging-area"
+  }
+}
+```
 
 `cloze`: blanks `{{1}}`, `{{2}}`… (at most 4) in `text`; `blanks` lists 1–6 accepted answers per blank in order. See the explain check above.
 

@@ -36,6 +36,25 @@
     color-scheme: dark;
   }
 
+  /* Reading preferences (lib/reading.ts); theme/tokens.stylex.ts `reading` reads them in StyleX. */
+  :root {
+    --reading-scale: 1;
+    --reading-leading: 1.65;
+    --reading-measure: 70ch;
+    --reading-font: "Onest", ui-sans-serif, system-ui, sans-serif;
+  }
+
+  :root[data-reading-size="s"] { --reading-scale: 0.9; }
+  :root[data-reading-size="l"] { --reading-scale: 1.12; }
+  :root[data-reading-size="xl"] { --reading-scale: 1.25; }
+  :root[data-reading-size="xxl"] { --reading-scale: 1.4; }
+  :root[data-reading-leading="relaxed"] { --reading-leading: 1.8; }
+  :root[data-reading-leading="airy"] { --reading-leading: 1.95; }
+  :root[data-reading-measure="narrow"] { --reading-measure: 58ch; }
+  :root[data-reading-measure="wide"] { --reading-measure: 84ch; }
+  :root[data-reading-font="legible"] { --reading-font: "Andika", "Onest", ui-sans-serif, system-ui, sans-serif; }
+  :root[data-reading-font="serif"] { --reading-font: "Literata Variable", Georgia, ui-serif, serif; }
+
   body {
     margin: 0;
     min-height: 100vh;
@@ -95,9 +114,9 @@
     opacity: 1;
   }
 
-  /* Rendered markdown (components/ui.tsx Markdown) */
+  /* Rendered markdown (components/ui.tsx Markdown); a reading surface (theme/ui.ts `readable`) sets --prose-* */
   .prose {
-    max-width: 70ch;
+    max-width: var(--prose-measure, 70ch);
     overflow-wrap: anywhere;
   }
 
@@ -107,7 +126,7 @@
 
   .prose p,
   .prose li {
-    line-height: 1.65;
+    line-height: var(--prose-leading, 1.65);
   }
 
   .prose ul,
@@ -159,6 +178,34 @@
     background: none;
   }
 
+  /* The course book (pages/Book.tsx): one document, so its headings step down in size */
+  .book .prose h1 {
+    font-size: 2em;
+  }
+
+  .book .prose h2 {
+    font-size: 1.5em;
+  }
+
+  .book .prose h3 {
+    font-size: 1.25em;
+  }
+
+  .book .prose h4 {
+    font-family: var(--font-display);
+    font-size: 1.05em;
+    font-weight: 700;
+  }
+
+  .book .prose :is(h2, h3, h4):not(:first-child) {
+    margin-top: 1.6em;
+  }
+
+  .book .prose svg {
+    max-width: min(100%, 640px);
+    height: auto;
+  }
+
   /* A glossary term mark (lib/markdown.ts); components/TermPopover.tsx shows its definition */
   .term {
     border-radius: 4px;
@@ -173,7 +220,7 @@
     background: var(--lilac-soft);
   }
 
-  /* The block the narration is reading (components/Narration.tsx) */
+  /* The block the narration is reading (components/LessonPlayer.tsx) */
   .prose > * {
     border-radius: 12px;
     transition: background-color 0.25s, box-shadow 0.25s;
@@ -350,6 +397,16 @@
   }
 }
 
+/* The same, when the learner turns reduced motion on in Settings (lib/reading.ts). */
+:root[data-reading-motion="reduce"] *,
+:root[data-reading-motion="reduce"] *::before,
+:root[data-reading-motion="reduce"] *::after {
+  animation-duration: 0.001ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.001ms !important;
+  scroll-behavior: auto !important;
+}
+
 /* Overlay scrollbars (lib/overlayScroll.ts): thin, rounded, auto-hidden, wider while hovered. */
 .os-theme-clayfold {
   --os-size: 12px;
@@ -374,4 +431,96 @@
 textarea {
   scrollbar-width: thin;
   scrollbar-color: var(--text-muted) transparent;
+}
+
+/*
+ * Print (lib/print.ts switches to the light palette first). Unlayered, so it wins over StyleX and the base layer;
+ * !important where it has to beat the unlayered overlayscrollbars rules that fix the page height.
+ * data-print="hide" drops app chrome, "flow" turns a layout grid into plain flow, "sheet" takes the card
+ * look off the printed document, and every lesson step (data-print-step) starts a new page.
+ */
+@media print {
+  @page {
+    margin: 16mm 14mm;
+  }
+
+  html,
+  body {
+    height: auto !important;
+    overflow: visible !important;
+    background: #fff;
+    color-scheme: light;
+  }
+
+  [data-overlayscrollbars],
+  [data-overlayscrollbars-viewport],
+  [data-overlayscrollbars-padding] {
+    height: auto !important;
+    max-height: none !important;
+    overflow: visible !important;
+  }
+
+  .os-scrollbar,
+  [data-print="hide"],
+  #main button,
+  #main [aria-live]:empty,
+  img[src^="/clay-web/"] {
+    display: none !important;
+  }
+
+  [data-app-root] {
+    min-height: 0;
+    padding: 0;
+    background: none;
+  }
+
+  [data-print="flow"] {
+    display: block;
+    max-width: none;
+    min-height: 0;
+    border-radius: 0;
+    background: none;
+  }
+
+  [data-print="sheet"] {
+    min-height: 0;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: none;
+  }
+
+  #main {
+    padding: 0;
+  }
+
+  *,
+  *::before,
+  *::after {
+    box-shadow: none;
+    text-shadow: none;
+  }
+
+  [data-print-step][hidden] {
+    display: block;
+  }
+
+  [data-print-step] ~ [data-print-step] {
+    break-before: page;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4 {
+    break-after: avoid;
+  }
+
+  figure,
+  pre,
+  tr,
+  li,
+  blockquote {
+    break-inside: avoid;
+  }
 }

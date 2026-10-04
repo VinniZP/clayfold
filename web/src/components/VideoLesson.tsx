@@ -6,10 +6,12 @@ import { Link } from "react-router";
 import type { ItemState, VideoExportView, VideoView } from "@shared/api";
 import type { PublicStep } from "@shared/schemas";
 import { api, ApiFailure, errorText } from "../lib/api";
+import { clock } from "../lib/format";
 import { t, useLang } from "../lib/i18n";
+import { prefersReducedMotion } from "../lib/reading";
 import { useResource } from "../lib/useResource";
 import { bp, color, font, radius } from "../theme/tokens.stylex";
-import { btn, layout, text } from "../theme/ui";
+import { btn, layout, readable, text } from "../theme/ui";
 import { LessonVideo, VideoPoster, VIDEO, type LessonVideoProps } from "../video/LessonVideo";
 import { ItemView } from "./ItemView";
 import { StepView } from "./Steps";
@@ -57,7 +59,6 @@ const POLL_MS = 2500;
 // The Player sizes itself from its inline style; with only a width it keeps the composition's aspect ratio.
 const PLAYER_STYLE = { width: "100%" };
 
-const clock = (seconds: number) => `${Math.floor(seconds / 60)}:${String(Math.floor(seconds % 60)).padStart(2, "0")}`;
 
 type LessonContext = {
   lessonId: string;
@@ -191,7 +192,7 @@ function Watch({ view, lessonId, topicId, title, steps, itemStates }: LessonCont
     const p = player.current;
     if (!p) return;
     const onFrame = ({ detail }: { detail: { frame: number } }) => setChapter(view.chapters.findLastIndex((c) => c.start <= detail.frame / VIDEO.fps));
-    const onEnded = () => questions.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    const onEnded = () => questions.current?.scrollIntoView({ behavior: prefersReducedMotion() ? "auto" : "smooth", block: "start" });
     p.addEventListener("frameupdate", onFrame);
     p.addEventListener("ended", onEnded);
     return () => {
@@ -210,7 +211,7 @@ function Watch({ view, lessonId, topicId, title, steps, itemStates }: LessonCont
   return (
     <>
       {warmup.length > 0 && (
-        <section aria-labelledby="video-warmup" {...stylex.props(s.section)}>
+        <section aria-labelledby="video-warmup" {...stylex.props(s.section, readable.surface)}>
           <h3 id="video-warmup" {...stylex.props(s.sectionTitle)}>
             {t("video.warmup")}
           </h3>
@@ -274,7 +275,7 @@ function Watch({ view, lessonId, topicId, title, steps, itemStates }: LessonCont
       <VideoDownload lessonId={lessonId} view={view} />
 
       {after.length > 0 && (
-        <section ref={questions} aria-labelledby="video-questions" {...stylex.props(s.section)}>
+        <section ref={questions} aria-labelledby="video-questions" {...stylex.props(s.section, readable.surface)}>
           <div>
             <h3 id="video-questions" {...stylex.props(s.sectionTitle)}>
               {t("video.questions")}

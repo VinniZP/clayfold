@@ -15,17 +15,70 @@ const ADDED_COLUMNS = [
   ["topics", "goal_id", "TEXT REFERENCES topics(id) ON DELETE SET NULL"],
   ["videos", "timeline", "TEXT"],
   ["lessons", "challenge_idx", "INTEGER"],
+  ["sources", "origin", "TEXT NOT NULL DEFAULT 'web' CHECK (origin IN ('web','learner'))"],
+  ["sources", "bytes", "INTEGER"],
+  ["sources", "headings", "TEXT"],
+  ["attempts", "confidence", "TEXT CHECK (confidence IN ('guess','unsure','sure'))"],
+  ["lessons", "practice", "TEXT"],
 ] as const;
+
+// Queues every searchable row once, when the search tables are created on a database that predates them.
+const SEARCH_BACKFILL = `INSERT INTO search_queue (kind, ref)
+  SELECT 'topic', id FROM topics
+  UNION ALL SELECT 'lesson', id FROM lessons
+  UNION ALL SELECT 'step', id FROM steps
+  UNION ALL SELECT 'term', topic_id || '/' || key FROM glossary_terms
+  UNION ALL SELECT 'note', id FROM notes
+  UNION ALL SELECT 'card', id FROM cards`;
+
+// SQLite cannot alter a CHECK constraint: these tables are rebuilt when an older database has other CHECKs than schema.sql.
+const CHECKED_TABLES = ["conversations"] as const;
+
+const checks = (sql: string) => (sql.match(/CHECK \([^()]*\([^()]*\)\)/g) ?? []).join("\n");
+
+function createStatement(table: string): string {
+  const statement = schema.match(new RegExp(`CREATE TABLE IF NOT EXISTS ${table} \\([\\s\\S]*?\\n\\);`))?.[0];
+  if (!statement) throw new Error(`schema.sql defines no table ${table}`);
+  return statement;
+}
+
+function rebuildChangedChecks(db: Database): void {
+  for (const table of CHECKED_TABLES) {
+    const stored = db.query<{ sql: string }, [string]>("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = ?").get(table)!.sql;
+    const wanted = createStatement(table);
+    if (checks(stored) === checks(wanted)) continue;
+    const columns = db
+      .query<{ name: string }, []>(`SELECT name FROM pragma_table_info('${table}')`)
+      .all()
+      .map((c) => c.name)
+      .join(", ");
+    // With foreign keys on, DROP TABLE would delete the rows that reference this table.
+    db.exec("PRAGMA foreign_keys = OFF");
+    try {
+      db.transaction(() => {
+        db.exec(wanted.replace(`CREATE TABLE IF NOT EXISTS ${table} (`, `CREATE TABLE ${table}_rebuilt (`));
+        db.exec(`INSERT INTO ${table}_rebuilt (${columns}) SELECT ${columns} FROM ${table}`);
+        db.exec(`DROP TABLE ${table}`);
+        db.exec(`ALTER TABLE ${table}_rebuilt RENAME TO ${table}`);
+      })();
+    } finally {
+      db.exec("PRAGMA foreign_keys = ON");
+    }
+  }
+}
 
 export function openDb(file: string = paths.db): Database {
   if (file !== ":memory:") mkdirSync(dirname(file), { recursive: true });
   const db = new Database(file, { create: true, strict: true });
+  const searchNew = !db.query("SELECT 1 FROM sqlite_master WHERE name = 'search_entries'").get();
   db.exec(schema);
+  if (searchNew) db.exec(SEARCH_BACKFILL);
   for (const [table, column, type] of ADDED_COLUMNS) {
     if (!db.query(`SELECT 1 FROM pragma_table_info('${table}') WHERE name = ?`).get(column)) {
       db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${type}`);
     }
   }
+  rebuildChangedChecks(db);
   return db;
 }
 

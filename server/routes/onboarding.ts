@@ -6,14 +6,16 @@ import { isRunning } from "../claude/runner";
 import { paths } from "../config";
 import { db } from "../db";
 import { t } from "../i18n";
-import { publisherCounts } from "../publishers";
+import { LEARNER_PUBLISHER, publisherCounts } from "../publishers";
 
 export type OnboardingFacts = {
   /** MISSION.md content, or null when the file does not exist. */
   mission: string | null;
+  /** Ok sources Claude registered; the learner's materials are counted in `materials`. */
   okSources: number;
-  /** Distinct publishers among the ok sources. */
+  /** Distinct publishers among those sources. */
   publishers: number;
+  materials: number;
   nodes: number;
   placed: number;
   /** Goals only: entries of the plan. */
@@ -57,14 +59,20 @@ export function derivePhases(f: OnboardingFacts): OnboardingPhase[] {
     {
       key: "sources",
       label: t("onboarding.sources"),
-      detail: f.okSources
-        ? `${t("onboarding.sourceCount", { count: f.okSources })} · ${t("onboarding.publisherCount", { count: f.publishers })}`
-        : null,
+      detail:
+        [
+          f.materials ? t("material.count", { count: f.materials }) : null,
+          f.okSources ? `${t("onboarding.sourceCount", { count: f.okSources })} · ${t("onboarding.publisherCount", { count: f.publishers })}` : null,
+        ]
+          .filter(Boolean)
+          .join(" · ") || null,
     },
     { key: "graph", label: t("onboarding.graph"), detail: f.nodes ? t("onboarding.nodeCount", { count: f.nodes }) : null },
     { key: "placement", label: t("onboarding.placement"), detail: f.placed ? t("onboarding.placed", { count: f.placed }) : null },
   ];
-  const done = [hasMission, hasMission, f.okSources >= MIN_SOURCES && f.publishers >= MIN_PUBLISHERS, f.nodes >= 1, f.placed >= 1 && !f.running];
+  // Learner materials are the primary sources, and Claude searches only for their gaps, so the graph closes the phase.
+  const sourcesDone = (f.okSources >= MIN_SOURCES && f.publishers >= MIN_PUBLISHERS) || (f.materials >= 1 && f.nodes >= 1);
+  const done = [hasMission, hasMission, sourcesDone, f.nodes >= 1, f.placed >= 1 && !f.running];
   const inProgress = f.running || !f.stopped;
   const active = inProgress ? done.indexOf(false) : -1;
   return phases.map((p, i) => ({ ...p, status: done[i] ? "done" : i === active ? "active" : "pending" }));
@@ -84,14 +92,15 @@ export function deriveGoalPhases(f: OnboardingFacts): OnboardingPhase[] {
 export function onboardingFacts(topic: { id: string; slug: string }, database: Database = db()): OnboardingFacts {
   const missionFile = join(paths.workspace(topic.slug), "MISSION.md");
   const counts = database
-    .query<{ sources: number; nodes: number; placed: number; planned: number }, [string, string, string, string]>(
+    .query<{ sources: number; materials: number; nodes: number; placed: number; planned: number }, [string, string, string, string, string]>(
       `SELECT
-         (SELECT count(*) FROM sources WHERE topic_id = ? AND status = 'ok') AS sources,
+         (SELECT count(*) FROM sources WHERE topic_id = ? AND status = 'ok' AND origin = 'web') AS sources,
+         (SELECT count(*) FROM sources WHERE topic_id = ? AND status = 'ok' AND origin = 'learner') AS materials,
          (SELECT count(*) FROM nodes WHERE topic_id = ?) AS nodes,
          (SELECT count(*) FROM nodes WHERE topic_id = ? AND placement IS NOT NULL) AS placed,
          (SELECT count(*) FROM goal_plan WHERE goal_id = ?) AS planned`,
     )
-    .get(topic.id, topic.id, topic.id, topic.id)!;
+    .get(topic.id, topic.id, topic.id, topic.id, topic.id)!;
   const conv = database
     .query<{ id: string; last_role: string | null }, [string]>(
       `SELECT c.id, (SELECT role FROM messages WHERE conversation_id = c.id ORDER BY rowid DESC LIMIT 1) AS last_role
@@ -102,7 +111,8 @@ export function onboardingFacts(topic: { id: string; slug: string }, database: D
   return {
     mission: existsSync(missionFile) ? readFileSync(missionFile, "utf8") : null,
     okSources: counts.sources,
-    publishers: Object.keys(publisherCounts(topic.id, database)).length,
+    publishers: Object.keys(publisherCounts(topic.id, database)).filter((p) => p !== LEARNER_PUBLISHER).length,
+    materials: counts.materials,
     nodes: counts.nodes,
     placed: counts.placed,
     planned: counts.planned,

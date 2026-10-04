@@ -1,7 +1,8 @@
 import { createContext, useContext, useEffect, type ReactNode } from "react";
 import type { ClayName } from "./ui";
 
-export type HeaderInfo = { title: string; sub?: string; back?: { to: string; label: string }; art?: ClayName };
+/** `focus` hides the app chrome around the page, leaving the title to screen readers. */
+export type HeaderInfo = { title: string; sub?: string; back?: { to: string; label: string }; art?: ClayName; focus?: boolean };
 
 const Ctx = createContext<(info: HeaderInfo) => void>(() => {});
 

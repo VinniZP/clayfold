@@ -7,19 +7,20 @@ import { checkLessonPlan } from "../../gates/deterministic";
 import { checkPlanSources, okSources } from "../../gates/diversity";
 import { criticOutage, gateStep, recordGates } from "../../gates/pipeline";
 import { checkDrawing, storeLessonReward } from "../../game/rewards";
-import { publisherOf } from "../../publishers";
+import { sourcePublisher } from "../../publishers";
 import { defineTool, ToolError, type ToolContext } from "../context";
+import type { PracticeSpec } from "./practice";
 
 export const MAX_ATTEMPTS = 3;
 
-type LessonRow = { id: string; status: string; level: Level; outline: string; challenge_idx: number | null };
+type LessonRow = { id: string; status: string; level: Level; outline: string; challenge_idx: number | null; practice: string | null };
 
-function lessonOf(ctx: ToolContext, lessonId: string): LessonRow & { outlineList: { kind: string; title: string }[] } {
+function lessonOf(ctx: ToolContext, lessonId: string): LessonRow & { outlineList: { kind: string; title: string }[]; spec: PracticeSpec | null } {
   const row = ctx.db
-    .query<LessonRow, [string, string]>("SELECT id, status, level, outline, challenge_idx FROM lessons WHERE id = ? AND topic_id = ?")
+    .query<LessonRow, [string, string]>("SELECT id, status, level, outline, challenge_idx, practice FROM lessons WHERE id = ? AND topic_id = ?")
     .get(lessonId, ctx.topicId);
   if (!row) throw new ToolError(`lesson "${lessonId}" does not exist in this topic; call lesson_plan first`);
-  return { ...row, outlineList: JSON.parse(row.outline) };
+  return { ...row, outlineList: JSON.parse(row.outline), spec: row.practice ? (JSON.parse(row.practice) as PracticeSpec) : null };
 }
 
 /**
@@ -35,7 +36,7 @@ export function announceNewSources(ctx: ToolContext, lessonId: string): string |
   ctx.db
     .query("UPDATE lessons SET announced_sources = ? WHERE id = ?")
     .run(JSON.stringify([...announced, ...fresh.map((s) => s.id)]), lessonId);
-  const list = fresh.map((s) => `${s.id} — ${s.title} (${publisherOf(s.url)})`).join("; ");
+  const list = fresh.map((s) => `${s.id} — ${s.title} (${sourcePublisher(s)})`).join("; ");
   return `${fresh.length} new sources were added to this topic after the lesson was planned: ${list}; consider citing them in the remaining steps.`;
 }
 
@@ -58,7 +59,7 @@ export const lessonPlan = defineTool({
   name: "lesson_plan",
   description: `Start a lesson: store its title, objective, graph nodes, learner level, the sources it will cite and the outline of steps (kind + title per step). The learner sees the outline at once.
 The outline must start with an 'activate' step (2-3 ungraded prequestions, L2) and end with a 'check' step (unaided exit check, L11); every nodeId must already be in the graph.
-sourceIds: ok sources of this topic (see get_learner_state). When the topic's sources come from two or more publishers, the planned sources must too (Q8), and the lesson's cites must span at least two publishers by the check step, which the gates enforce.
+sourceIds: ok sources of this topic (see get_learner_state). When the topic's sources come from two or more publishers, the planned sources must too (Q8), and the lesson's cites must span at least two publishers by the check step, which the gates enforce. All of the learner's materials (origin "learner") count as one publisher, "learner materials".
 Returns {lessonId}. Then submit the steps in order with step_submit (index = position in the outline), and close with lesson_finish.`,
   gameDescription: `Gamification is on. challenge: the outline index of one practice step, the lesson's hardest item (G1). reward: the meerkat wearable this lesson awards, drawn per the system prompt (G2); earnedBy "complete" (the exit check answered), "silver" (its crown) or "gold" (crown plus the challenge right on the first try, only with a challenge).`,
   handler(ctx, { plan, challenge, reward }) {
@@ -99,7 +100,7 @@ Returns {lessonId}. Then submit the steps in order with step_submit (index = pos
 export const stepSubmit = defineTool({
   name: "step_submit",
   description: `Submit one lesson step (the outline entry at "index") for the quality gates; the learner sees it only if it passes. The call can take up to about two minutes.
-Gates, in order: schema; deterministic rules (L2 closed prequestions, L4 explain body <= 400 words, L8 a misconception on every distractor and none on the key, Q4 no length/wording cues and no all/none-of-the-above, Q5 >= 30% apply-or-higher items across the lesson when you submit the check step, Q7 no near-duplicate items in the topic, V3 caption does not repeat the body, V6 figure parses and is self-contained); Q6 every cite's quote occurs verbatim in its stored source (take quotes from source_search); then a critic model: blind solve (Q1, exactly one defensible answer equal to the key), options-only guess (Q2), and yes/no checks (quote supports the claim, distractor plausible and wrong, Bloom label, figure V1/V2, L3, L6, L16).
+Gates, in order: schema; deterministic rules (L2 closed prequestions, L4 explain body <= 400 words, L8 a misconception on every distractor and none on the key and a named mistake in every match and sort item, Q1 no repeated match or sort entries, S1 every sort category holds an entry, Q4 no length/wording cues, no long word shared only by a match or sort entry and its own answer, and no all/none-of-the-above, Q5 >= 30% apply-or-higher items across the lesson when you submit the check step, in a practice set at its last index and on every item of a "harder" set, L13 a practice set mixes recall and choice formats by its last index, Q7 no near-duplicate items in the topic, V3 caption does not repeat the body, V6 figure parses and is self-contained); Q6 every cite's quote occurs verbatim in its stored source (take quotes from source_search); then a critic model: blind solve (Q1, exactly one defensible answer equal to the key), options-only guess (Q2), and yes/no checks (quote supports the claim, distractor plausible and wrong, Bloom label, figure V1/V2, L3, L6, L16).
 Returns {status, attempt, violations}. "published": go on to the next index. "rejected": fix exactly the listed violations (rule ID, path into the step, message) and resubmit the same index. A step is "dropped" after ${MAX_ATTEMPTS} rejected attempts; then continue with the next index. step.kind must equal the outline kind at that index; a published or dropped index cannot be resubmitted.`,
   async handler(ctx, { lessonId, index, step }) {
     const lesson = lessonOf(ctx, lessonId);
@@ -131,6 +132,7 @@ Returns {status, attempt, violations}. "published": go on to the next index. "re
     const displayOrders = items.map(({ item }) => displayOrderFor(item));
     let run;
     try {
+      const practice = lesson.spec ? { focus: lesson.spec.focus, closing: index === lesson.outlineList.length - 1 } : undefined;
       run = await gateStep({ db: ctx.db, critic: ctx.critic }, {
         topicId: ctx.topicId,
         lessonId,
@@ -138,6 +140,7 @@ Returns {status, attempt, violations}. "published": go on to the next index. "re
         step,
         displayOrders,
         challenge: lesson.challenge_idx === index,
+        practice,
       });
     } catch (e) {
       ctx.db.query("UPDATE steps SET status = 'rejected' WHERE id = ?").run(stepId);

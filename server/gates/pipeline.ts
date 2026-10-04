@@ -1,11 +1,11 @@
 import type { Database } from "bun:sqlite";
 import type { z } from "zod";
-import { Card, Item, Step, type Bloom, type Level } from "../../shared/schemas";
+import { Card, Item, Step, type Level, type PracticeFocus } from "../../shared/schemas";
 import type { Violation } from "../../shared/rules";
 import { newId } from "../db";
 import { cardCites, itemCites, itemSurface, stepCites, stepItems, type ItemRole } from "./content";
 import { criticEnabled, critiqueCards, critiqueItem, critiqueStep, type CriticRunner, type CriticVerdict } from "./critic";
-import { checkCard, checkDuplicates, checkItem, checkStep, HIGHER_BLOOM, Report } from "./deterministic";
+import { checkCard, checkDuplicates, checkItem, checkPracticeSet, checkStep, HIGHER_BLOOM, Report } from "./deterministic";
 import { checkLessonDiversity } from "./diversity";
 import { checkCites } from "./quotes";
 import { checkTermMarks, glossaryKeys } from "./terms";
@@ -84,17 +84,26 @@ function activeSurfaces(db: Database, topicId: string, excludeItemId?: string): 
     .map((row) => itemSurface(stripTermMarksDeep(JSON.parse(row.content) as Item)));
 }
 
-/** Blooms of the lesson's graded items; ungraded prequestions (activate) do not count toward Q5. */
-function lessonBlooms(db: Database, lessonId: string): Bloom[] {
+/** The lesson's published graded items; ungraded prequestions (activate) do not count toward Q5. */
+function lessonItems(db: Database, lessonId: string): Item[] {
   return db
     .query<{ content: string }, [string]>("SELECT content FROM items WHERE lesson_id = ? AND role != 'activate'")
     .all(lessonId)
-    .map((row) => (JSON.parse(row.content) as Item).bloom);
+    .map((row) => JSON.parse(row.content) as Item);
 }
 
 export async function gateStep(
   deps: GateDeps,
-  input: { topicId: string; lessonId: string; level: Level; step: unknown; displayOrders: (number[] | null)[]; challenge?: boolean },
+  input: {
+    topicId: string;
+    lessonId: string;
+    level: Level;
+    step: unknown;
+    displayOrders: (number[] | null)[];
+    challenge?: boolean;
+    /** Set for a step of a practice set; `closing` on its last index. */
+    practice?: { focus: PracticeFocus; closing: boolean };
+  },
 ): Promise<GateRun> {
   const schema = schemaStage(Step, input.step);
   if (!schema.ok) return schema.run;
@@ -102,11 +111,13 @@ export async function gateStep(
   const step = stripTermMarksDeep(schema.value);
   const run = schema.run;
 
-  const det = await checkStep(step, { existingSurfaces: activeSurfaces(deps.db, input.topicId), lessonBlooms: lessonBlooms(deps.db, input.lessonId) });
+  const earlier = lessonItems(deps.db, input.lessonId);
+  const det = await checkStep(step, { existingSurfaces: activeSurfaces(deps.db, input.topicId), lessonBlooms: earlier.map((i) => i.bloom) });
   if (input.challenge && step.kind === "practice") {
     det.check("G1");
     if (!HIGHER_BLOOM.has(step.item.bloom)) det.fail("G1", `the challenge item is "${step.item.bloom}"; a challenge is apply or higher`, "item.bloom");
   }
+  if (input.practice) checkPracticeSet(step, input.practice, earlier, det);
   checkNodes(deps.db, input.topicId, stepItems(step).map(({ item, path }) => ({ nodeId: item.nodeId, path })), det);
   checkLessonDiversity(deps.db, { topicId: input.topicId, lessonId: input.lessonId, step }, det);
   checkTermMarks(schema.value, "step", glossaryKeys(deps.db, input.topicId), det);

@@ -1,18 +1,22 @@
 import * as stylex from "@stylexjs/stylex";
-import { AudioLines, Check, Clapperboard, KeyRound, Play, Sparkles, TriangleAlert } from "lucide-react";
+import { AudioLines, BookOpen, Check, Clapperboard, Gauge, Keyboard, KeyRound, MessagesSquare, Play, RotateCcw, Sparkles, TriangleAlert } from "lucide-react";
 import { useId, useRef, useState } from "react";
 import { CLAUDE_MODELS, CLAUDE_ROLES, EFFORTS, TTS_MODELS, supportsEffort, type ClaudeModel, type Effort, type Settings, type SettingsUpdate } from "@shared/api";
 import { Segmented, Select, Switch } from "../components/controls";
 import { useHeader } from "../components/header";
 import { INTRO_EVENT } from "../components/Intro";
 import { Meerkat } from "../components/meerkat/Meerkat";
+import { showShortcuts } from "../components/Shortcuts";
 import { CardHead, ErrorBox, PageLoading, Spinner } from "../components/ui";
 import { api, errorText } from "../lib/api";
 import { setGameOn } from "../lib/game";
+import { setConfidenceEnabled } from "../lib/confidence";
 import { t, useLang } from "../lib/i18n";
+import { setKeyHints } from "../lib/shortcuts";
+import { type Reading, READING_DEFAULTS, READING_OPTIONS, setReading, useReading, useSystemReducedMotion } from "../lib/reading";
 import { useResource } from "../lib/useResource";
-import { bp, color, radius } from "../theme/tokens.stylex";
-import { banner, btn, card, chip, field, layout, text } from "../theme/ui";
+import { bp, color, font, radius, reading } from "../theme/tokens.stylex";
+import { banner, btn, card, chip, field, layout, readable, text } from "../theme/ui";
 
 const s = stylex.create({
   page: { display: "grid", gridTemplateColumns: { default: "repeat(2, minmax(0, 1fr))", [bp.mobile]: "minmax(0, 1fr)" }, gap: 20, alignItems: "stretch" },
@@ -26,6 +30,9 @@ const s = stylex.create({
   game: { backgroundImage: `linear-gradient(135deg, ${color.butter}, ${color.peachSoft})` },
   video: { backgroundImage: `linear-gradient(135deg, ${color.lilacSoft}, ${color.surface})` },
   narrationArt: { backgroundColor: color.peachSoft },
+  confidenceArt: { backgroundColor: color.pistachioSoft },
+  keyboardArt: { backgroundColor: color.lilacSoft },
+  teachbackArt: { backgroundColor: color.butter },
   whatsNew: { display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: 16 },
   keyRow: { display: "flex", gap: 8, flexWrap: "wrap" },
   keyInput: { flex: "1 1 200px" },
@@ -35,7 +42,16 @@ const s = stylex.create({
   role: { display: "grid", gap: 8, padding: 14, borderRadius: radius.inner, backgroundColor: color.surface2 },
   roleName: { fontWeight: 700, fontSize: 14.5 },
   roleRow: { display: "grid", gap: 8 },
+  readingArt: { backgroundColor: color.pistachioSoft },
+  controls: { display: "flex", flexWrap: "wrap", columnGap: 32, rowGap: 20, alignItems: "flex-start" },
+  withHint: { maxWidth: 360 },
+  glyph: (px: number) => ({ fontSize: px, fontWeight: 700, lineHeight: 1 }),
+  caption: { fontFamily: font.body },
+  preview: { display: "grid", gap: 10, paddingBlock: 22, paddingInline: 24, borderWidth: 1.5, borderStyle: "solid", borderColor: color.border, borderRadius: radius.inner },
+  previewBody: { fontSize: `calc(17px * ${reading.scale})` },
 });
+
+const SIZE_GLYPH: Record<Reading["size"], number> = { s: 12, m: 15, l: 18, xl: 21, xxl: 25 };
 
 export function SettingsPage() {
   useLang();
@@ -46,9 +62,13 @@ export function SettingsPage() {
   const onChange = (next: Settings) => settings.setData(() => next);
   return (
     <div {...stylex.props(s.page)}>
+      <ReadingSettings />
       <GameSettings settings={settings.data} onChange={onChange} />
       <VideoSettings settings={settings.data} onChange={onChange} />
       <NarrationSettings settings={settings.data} onChange={onChange} />
+      <ConfidenceSettings settings={settings.data} onChange={onChange} />
+      <KeyboardSettings settings={settings.data} onChange={onChange} />
+      <TeachbackSettings settings={settings.data} onChange={onChange} />
       <ClaudeSettings settings={settings.data} onChange={onChange} />
       <WhatsNew onChange={onChange} />
     </div>
@@ -77,6 +97,115 @@ function WhatsNew({ onChange }: { onChange: (next: Settings) => void }) {
         <Sparkles size={16} aria-hidden="true" /> {t("settings.whatsNewShow")}
       </button>
       <SaveStatus error={error} saved={false} />
+    </section>
+  );
+}
+
+/** Stored in this browser like the theme, not in the server settings, and applied as they change. */
+function ReadingSettings() {
+  useLang();
+  const pref = useReading();
+  const systemReduce = useSystemReducedMotion();
+  const [termBefore, termAfter = ""] = t("settings.reading.previewBody").split("{term}");
+  const [codeBefore, codeAfter = ""] = t("settings.reading.previewCode").split("{code}");
+  const body = stylex.props(s.previewBody);
+  const changed = (Object.keys(READING_DEFAULTS) as (keyof Reading)[]).some((key) => pref[key] !== READING_DEFAULTS[key]);
+
+  return (
+    <section aria-labelledby="settings-reading" {...stylex.props(card.base, s.card, s.wide)}>
+      <div {...stylex.props(s.feature)}>
+        <span {...stylex.props(s.featureArt, s.readingArt)}>
+          <BookOpen size={34} aria-hidden="true" />
+        </span>
+        <CardHead id="settings-reading" title={t("settings.reading")}>
+          {changed && (
+            <button type="button" onClick={() => setReading(READING_DEFAULTS)} {...stylex.props(btn.base, btn.ghost, btn.sm)}>
+              <RotateCcw size={14} aria-hidden="true" /> {t("settings.reading.reset")}
+            </button>
+          )}
+        </CardHead>
+      </div>
+      <p {...stylex.props(text.small, s.intro)}>{t("settings.readingIntro")}</p>
+      <div {...stylex.props(s.controls)}>
+        <div {...stylex.props(field.stack)}>
+          <span {...stylex.props(field.label)}>{t("settings.reading.size")}</span>
+          <Segmented
+            compact
+            label={t("settings.reading.size")}
+            value={pref.size}
+            options={READING_OPTIONS.size.map((value) => ({
+              value,
+              label: t(`settings.reading.size.${value}`),
+              content: <span {...stylex.props(s.glyph(SIZE_GLYPH[value]))}>{t("settings.reading.sizeGlyph")}</span>,
+            }))}
+            onChange={(size) => setReading({ size })}
+          />
+        </div>
+        <div {...stylex.props(field.stack)}>
+          <span {...stylex.props(field.label)}>{t("settings.reading.leading")}</span>
+          <Segmented
+            compact
+            label={t("settings.reading.leading")}
+            value={pref.leading}
+            options={READING_OPTIONS.leading.map((value) => ({ value, label: t(`settings.reading.leading.${value}`) }))}
+            onChange={(leading) => setReading({ leading })}
+          />
+        </div>
+        <div {...stylex.props(field.stack)}>
+          <span {...stylex.props(field.label)}>{t("settings.reading.measure")}</span>
+          <Segmented
+            compact
+            label={t("settings.reading.measure")}
+            value={pref.measure}
+            options={READING_OPTIONS.measure.map((value) => ({ value, label: t(`settings.reading.measure.${value}`) }))}
+            onChange={(measure) => setReading({ measure })}
+          />
+        </div>
+        <div {...stylex.props(field.stack, s.withHint)}>
+          <span {...stylex.props(field.label)}>{t("settings.reading.font")}</span>
+          <Segmented
+            compact
+            label={t("settings.reading.font")}
+            value={pref.font}
+            options={READING_OPTIONS.font.map((value) => ({ value, label: t(`settings.reading.font.${value}`) }))}
+            onChange={(font) => setReading({ font })}
+          />
+          <p {...stylex.props(text.muted, text.small)}>{t("settings.reading.fontHint")}</p>
+        </div>
+        <div {...stylex.props(field.stack, s.withHint)}>
+          <span {...stylex.props(field.label)}>{t("settings.reading.motionTitle")}</span>
+          <Switch
+            checked={systemReduce || pref.motion === "reduce"}
+            disabled={systemReduce}
+            onChange={(on) => setReading({ motion: on ? "reduce" : "system" })}
+            label={t("settings.reading.motion")}
+          />
+          <p {...stylex.props(text.muted, text.small)}>{t(systemReduce ? "settings.reading.motionSystem" : "settings.reading.motionHint")}</p>
+        </div>
+      </div>
+      <figure aria-labelledby="settings-reading-preview" {...stylex.props(s.preview, readable.surface)}>
+        <figcaption id="settings-reading-preview" {...stylex.props(field.label, s.caption)}>
+          {t("settings.reading.preview")}
+        </figcaption>
+        <div className={`prose ${body.className ?? ""}`} style={body.style}>
+          <h3>{t("settings.reading.previewTitle")}</h3>
+          <p>
+            {termBefore}
+            <span className="term">{t("settings.reading.previewTerm")}</span>
+            {termAfter}
+          </p>
+          <ul>
+            <li>{t("settings.reading.previewStep1")}</li>
+            <li>{t("settings.reading.previewStep2")}</li>
+            <li>{t("settings.reading.previewStep3")}</li>
+          </ul>
+          <p>
+            {codeBefore}
+            <code>{t("settings.reading.previewCodeSample")}</code>
+            {codeAfter}
+          </p>
+        </div>
+      </figure>
     </section>
   );
 }
@@ -141,6 +270,29 @@ function GameSettings({ settings, onChange }: { settings: Settings; onChange: (n
         disabled={busy}
         onChange={(on) => void save(() => api.setSettings({ gamification: on }))}
         label={t(settings.gamification ? "settings.gameOn" : "settings.gameOff")}
+      />
+      <SaveStatus error={error} saved={saved} />
+    </section>
+  );
+}
+
+function TeachbackSettings({ settings, onChange }: { settings: Settings; onChange: (next: Settings) => void }) {
+  useLang();
+  const { busy, error, saved, save } = useSave(onChange);
+  return (
+    <section aria-labelledby="settings-teachback" {...stylex.props(card.base, s.card, s.wide)}>
+      <div {...stylex.props(s.feature)}>
+        <span {...stylex.props(s.featureArt, s.teachbackArt)}>
+          <MessagesSquare size={34} aria-hidden="true" />
+        </span>
+        <CardHead id="settings-teachback" title={t("settings.teachback")} />
+      </div>
+      <p {...stylex.props(text.small, s.intro)}>{t("settings.teachbackIntro")}</p>
+      <Switch
+        checked={settings.teachback.enabled}
+        disabled={busy}
+        onChange={(on) => void save(() => api.setSettings({ teachbackEnabled: on }))}
+        label={t("settings.teachbackToggle")}
       />
       <SaveStatus error={error} saved={saved} />
     </section>
@@ -255,6 +407,10 @@ function NarrationSettings({ settings, onChange }: { settings: Settings; onChang
                 onChange={(m) => update({ ttsModel: m })}
               />
             </div>
+            <div {...stylex.props(field.stack)}>
+              <Switch checked={settings.narration.prefetch} disabled={busy} onChange={(on) => update({ narrationPrefetch: on })} label={t("settings.prefetch")} />
+              <p {...stylex.props(text.muted, text.xs, s.intro)}>{t("settings.prefetchHint")}</p>
+            </div>
           </div>
         ) : (
           <form
@@ -347,6 +503,63 @@ function ClaudeSettings({ settings, onChange }: { settings: Settings; onChange: 
           <TriangleAlert size={18} aria-hidden="true" /> {t("settings.claude.sameCritic", { model: modelOf("lesson") })}
         </p>
       )}
+      <SaveStatus error={error} saved={saved} />
+    </section>
+  );
+}
+
+function ConfidenceSettings({ settings, onChange }: { settings: Settings; onChange: (next: Settings) => void }) {
+  useLang();
+  const { busy, error, saved, save } = useSave((next) => {
+    setConfidenceEnabled(next.confidence.enabled);
+    onChange(next);
+  });
+  return (
+    <section aria-labelledby="settings-confidence" {...stylex.props(card.base, s.card, s.wide)}>
+      <div {...stylex.props(s.feature)}>
+        <span {...stylex.props(s.featureArt, s.confidenceArt)}>
+          <Gauge size={34} aria-hidden="true" />
+        </span>
+        <CardHead id="settings-confidence" title={t("settings.confidence")} />
+      </div>
+      <p {...stylex.props(text.small, s.intro)}>{t("settings.confidenceIntro")}</p>
+      <Switch
+        checked={settings.confidence.enabled}
+        disabled={busy}
+        onChange={(on) => void save(() => api.setSettings({ confidenceEnabled: on }))}
+        label={t("settings.confidenceToggle")}
+      />
+      <SaveStatus error={error} saved={saved} />
+    </section>
+  );
+}
+
+function KeyboardSettings({ settings, onChange }: { settings: Settings; onChange: (next: Settings) => void }) {
+  useLang();
+  const { busy, error, saved, save } = useSave((next) => {
+    onChange(next);
+    setKeyHints(next.shortcuts.hints);
+  });
+  return (
+    <section aria-labelledby="settings-keyboard" {...stylex.props(card.base, s.card, s.wide)}>
+      <div {...stylex.props(s.feature)}>
+        <span {...stylex.props(s.featureArt, s.keyboardArt)}>
+          <Keyboard size={34} aria-hidden="true" />
+        </span>
+        <CardHead id="settings-keyboard" title={t("settings.keyboard")} />
+      </div>
+      <p {...stylex.props(text.small, s.intro)}>{t("settings.keyboardIntro")}</p>
+      <Switch
+        checked={settings.shortcuts.hints}
+        disabled={busy}
+        onChange={(on) => void save(() => api.setSettings({ shortcutHints: on }))}
+        label={t("settings.keyHintsToggle")}
+      />
+      <div {...stylex.props(layout.row)}>
+        <button type="button" onClick={showShortcuts} {...stylex.props(btn.base, btn.ghost, btn.sm)}>
+          <Keyboard size={16} aria-hidden="true" /> {t("settings.showShortcuts")}
+        </button>
+      </div>
       <SaveStatus error={error} saved={saved} />
     </section>
   );

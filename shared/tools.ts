@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { Card, CourseReward, GlossaryTerm, GoalPlanEntry, GraphNode, Item, LessonPlan, LessonReward, Resident, Slug, StageTrophy, Step } from "./schemas";
+import { Card, CourseReward, GlossaryTerm, GoalPlanEntry, GraphNode, Item, LessonPlan, LessonReward, Resident, Slug, StageTrophy, Step, type Level, type PracticeFocus } from "./schemas";
 import type { RuleId, Violation } from "./rules";
 
 // MCP tool contract between the plugin skills and the server.
@@ -30,6 +30,13 @@ export const TOOL_INPUTS = {
     sourceId: z.string().min(1),
     query: z.string().min(2).max(200),
     maxPassages: z.number().int().min(1).max(8).default(4),
+  },
+  material_list: {},
+  material_read: {
+    sourceId: z.string().min(1),
+    /** Character offset to start at: 0, the previous call's nextOffset, or a heading's offset. */
+    offset: z.number().int().min(0).default(0),
+    maxChars: z.number().int().min(1000).max(40_000).default(12_000),
   },
   graph_set: {
     nodes: z.array(GraphNode).min(1).max(60),
@@ -68,7 +75,9 @@ export const TOOL_INPUTS = {
     answer: z.string().min(1).max(1000),
     outcome: z.enum(["correct", "gave_up"]),
   },
+  teachback_finish: { teachbackId: z.string().min(1) },
   get_learner_state: { nodeIds: z.array(Slug).max(20).optional() },
+  practice_brief: { lessonId: z.string().min(1) },
   item_replace: {
     queueId: z.string().min(1),
     item: Item.optional(),
@@ -105,6 +114,32 @@ export type SourceSearchResult = {
   passages: { quote: string; offset: number }[];
 };
 
+export type MaterialListResult = {
+  materials: {
+    sourceId: string;
+    title: string;
+    /** How the learner provided it: text, markdown, html, pdf or link. */
+    kind: string;
+    /** The address of a link; null for a file or pasted text. */
+    url: string | null;
+    chars: number;
+    /** Headings with their character offsets, for material_read. */
+    headings: { text: string; offset: number }[];
+    addedAt: string;
+  }[];
+};
+
+export type MaterialReadResult = {
+  sourceId: string;
+  title: string;
+  offset: number;
+  text: string;
+  /** Characters of the whole material. */
+  total: number;
+  /** Where the next call continues; null at the end. */
+  nextOffset: number | null;
+};
+
 export type GateOutcome = {
   status: "published" | "rejected" | "dropped";
   /** Attempt number for this step index, starting at 1. A step is dropped after 3 rejected attempts. */
@@ -117,6 +152,7 @@ export type GoalPlanSetResult = { ok: true; total: number; trophiesMissing?: str
 export type GoalNoteResult = { ok: true };
 export type GlossarySetResult = { ok: true; total: number };
 export type WorkedLineRecordResult = { ok: true };
+export type TeachbackFinishResult = { ok: true; instruction: string };
 export type GraphSetResult = { ok: true; total: number; added: number; updated: number };
 export type PlacementRecordResult = { ok: true };
 export type LessonPlanResult = { lessonId: string };
@@ -138,8 +174,8 @@ export type LearnerState = {
     prereqs: string[];
     unmasteredPrereqs: string[];
   }[];
-  /** Sources registered with source_add; cite them by id. */
-  sources: { id: string; title: string; url: string; kind: string; status: "ok" | "failed" }[];
+  /** Sources registered with source_add, and the learner's materials (origin "learner"); cite them by id. */
+  sources: { id: string; title: string; url: string; kind: string; status: "ok" | "failed"; origin: "web" | "learner" }[];
   recentAttempts: {
     itemId: string;
     nodeId: string;
@@ -150,13 +186,37 @@ export type LearnerState = {
     at: string;
   }[];
   misconceptionsSeen: { misconception: string; count: number; nodeId: string }[];
-  notes: { text: string; lessonId: string | null; at: string }[];
+  /** Key ideas the learner left out or got wrong in the latest debriefed teach-back on each node (L24). */
+  teachbackGaps: { nodeId: string; idea: string; verdict: "missing" | "wrong"; correction: string; at: string }[];
+  notes: { text: string; quote: string | null; lessonId: string | null; at: string }[];
   regenQueue: { queueId: string; targetType: "item" | "card"; reason: RegenReason; content: unknown }[];
   lessonsDone: { lessonId: string; title: string; nodeIds: string[]; finishedAt: string }[];
   /** The topic glossary; text marks terms from it as [[surface|Term]]. */
   glossary: { term: string; definition: string; original: string | null }[];
 };
 
-export type RegenReason = "possible_leak" | "dead_distractor" | "leech" | "learner_report";
+/** What a practice set asks for: its nodes, size and focus, and the learner's errors to target. */
+export type PracticeBrief = {
+  lessonId: string;
+  /** Items to write: one practice step per outline index 0..size-1. */
+  size: number;
+  focus: PracticeFocus;
+  level: Level;
+  nodes: { id: string; title: string; summary: string; mastery: LearnerState["nodes"][number]["mastery"] }[];
+  /** Nodes under 80% in the course's latest final exam (L21); they get about twice the items of the others. */
+  weakNodeIds: string[];
+  /** The item the learner asked for more practice like; write new cases of the same skill, never a variant of it. */
+  seed: { itemId: string; nodeId: string; format: string; bloom: string; prompt: string; misconceptions: string[] } | null;
+  /** Misconceptions the learner chose on these nodes, most frequent and most recent first. */
+  targets: PracticeTarget[];
+  /** Items on these nodes the learner answered wrongly or gave up on, most recent first. */
+  missed: { itemId: string; nodeId: string; prompt: string; misconception: string | null; gaveUp: boolean; solvedLater: boolean; at: string }[];
+  /** Prompts of the topic's active items on these nodes; new items test other cases (Q7). */
+  existingPrompts: { nodeId: string; prompt: string }[];
+};
+
+export type PracticeTarget = { misconception: string; nodeId: string; count: number; lastAt: string };
+
+export type RegenReason ="possible_leak" | "dead_distractor" | "leech" | "learner_report";
 
 export type { RuleId };

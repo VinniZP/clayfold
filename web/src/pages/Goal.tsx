@@ -5,6 +5,7 @@ import { Link, useNavigate } from "react-router";
 import type { GoalPlanEntryView, OnboardingPhase, TopicDetail } from "@shared/api";
 import { Chat } from "../components/Chat";
 import { StageTrophy } from "../components/meerkat/CourseGame";
+import { PracticeTestCard } from "../components/PracticeTestCard";
 import { Empty, Spinner } from "../components/ui";
 import { api, errorText } from "../lib/api";
 import { t, useLang } from "../lib/i18n";
@@ -223,9 +224,11 @@ export function GoalView({ detail, convId, reload }: { detail: TopicDetail; conv
                                 {t("goal.toCourse")} <ArrowRight size={14} aria-hidden="true" />
                               </Link>
                               <span {...stylex.props(s.progressText)}>
-                                {entry.topic.nodesTotal
-                                  ? t("topics.masteredOf", { mastered: entry.topic.nodesMastered, count: entry.topic.nodesTotal })
-                                  : t("topics.mapBuilding")}
+                                {entry.topic.final?.passed
+                                  ? t("final.chip", { percent: entry.topic.final.percent })
+                                  : entry.topic.nodesTotal
+                                    ? t("topics.masteredOf", { mastered: entry.topic.nodesMastered, count: entry.topic.nodesTotal })
+                                    : t("topics.mapBuilding")}
                               </span>
                             </>
                           ) : (
@@ -243,6 +246,7 @@ export function GoalView({ detail, convId, reload }: { detail: TopicDetail; conv
             <p {...stylex.props(s.hint)}>{t("goal.changeHint")}</p>
           </>
         )}
+        <PracticeTestCard key={goalId} scopeId={goalId} embedded />
       </aside>
     </div>
   );

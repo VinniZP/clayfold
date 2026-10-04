@@ -3,9 +3,17 @@ import { useSyncExternalStore } from "react";
 export type Theme = "light" | "dark";
 const KEY = "clayfold-theme";
 const listeners = new Set<() => void>();
+let printing = false;
 
 function read(): Theme {
-  return document.documentElement.dataset.theme === "dark" ? "dark" : "light";
+  return !printing && document.documentElement.dataset.theme === "dark" ? "dark" : "light";
+}
+
+/** While printing, everything that follows the theme uses the light palette; the stored choice stays. */
+export function setPrinting(on: boolean) {
+  if (printing === on) return;
+  printing = on;
+  for (const l of listeners) l();
 }
 
 export function setTheme(theme: Theme) {

@@ -1,34 +1,51 @@
 import * as stylex from "@stylexjs/stylex";
-import { ArrowLeft, ArrowRight, BookOpen, Check, CircleSlash, Clapperboard, Copy, MessageCircle, NotebookText, PanelRightClose, RotateCcw, ShieldCheck, TriangleAlert } from "lucide-react";
+import { ArrowLeft, ArrowRight, BookOpen, Check, CircleSlash, Clapperboard, Copy, Headphones, Maximize2, MessageCircle, Minimize2, NotebookText, PanelRightClose, Printer, RotateCcw, ShieldCheck, TriangleAlert } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { Link, useParams, useSearchParams } from "react-router";
-import type { LessonView } from "@shared/api";
+import type { LessonView, PracticeFrom } from "@shared/api";
 import type { MessageKey } from "@shared/i18n";
 import type { PublicItem, PublicStep } from "@shared/schemas";
 import { Chat } from "../components/Chat";
 import { DayProgress } from "../components/DayProgress";
+import { FinalInvite } from "../components/FinalExamCard";
 import { GenProgress, type Rejection } from "../components/GenProgress";
 import { LearnerChip } from "../components/LessonList";
 import { ChallengeBanner, LessonCompanion, LessonReward, useLessonFocus } from "../components/meerkat/LessonGame";
 import { StaleSources } from "../components/LessonStatus";
 import { useHeader } from "../components/header";
 import type { ItemResult } from "../components/ItemView";
+import { FOCUS_LABEL, PracticeDialog, PracticeEnd, PracticeOffer } from "../components/Practice";
+import { LessonPlayer } from "../components/LessonPlayer";
+import { LessonAudio } from "../components/Narration";
 import { ProposedCards } from "../components/ProposedCards";
+import { type SelectedText, SelectionActions } from "../components/SelectionActions";
+import { KeyHint } from "../components/Shortcuts";
 import { StepView, type LineResults, type TutorHooks } from "../components/Steps";
+import { TeachBackButton } from "../components/TeachBackButton";
 import { CardHead, Clay, Empty, ErrorBox, Markdown, PageLoading, Progress, Spinner } from "../components/ui";
 import { VideoLesson } from "../components/VideoLesson";
 import { api, errorText } from "../lib/api";
+import { setFocusMode, useFocusMode } from "../lib/focusMode";
 import { formatDateTime, kindLabel, levelLabel } from "../lib/format";
 import { useCelebrationHold } from "../lib/game";
 import { t, useLang } from "../lib/i18n";
 import { useOverlayScroll } from "../lib/overlayScroll";
+import { useRecentVisit } from "../lib/recent";
+import { prefersReducedMotion } from "../lib/reading";
+import { printPage } from "../lib/print";
 import { useStreamStatus, useTopicStream } from "../lib/stream";
 import { useGlossaryScope } from "../lib/glossary";
+import { useShortcutPage, useShortcuts } from "../lib/shortcuts";
+import { itemSettled, upcoming, type Track } from "../lib/listen";
 import { useResource } from "../lib/useResource";
 import { bp, color, font, radius } from "../theme/tokens.stylex";
-import { banner, btn, card, chip, layout, shadow, text } from "../theme/ui";
+import { banner, btn, card, chip, layout, readable, shadow, text } from "../theme/ui";
 
 type StepState = LessonView["stepStatus"][number];
+
+/** First-try share of the exit check that passes it (L12, server/review/mastery.ts). */
+const CROWN_SHARE = 0.8;
+
 type Offer = { itemId: string; stepId: string; reason: "wrong_twice" | "idle" };
 
 function itemsOf(step: PublicStep): PublicItem[] {
@@ -64,7 +81,8 @@ const STATUS_TEXT: Record<StepState, MessageKey> = {
 };
 
 const s = stylex.create({
-  tabs: { display: "flex", flexWrap: "wrap", gap: 10, marginBottom: 4 },
+  tabsRow: { display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: 4 },
+  tabs: { display: "flex", flexWrap: "wrap", gap: 10 },
   tab: {
     display: "inline-flex",
     alignItems: "center",
@@ -88,6 +106,9 @@ const s = stylex.create({
     scrollMarginTop: 24,
   },
   gridDocked: { gridTemplateColumns: "minmax(270px, 310px) minmax(0, 1fr) minmax(280px, 320px)", gap: 16 },
+  gridFocus: { gridTemplateColumns: "minmax(0, 1fr)", width: "100%", maxWidth: 980, marginInline: "auto" },
+  gridFocusDocked: { gridTemplateColumns: "minmax(0, 1fr) minmax(300px, 340px)", maxWidth: 1340 },
+  gone: { display: "none" },
   outline: {
     position: { default: "sticky", [bp.mobile]: "relative" },
     top: 24,
@@ -162,7 +183,7 @@ const s = stylex.create({
   itemTitleDropped: { textDecoration: "line-through" },
   itemSub: { fontSize: 12.5, color: color.textMuted },
   main: { minWidth: 0, paddingBlock: { default: 28, [bp.mobile]: 20 }, paddingInline: { default: 30, [bp.mobile]: 18 }, minHeight: 560, display: "grid", gap: 20, alignContent: "start" },
-  progressRow: { display: "flex", flexWrap: "wrap", alignItems: "center", gap: 14 },
+  progressRow: { display: "flex", flexWrap: "wrap", alignItems: "center", gap: 14, fontFamily: font.body },
   progressBar: { flexGrow: 1, flexBasis: 160 },
   interrupted: { flexWrap: "wrap" },
   interruptedText: { flexGrow: 1, flexBasis: 240 },
@@ -195,7 +216,7 @@ const s = stylex.create({
   },
   tutorHead: { display: "flex", alignItems: "center", gap: 12 },
   tutorAvatar: { borderRadius: "50%", backgroundColor: color.surface2 },
-  tutorName: { fontFamily: font.display, fontSize: 22, fontWeight: 800, letterSpacing: "-0.01em", flexGrow: 1 },
+  tutorName: { fontFamily: font.display, fontSize: 22, fontWeight: 800, letterSpacing: "-0.01em", flexGrow: 1, outline: "none" },
   tutorIntro: { display: "grid", gap: 8, color: color.textMuted },
   tutorList: { display: "grid", gap: 4, margin: 0, paddingLeft: 18, fontSize: 13.5 },
   offer: { display: "grid", gap: 10, padding: 16, borderRadius: radius.inner, backgroundColor: color.lilacSoft },
@@ -206,6 +227,7 @@ const s = stylex.create({
   score: { fontFamily: font.display, fontSize: 44, fontWeight: 800, lineHeight: 1, fontVariantNumeric: "tabular-nums" },
   scoreOf: { fontFamily: font.body, fontSize: 16, fontWeight: 600, color: color.textMuted },
   start: { justifySelf: "start" },
+  teachBack: { display: "grid", gap: 10, paddingBlock: 18, paddingInline: 22, borderRadius: radius.inner, backgroundColor: color.butter },
   notes: { display: "grid", gap: 12, margin: 0, padding: 0, listStyle: "none" },
   note: { display: "grid", gap: 6, paddingBlock: 14, paddingInline: 18, borderRadius: radius.inner, backgroundColor: color.surface2 },
   quote: { paddingBlock: 8, paddingInline: 12, borderRadius: 12, backgroundColor: color.surface, fontStyle: "italic", color: color.textMuted, fontSize: 14 },
@@ -250,20 +272,41 @@ export function LessonPage() {
   const [checkResults, setCheckResults] = useState<{ item: PublicItem; result: ItemResult | undefined }[] | null>(null);
   const [tutorOpen, setTutorOpen] = useState(false);
   const [tab, setTab] = useState<"lesson" | "cards" | "notes" | "video">("lesson");
-  const videoOn = useResource(() => api.settings(), "settings").data?.video.enabled ?? false;
-  const docked = useMediaQuery("(min-width: 1281px)");
+  const settings = useResource(() => api.settings(), "settings").data;
+  const videoOn = settings?.video.enabled ?? false;
+  const [listening, setListening] = useState(false);
+  const [answered, setAnswered] = useState<Record<string, boolean>>({});
+  const wide = useMediaQuery("(min-width: 1281px)");
+  const focusMode = useFocusMode();
   const outlineRef = useRef<HTMLElement>(null);
+  const tutorRef = useRef<HTMLElement>(null);
+  const tutorToggle = useRef<HTMLButtonElement>(null);
   useOverlayScroll(outlineRef);
   const [offer, setOffer] = useState<Offer | null>(null);
   const [tutorCtx, setTutorCtx] = useState<{ itemId?: string; stepId?: string; line?: number }>({});
   const [lineResults, setLineResults] = useState<Record<string, LineResults>>({});
   const [tutorConv, setTutorConv] = useState<string | null>(null);
-  const [autoSend, setAutoSend] = useState<{ text: string; nonce: number } | null>(null);
+  const [autoSend, setAutoSend] = useState<{ text: string; quote?: string; nonce: number } | null>(null);
+  const [tutorQuote, setTutorQuote] = useState<string | null>(null);
+  const [tutorFocus, setTutorFocus] = useState(0);
+  const mainRef = useRef<HTMLElement>(null);
   const offered = useRef(new Set<string>());
   const navigated = useRef(false);
   const v = view.data;
   const [resuming, setResuming] = useState(false);
   const [resumeError, setResumeError] = useState<string | null>(null);
+  const [practiceFrom, setPracticeFrom] = useState<PracticeFrom | null>(null);
+  const [stopping, setStopping] = useState(false);
+  const practice = v?.lesson.practice ?? null;
+  const stop = async () => {
+    if (!v?.authorConversationId) return;
+    setStopping(true);
+    try {
+      await api.cancel(v.authorConversationId);
+    } catch {
+      setStopping(false);
+    }
+  };
   const resume = async () => {
     setResuming(true);
     setResumeError(null);
@@ -281,6 +324,7 @@ export function LessonPage() {
   const streamStatus = useStreamStatus(topicId);
   const topics = useResource(api.topics, topicId ? "topics" : null);
   const topicTitle = topics.data?.find((t) => t.id === topicId)?.title ?? null;
+  useRecentVisit(v ? { kind: "lesson", id: lessonId, title: v.lesson.title, context: topicTitle, goal: false } : null);
 
   // The lesson grid is the page's snap point: stopping near it lines the sticky outline and tutor up with the viewport.
   useEffect(() => {
@@ -335,6 +379,11 @@ export function LessonPage() {
         case "lesson.finished":
           if (e.lessonId === lessonId) setSummary(e.summary);
           return;
+        case "conv.done":
+          if (e.conversationId !== v?.authorConversationId) return;
+          setStopping(false);
+          void view.reload();
+          return;
         case "worked.answered":
           if (e.lessonId !== lessonId) return;
           setLineResults((m) => ({ ...m, [e.stepId]: { ...m[e.stepId], [e.idx]: { text: e.text, correct: e.correct } } }));
@@ -350,6 +399,21 @@ export function LessonPage() {
     () => void view.reload(),
   );
 
+  const tracks: Track[] = useMemo(
+    () =>
+      outline.map((o, i) => {
+        const st = steps[i];
+        return { kind: o.kind, state: status[i] ?? "pending", checks: st?.kind === "explain" ? st.checks.map((c) => c.id) : [] };
+      }),
+    [outline, status, steps],
+  );
+  const settled = useMemo(() => {
+    const out: Record<string, boolean> = {};
+    for (const [id, state] of Object.entries(v?.itemStates ?? {})) out[id] = itemSettled(state);
+    return { ...out, ...answered };
+  }, [v, answered]);
+  const audio = useMemo(() => ({ open: listening, start: () => setListening(true) }), [listening]);
+
   const total = outline.length;
   const requested = Number(params.get("step"));
   const firstPublished = status.findIndex((s) => s === "published");
@@ -360,6 +424,9 @@ export function LessonPage() {
   // A new item never interrupts an exercise: unlocks wait for the lesson end.
   useCelebrationHold(!isEnd);
   useLessonFocus(lessonId, isEnd && checkResults !== null);
+  const focus = focusMode && tab === "lesson" && total > 0;
+  // In focus mode the tutor stays closed until the learner opens it; a wide screen then gives it a column beside the step.
+  const docked = wide && (!focus || tutorOpen);
 
   const go = (p: number) => {
     navigated.current = true;
@@ -378,15 +445,18 @@ export function LessonPage() {
   useEffect(() => {
     if (!navigated.current) return;
     const el = current ? document.getElementById(`step-title-${current.id}`) : document.getElementById("step-placeholder");
-    el?.focus();
-    const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    window.scrollTo({ top: 0, behavior: reduce ? "auto" : "smooth" });
+    if (!document.activeElement?.closest("[data-lesson-player]")) el?.focus();
+    window.scrollTo({ top: 0, behavior: prefersReducedMotion() ? "auto" : "smooth" });
   }, [pos, current]);
 
   // L11: no tutor during the exit check.
   useEffect(() => {
     if (inCheck) setTutorOpen(false);
   }, [inCheck]);
+
+  useEffect(() => {
+    if (focus) setTutorOpen(false);
+  }, [focus]);
 
   const openOffer = useCallback((o: Offer) => {
     const key = `${o.itemId}:${o.reason}`;
@@ -415,12 +485,83 @@ export function LessonPage() {
     [openOffer],
   );
 
+  const askAbout = (sel: SelectedText) => {
+    setOffer(null);
+    setTutorCtx({ stepId: current?.id, itemId: sel.itemId });
+    setTutorQuote(sel.quote);
+    setTutorOpen(true);
+    setTutorFocus((n) => n + 1);
+  };
+  const defineViaTutor = (sel: SelectedText & { term: string }) => {
+    setOffer(null);
+    setTutorCtx({ stepId: current?.id, itemId: sel.itemId });
+    setTutorOpen(true);
+    setAutoSend({ text: t("selection.defineMessage", { term: sel.term }), quote: sel.quote, nonce: Date.now() });
+  };
+
+  const tutorAllowed = !inCheck && topicId !== null && (docked || (!isEnd && total > 0));
+  const focusTutor = () => {
+    setTutorOpen(true);
+    requestAnimationFrame(() => {
+      const box = tutorRef.current;
+      (box?.querySelector<HTMLElement>("form textarea:not(:disabled)") ?? box?.querySelector<HTMLElement>("h2"))?.focus();
+    });
+  };
+
+  useShortcutPage("lesson");
+  useShortcuts(
+    "page",
+    (a) => {
+      switch (a.name) {
+        case "submit":
+        case "nextStep":
+          if (isEnd || total === 0) return false;
+          go(nextPos);
+          return true;
+        case "prevStep":
+          if (prevPos < 0) return false;
+          go(prevPos);
+          return true;
+        case "tutor":
+          if (!tutorAllowed) return false;
+          focusTutor();
+          return true;
+        case "narration":
+          if (listening || inCheck || isEnd || upcoming(tracks, pos) < 0) return false;
+          setListening(true);
+          return true;
+        case "escape":
+          if (docked || !tutorOpen || inCheck) return false;
+          setTutorOpen(false);
+          tutorToggle.current?.focus();
+          return true;
+        default:
+          return false;
+      }
+    },
+    tab === "lesson",
+  );
+
   useHeader({
     title: v?.lesson.title ?? t("lesson.title"),
     sub: v?.lesson.objective,
     back: topicId ? { to: `/topics/${topicId}`, label: t("lesson.backToCourse") } : undefined,
     art: "spheres",
+    focus,
   });
+
+  // F toggles focus mode and Esc leaves it. KeyF also matches the key on non-Latin layouts; keys typed into a field stay there.
+  useEffect(() => {
+    if (tab !== "lesson" || total === 0) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.defaultPrevented || e.repeat || e.ctrlKey || e.metaKey || e.altKey) return;
+      if (e.target instanceof Element && e.target.closest("input, textarea, select, [contenteditable]")) return;
+      if (e.key === "f" || e.key === "F" || e.code === "KeyF") setFocusMode(!focusMode);
+      else if (e.key === "Escape" && focusMode) setFocusMode(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [tab, total, focusMode]);
 
   if (view.loading && !v) return <PageLoading />;
   if (view.error && !v)
@@ -453,7 +594,7 @@ export function LessonPage() {
             >
               <Marker n={i + 1} st={st} done={ready && i < pos} current={i === pos && ready} />
               <span {...stylex.props(s.itemText)}>
-                <span {...stylex.props(s.itemTitle, !ready && s.itemTitleMuted, st === "dropped" && s.itemTitleDropped)}>{o.title}</span>
+                <span {...stylex.props(s.itemTitle, !ready && s.itemTitleMuted, st === "dropped" && s.itemTitleDropped)}>{steps[i]?.title ?? o.title}</span>
                 <span {...stylex.props(s.itemSub)}>
                   {o.kind === "check" ? t("lesson.noHints") : kindLabel(o.kind)}
                   {!ready && <> · {t(retrying[i] && st === "checking" ? "lesson.step.retrying" : STATUS_TEXT[st])}</>}
@@ -469,7 +610,7 @@ export function LessonPage() {
           <button type="button" aria-current={isEnd ? "step" : undefined} onClick={() => go(total)} {...stylex.props(s.item, isEnd && s.itemCurrent)}>
             <Marker n={null} st="published" done={false} current={isEnd} />
             <span {...stylex.props(s.itemText)}>
-              <span {...stylex.props(s.itemTitle)}>{t("lesson.summaryAndCards")}</span>
+              <span {...stylex.props(s.itemTitle)}>{t(practice ? "practiceSet.results" : "lesson.summaryAndCards")}</span>
             </span>
           </button>
         </li>
@@ -479,30 +620,40 @@ export function LessonPage() {
   );
 
   const tabs = (
-    <div role="tablist" aria-label={t("lesson.sections")} {...stylex.props(s.tabs)}>
-      {(
-        [
-          ["lesson", "lesson.title", <BookOpen key="i" size={20} aria-hidden="true" />],
-          ["video", "lesson.tab.video", <Clapperboard key="i" size={20} aria-hidden="true" />],
-          ["cards", "lesson.tab.cards", <Copy key="i" size={20} aria-hidden="true" />],
-          ["notes", "lesson.tab.notes", <NotebookText key="i" size={20} aria-hidden="true" />],
-        ] as const
-      )
-        .filter(([key]) => key !== "video" || videoOn)
-        .map(([key, label, icon]) => (
-        <button
-          key={key}
-          type="button"
-          role="tab"
-          id={`tab-${key}`}
-          aria-selected={tab === key}
-          aria-controls={`panel-${key}`}
-          onClick={() => setTab(key)}
-          {...stylex.props(s.tab, tab === key && s.tabOn)}
-        >
-          {icon} {t(label)}
+    <div data-print="hide" {...stylex.props(s.tabsRow)}>
+      <div role="tablist" aria-label={t("lesson.sections")} {...stylex.props(s.tabs)}>
+        {(
+          [
+            ["lesson", "lesson.title", <BookOpen key="i" size={20} aria-hidden="true" />],
+            ["video", "lesson.tab.video", <Clapperboard key="i" size={20} aria-hidden="true" />],
+            ["cards", "lesson.tab.cards", <Copy key="i" size={20} aria-hidden="true" />],
+            ["notes", "lesson.tab.notes", <NotebookText key="i" size={20} aria-hidden="true" />],
+          ] as const
+        )
+          .filter(([key]) => (key !== "video" || videoOn) && !(practice && (key === "video" || key === "cards")))
+          .map(([key, label, icon]) => (
+          <button
+            key={key}
+            type="button"
+            role="tab"
+            id={`tab-${key}`}
+            aria-selected={tab === key}
+            aria-controls={`panel-${key}`}
+            onClick={() => {
+              setTab(key);
+              if (key !== "lesson") setListening(false);
+            }}
+            {...stylex.props(s.tab, tab === key && s.tabOn)}
+          >
+            {icon} {t(label)}
+          </button>
+        ))}
+      </div>
+      {tab === "lesson" && (
+        <button type="button" onClick={() => void printPage()} {...stylex.props(btn.base, btn.ghost)}>
+          <Printer size={18} aria-hidden="true" /> {t("lesson.print")}
         </button>
-      ))}
+      )}
     </div>
   );
 
@@ -548,21 +699,23 @@ export function LessonPage() {
     );
 
   return (
-    <>
-      {tabs}
+    <LessonAudio.Provider value={audio}>
+      {!focus && tabs}
       {stale}
-      <div role="tabpanel" id="panel-lesson" aria-labelledby="tab-lesson" {...stylex.props(s.grid, showTutor && docked && s.gridDocked)}>
-        <aside ref={outlineRef} aria-label={t("lesson.outline")} {...stylex.props(card.base, s.outline)}>
+      <div role="tabpanel" id="panel-lesson" data-print="flow" aria-labelledby="tab-lesson" {...stylex.props(s.grid, focus && s.gridFocus, showTutor && docked && (focus ? s.gridFocusDocked : s.gridDocked))}>
+        <aside ref={outlineRef} data-print="hide" aria-label={t("lesson.outline")} {...stylex.props(card.base, s.outline, focus && s.gone)}>
           <p {...stylex.props(s.outlineTitle)}>{topicTitle ?? t("lesson.plan")}</p>
           <p {...stylex.props(s.outlineMeta, text.small, text.muted, text.tnum)}>
-            {t("lesson.outlineMeta", { level: levelLabel(v.lesson.level), ready: published, total })}
+            {practice
+              ? t("practiceSet.outlineMeta", { focus: t(FOCUS_LABEL[practice.focus]), ready: published, total })
+              : t("lesson.outlineMeta", { level: levelLabel(v.lesson.level), ready: published, total })}
           </p>
           <p {...stylex.props(s.outlineMeta)}>
             <LearnerChip status={v.lesson.learnerStatus} />
             {streamStatus === "reconnecting" && <span {...stylex.props(chip.base, chip.xs, chip.butter)}> {t("lesson.reconnecting")}</span>}
           </p>
           <details {...stylex.props(s.mobileOnly)}>
-            <summary {...stylex.props(s.mobileSummary)}>{isEnd ? t("lesson.summaryTitle") : t("lesson.stepOf", { n: pos + 1, total })} · {t("lesson.contents")}</summary>
+            <summary {...stylex.props(s.mobileSummary)}>{isEnd ? t(practice ? "practiceSet.results" : "lesson.summaryTitle") : t("lesson.stepOf", { n: pos + 1, total })} · {t("lesson.contents")}</summary>
             {outlineList}
           </details>
           <nav aria-label={t("lesson.steps")} {...stylex.props(s.desktopOnly)}>
@@ -570,11 +723,13 @@ export function LessonPage() {
           </nav>
         </aside>
 
-        <section aria-label={t("lesson.step")} {...stylex.props(card.base, s.main)}>
+        <section ref={mainRef} aria-label={t("lesson.step")} data-print="sheet" {...stylex.props(card.base, s.main, readable.surface)}>
           {v.lesson.status === "failed" && (
-            <div role="alert" {...stylex.props(banner.base, banner.danger, s.interrupted)}>
+            <div role="alert" data-print="hide" {...stylex.props(banner.base, banner.danger, s.interrupted)}>
               <TriangleAlert size={16} aria-hidden="true" />
-              <span {...stylex.props(s.interruptedText)}>{resumeError ? t("lesson.resumeFailed", { error: resumeError }) : t("lesson.interrupted")}</span>
+              <span {...stylex.props(s.interruptedText)}>
+                {resumeError ? t("lesson.resumeFailed", { error: resumeError }) : t(practice ? "practiceSet.interrupted" : "lesson.interrupted")}
+              </span>
               <button type="button" disabled={resuming} onClick={resume} {...stylex.props(btn.base, btn.danger, btn.sm)}>
                 {resuming ? <Spinner /> : <RotateCcw size={14} aria-hidden="true" />} {t("lesson.resume")}
               </button>
@@ -588,15 +743,28 @@ export function LessonPage() {
           ) : (
             <>
               {v.lesson.status !== "failed" && status.some((st) => st === "pending" || st === "checking") && (
-                <GenProgress outline={outline} status={status} checkingSince={checkingSince} rejection={rejection} />
+                <div data-print="hide">
+                  <GenProgress
+                    outline={outline.map((o, i) => ({ title: steps[i]?.title ?? o.title }))}
+                    status={status}
+                    checkingSince={checkingSince}
+                    rejection={rejection}
+                    practice={practice && v.authorConversationId ? { onStop: stop, stopping } : undefined}
+                  />
+                </div>
               )}
-              <div {...stylex.props(s.progressRow)}>
-                <span {...stylex.props(text.small, text.muted, text.tnum)}>{isEnd ? t("lesson.summaryShort") : t("lesson.stepOf", { n: pos + 1, total })}</span>
+              <div data-print="hide" {...stylex.props(s.progressRow)}>
+                <span {...stylex.props(text.small, text.muted, text.tnum)}>{isEnd ? t(practice ? "practiceSet.results" : "lesson.summaryShort") : t("lesson.stepOf", { n: pos + 1, total })}</span>
                 <div {...stylex.props(s.progressBar)}>
                   <Progress value={done} max={total} label={t("lesson.stepsDone")} />
                 </div>
+                {!listening && !inCheck && !isEnd && current?.kind !== "explain" && upcoming(tracks, pos) >= 0 && (
+                  <button type="button" onClick={() => setListening(true)} {...stylex.props(btn.base, btn.ghost, btn.sm)}>
+                    <Headphones size={16} aria-hidden="true" /> {t("narration.listenLesson")}
+                  </button>
+                )}
                 {!inCheck && !isEnd && !docked && (
-                  <button type="button" aria-expanded={tutorOpen} onClick={() => setTutorOpen((o) => !o)} {...stylex.props(btn.base, btn.ghost, btn.sm)}>
+                  <button ref={tutorToggle} type="button" aria-expanded={tutorOpen} onClick={() => setTutorOpen((o) => !o)} {...stylex.props(btn.base, btn.ghost, btn.sm)}>
                     <MessageCircle size={16} aria-hidden="true" /> {t("lesson.tutor")}
                   </button>
                 )}
@@ -605,12 +773,29 @@ export function LessonPage() {
                     <ShieldCheck size={12} aria-hidden="true" /> {t("lesson.noHintsChip")}
                   </span>
                 )}
+                <button
+                  type="button"
+                  aria-keyshortcuts={focus ? "Escape" : "F"}
+                  title={t(focus ? "lesson.focusExitHint" : "lesson.focusHint")}
+                  onClick={() => setFocusMode(!focus)}
+                  {...stylex.props(btn.base, focus ? btn.soft : btn.ghost, btn.sm)}
+                >
+                  {focus ? <Minimize2 size={16} aria-hidden="true" /> : <Maximize2 size={16} aria-hidden="true" />} {t(focus ? "lesson.focusExit" : "lesson.focus")}
+                </button>
               </div>
 
               {Object.values(steps).map((st) => (
-                <div key={st.id} hidden={st.idx !== pos || isEnd}>
-                  {st.idx === v.challengeIdx && <ChallengeBanner />}
-                  {st.idx === 0 && <LessonReward lessonId={lessonId} />}
+                <div key={st.id} data-print-step="" hidden={st.idx !== pos || isEnd}>
+                  {st.idx === v.challengeIdx && (
+                    <div data-print="hide">
+                      <ChallengeBanner />
+                    </div>
+                  )}
+                  {st.idx === 0 && (
+                    <div data-print="hide">
+                      <LessonReward lessonId={lessonId} />
+                    </div>
+                  )}
                   <StepView
                     step={st}
                     topicId={topicId}
@@ -618,15 +803,18 @@ export function LessonPage() {
                     active={st.idx === pos && !isEnd}
                     tutor={tutorHooks}
                     onCheckResults={(_, r) => setCheckResults(r)}
+                    onPractiseMore={(itemId) => setPracticeFrom({ itemId })}
+                    onExplainCheck={(itemId, r) => setAnswered((m) => ({ ...m, [itemId]: r.gaveUp !== null || r.response.correct !== false }))}
                     itemStates={v.itemStates}
                     revealedLines={v.revealedLines[st.id] ?? []}
                     lineResults={lineResults[st.id]}
+                    alternatives={v.alternatives[st.id] ?? []}
                   />
                 </div>
               ))}
 
               {!isEnd && !current && (
-                <div id="step-placeholder" tabIndex={-1} role="status" {...stylex.props(s.wait)}>
+                <div id="step-placeholder" tabIndex={-1} role="status" data-print="hide" {...stylex.props(s.wait)}>
                   {status[pos] === "dropped" ? (
                     <>
                       <CircleSlash size={24} aria-hidden="true" />
@@ -644,38 +832,74 @@ export function LessonPage() {
                 </div>
               )}
 
-              {isEnd && (
-                <LessonEnd summary={summary} generating={v.lesson.status === "generating" && !summary} checkResults={checkResults} topicId={topicId} lessonId={lessonId} />
-              )}
+              {isEnd &&
+                (practice ? (
+                  <PracticeEnd lessonId={lessonId} topicId={topicId} summary={summary} generating={v.lesson.status === "generating" && !summary} />
+                ) : (
+                  <LessonEnd
+                    lessonId={lessonId}
+                    summary={summary}
+                    generating={v.lesson.status === "generating" && !summary}
+                    checkResults={checkResults}
+                    topicId={topicId}
+                    teachBack={
+                      settings?.teachback.enabled &&
+                      (v.lesson.status === "ready" || v.lesson.status === "finished") &&
+                      v.lesson.nodeIds[0] &&
+                      (v.lesson.learnerStatus === "completed" || (checkResults?.length && checkResults.every((r) => r.result)))
+                        ? { lessonId, nodeId: v.lesson.nodeIds[0] }
+                        : null
+                    }
+                  />
+                ))}
 
-              <nav aria-label={t("lesson.stepNav")} {...stylex.props(s.nav)}>
+              <nav aria-label={t("lesson.stepNav")} data-print="hide" {...stylex.props(s.nav)}>
                 <button type="button" disabled={prevPos < 0} onClick={() => go(prevPos)} {...stylex.props(btn.base, btn.ghost, s.navBtn)}>
-                  <ArrowLeft size={17} aria-hidden="true" /> {t("lesson.back")}
+                  <ArrowLeft size={17} aria-hidden="true" /> {t("lesson.back")} <KeyHint>K</KeyHint>
                 </button>
                 {!isEnd && (
                   <button type="button" onClick={() => go(nextPos)} {...stylex.props(btn.base, btn.primary, s.navBtn)}>
-                    {t(nextPos >= total ? "lesson.toSummary" : "lesson.next")} <ArrowRight size={17} aria-hidden="true" />
+                    {t(nextPos >= total ? "lesson.toSummary" : "lesson.next")} <ArrowRight size={17} aria-hidden="true" /> <KeyHint>J</KeyHint>
                   </button>
                 )}
               </nav>
+
+              {listening && (
+                <LessonPlayer
+                  tracks={tracks}
+                  titles={outline.map((o) => o.title)}
+                  steps={steps}
+                  pos={pos}
+                  settled={settled}
+                  go={go}
+                  lessonTitle={v.lesson.title}
+                  topicTitle={topicTitle}
+                  prefetch={settings?.narration.prefetch ?? false}
+                  onClose={() => setListening(false)}
+                />
+              )}
             </>
           )}
         </section>
 
         {docked && inCheck && (
-          <aside aria-label={t("lesson.tutor")} {...stylex.props(card.base, s.checkNote)}>
+          <aside aria-label={t("lesson.tutor")} data-print="hide" {...stylex.props(card.base, s.checkNote)}>
             <Clay name="tutor-reading" size={160} />
             <p {...stylex.props(text.h3)}>{t("lesson.checkNoTutor")}</p>
             <p {...stylex.props(text.small, text.muted)}>{t("lesson.checkNoTutorBody")}</p>
           </aside>
         )}
 
+        <PracticeDialog from={practiceFrom} defaultFocus="mistakes" onClose={() => setPracticeFrom(null)} />
+
         {showTutor && topicId && (
-          <aside aria-label={t("lesson.aiTutor")} {...stylex.props(card.base, s.tutor, !docked && s.tutorFloating, !docked && shadow.pop)}>
+          <aside ref={tutorRef} aria-label={t("lesson.aiTutor")} data-print="hide" {...stylex.props(card.base, s.tutor, !docked && s.tutorFloating, !docked && shadow.pop)}>
             <div {...stylex.props(s.tutorHead)}>
               <Clay name="tutor-avatar" size={56} xstyle={s.tutorAvatar} />
-              <h2 {...stylex.props(s.tutorName)}>{t("lesson.aiTutor")}</h2>
-              {!docked && (
+              <h2 tabIndex={-1} {...stylex.props(s.tutorName)}>
+                {t("lesson.aiTutor")}
+              </h2>
+              {(!docked || focus) && (
                 <button type="button" aria-label={t("lesson.closeTutor")} onClick={() => setTutorOpen(false)} {...stylex.props(btn.base, btn.icon)}>
                   <PanelRightClose size={18} aria-hidden="true" />
                 </button>
@@ -712,6 +936,8 @@ export function LessonPage() {
               placeholder={t("lesson.tutorPlaceholder")}
               persona={{ avatar: "tutor-avatar", illustration: "tutor-reading" }}
               autoSend={autoSend}
+              quote={tutorQuote ? { text: tutorQuote, onRemove: () => setTutorQuote(null) } : null}
+              focusKey={tutorFocus}
               empty={
                 <div {...stylex.props(s.tutorIntro)}>
                   <p {...stylex.props(text.small)}>{t("lesson.tutorIntro")}</p>
@@ -722,8 +948,8 @@ export function LessonPage() {
                   </ul>
                 </div>
               }
-              onSend={async (msg) => {
-                const res = await api.tutor(lessonId, { ...tutorCtx, stepId: tutorCtx.stepId ?? current?.id, text: msg });
+              onSend={async (msg, quote) => {
+                const res = await api.tutor(lessonId, { ...tutorCtx, stepId: tutorCtx.stepId ?? current?.id, quote, text: msg });
                 setTutorConv(res.conversationId);
                 return res.conversationId;
               }}
@@ -731,8 +957,19 @@ export function LessonPage() {
           </aside>
         )}
       </div>
-      <LessonCompanion topicId={topicId} step={pos} total={total} />
-    </>
+      {!focus && (
+        <div data-print="hide">
+          <LessonCompanion topicId={topicId} step={pos} total={total} />
+        </div>
+      )}
+      <SelectionActions
+        roots={[mainRef, tutorRef]}
+        tutorBlocked={inCheck ? t("selection.tutorOffCheck") : null}
+        noteTarget={topicId ? { topicId, lessonId, stepId: current?.id } : null}
+        onAsk={askAbout}
+        onDefine={defineViaTutor}
+      />
+    </LessonAudio.Provider>
   );
 }
 
@@ -754,11 +991,11 @@ function LessonNotes({ topicId, lessonId }: { topicId: string; lessonId: string 
       ) : mine.length === 0 ? (
         <Empty title={t("lesson.noNotesTitle")}>{t("lesson.noNotesBody")}</Empty>
       ) : (
-        <ul {...stylex.props(s.notes)}>
+        <ul {...stylex.props(s.notes, readable.surface)}>
           {mine.map((n) => (
             <li key={n.id} {...stylex.props(s.note)}>
               {n.quote && <blockquote {...stylex.props(s.quote)}>{n.quote}</blockquote>}
-              <p>{n.text}</p>
+              {n.text && <p>{n.text}</p>}
               <p {...stylex.props(text.xs, text.muted)}>{formatDateTime(n.createdAt)}</p>
             </li>
           ))}
@@ -769,17 +1006,20 @@ function LessonNotes({ topicId, lessonId }: { topicId: string; lessonId: string 
 }
 
 function LessonEnd({
+  lessonId,
   summary,
   generating,
   checkResults,
   topicId,
-  lessonId,
+  teachBack,
 }: {
+  lessonId: string;
   summary: string | null;
   generating: boolean;
   checkResults: { item: PublicItem; result: ItemResult | undefined }[] | null;
   topicId: string | null;
-  lessonId: string;
+  /** Offered once the learner has completed the lesson (L24). */
+  teachBack: { lessonId: string; nodeId: string } | null;
 }) {
   useLang();
   const correct = checkResults?.filter((r) => r.result?.response.correct === true).length ?? 0;
@@ -797,6 +1037,8 @@ function LessonEnd({
         </div>
       )}
       <LessonReward lessonId={lessonId} end />
+      <PracticeOffer lessonId={lessonId} belowCrown={!!checkResults && checkResults.length > 0 && correct / checkResults.length < CROWN_SHARE} />
+      {topicId && <FinalInvite topicId={topicId} />}
       <DayProgress />
       {summary ? (
         <Markdown src={summary} />
@@ -805,6 +1047,15 @@ function LessonEnd({
           <Spinner /> {t("lesson.stillWriting")}
         </p>
       ) : null}
+      {teachBack && topicId && (
+        <section aria-labelledby="teachback-title" {...stylex.props(s.teachBack)}>
+          <h3 id="teachback-title" {...stylex.props(text.h3)}>
+            {t("teachback.title")}
+          </h3>
+          <p>{t("teachback.lessonEnd", { name: t("teachback.persona") })}</p>
+          <TeachBackButton topicId={topicId} nodeId={teachBack.nodeId} lessonId={teachBack.lessonId} primary />
+        </section>
+      )}
       <section aria-labelledby="cards-title">
         <CardHead title={t("lesson.reviewCards")} id="cards-title" />
         <p {...stylex.props(text.small, text.muted)}>{t("lesson.reviewCardsHint")}</p>

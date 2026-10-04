@@ -55,6 +55,39 @@ export function orderItem(sourceId = "src_top_1"): Item {
   };
 }
 
+export function matchItem(sourceId = "src_top_1"): Extract<Item, { format: "match" }> {
+  return {
+    format: "match",
+    prompt: "Match each command to what it does.",
+    pairs: [
+      {
+        left: "git add",
+        right: "Puts a change into the index",
+        mistake: { misconception: "Confuses staging a change with recording it", feedback: "This command prepares the next snapshot; nothing is recorded yet." },
+      },
+      { left: "git commit", right: "Records the index as a snapshot" },
+      { left: "git status", right: "Lists staged and unstaged changes" },
+    ],
+    distractors: [{ text: "Sends commits to the remote", misconception: "Thinks a commit leaves the machine", feedback: "None of these commands talks to a server." }],
+    ...common(sourceId),
+  };
+}
+
+export function sortItem(sourceId = "src_top_1"): Extract<Item, { format: "sort" }> {
+  return {
+    format: "sort",
+    prompt: "Where is each change right now?",
+    categories: ["Working tree", "Index"],
+    entries: [
+      { text: "A file you just edited", category: 0, mistake: { misconception: "Thinks saving a file stages it", feedback: "Saving writes the file to disk; nothing has been added yet." } },
+      { text: "A change after git add", category: 1 },
+      { text: "A new file nobody added", category: 0 },
+      { text: "A change ready for the next commit", category: 1 },
+    ],
+    ...common(sourceId),
+  };
+}
+
 export function clozeItem(sourceId = "src_top_1"): Item {
   return {
     format: "cloze",
@@ -111,4 +144,36 @@ export function card(sourceId = "src_top_1", overrides: Partial<Card> = {}): Car
     cites: [{ sourceId, quote: QUOTE_ADD }],
     ...overrides,
   };
+}
+
+/** A one-page PDF with a Helvetica text line per entry and, optionally, an outline of top-level titles. */
+export function pdfFile(lines: string[], outline: string[] = []): Uint8Array<ArrayBuffer> {
+  const escape = (s: string) => s.replace(/[()\\]/g, "\\$&");
+  const content = `BT /F1 12 Tf 72 720 Td 14 TL ${lines.map((l) => `(${escape(l)}) '`).join(" ")} ET`;
+  const objects = [
+    `<< /Type /Catalog /Pages 2 0 R${outline.length ? " /Outlines 6 0 R" : ""} >>`,
+    "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+    "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>",
+    `<< /Length ${content.length} >>\nstream\n${content}\nendstream`,
+    "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+  ];
+  if (outline.length) {
+    const first = objects.length + 2;
+    objects.push(`<< /Type /Outlines /First ${first} 0 R /Last ${first + outline.length - 1} 0 R /Count ${outline.length} >>`);
+    outline.forEach((title, i) => {
+      const n = first + i;
+      const links = `${i > 0 ? ` /Prev ${n - 1} 0 R` : ""}${i < outline.length - 1 ? ` /Next ${n + 1} 0 R` : ""}`;
+      objects.push(`<< /Title (${escape(title)}) /Parent 6 0 R${links} /Dest [3 0 R /Fit] >>`);
+    });
+  }
+  let out = "%PDF-1.4\n";
+  const offsets = objects.map((o, i) => {
+    const at = out.length;
+    out += `${i + 1} 0 obj\n${o}\nendobj\n`;
+    return at;
+  });
+  const xref = out.length;
+  out += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n${offsets.map((o) => `${String(o).padStart(10, "0")} 00000 n \n`).join("")}`;
+  out += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF\n`;
+  return new TextEncoder().encode(out);
 }

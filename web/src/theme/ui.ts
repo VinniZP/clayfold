@@ -1,5 +1,5 @@
 import * as stylex from "@stylexjs/stylex";
-import { bp, color, font, motion, radius, space } from "./tokens.stylex";
+import { bp, color, font, motion, radius, reading, space } from "./tokens.stylex";
 
 // Shared style primitives: buttons, cards, fields, chips, banners and text helpers.
 
@@ -196,6 +196,17 @@ export const text = stylex.create({
   },
   error: { display: "flex", alignItems: "center", gap: 6, color: color.danger, fontSize: 14, fontWeight: 500 },
   saved: { display: "inline-flex", alignItems: "center", gap: 6, color: color.success, fontSize: 14, fontWeight: 600 },
+});
+
+/** Text the learner reads (lessons, conversations, notes, the glossary) follows the reading preferences inside it. */
+export const readable = stylex.create({
+  surface: {
+    fontFamily: reading.font,
+    fontSize: `calc(15px * ${reading.scale})`,
+    lineHeight: reading.leading,
+    "--prose-leading": reading.leading,
+    "--prose-measure": reading.measure,
+  },
 });
 
 export const layout = stylex.create({
