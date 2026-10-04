@@ -6,7 +6,7 @@ import { effortArgs, roleRun } from "./roles";
 
 export type OneShotResult<T> = { ok: true; value: T; costUsd: number | null } | { ok: false; error: string };
 
-export type JsonPromptPurpose = "critic" | "grading" | "narration";
+export type JsonPromptPurpose = "critic" | "grading" | "narration" | "video";
 
 type ActiveCall = { pid: number; purpose: JsonPromptPurpose; model: string; effort: Effort | null; startedAt: string };
 
@@ -19,7 +19,7 @@ export function activeJsonPrompts(): ActiveCall[] {
 
 /**
  * Runs a single tool-less `claude -p` call that must answer with JSON matching `schema`
- * (--json-schema). Used by the critic, short-answer grading and narration scripts.
+ * (--json-schema). Used by the critic, short-answer grading, narration and video scripts.
  */
 export async function runJsonPrompt<T>(opts: {
   prompt: string;

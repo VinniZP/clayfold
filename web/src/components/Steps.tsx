@@ -86,7 +86,8 @@ type StepProps = {
   topicId: string | null;
   lessonId: string;
   active: boolean;
-  tutor: TutorHooks;
+  /** Without it the step offers no tutor, as on a page that has no tutor panel. */
+  tutor?: TutorHooks;
   onCheckResults?: (stepId: string, results: { item: PublicItem; result: ItemResult | undefined }[]) => void;
   itemStates: Record<string, ItemState>;
   revealedLines: { idx: number; text: string }[];
@@ -108,8 +109,8 @@ export function StepView({ step, topicId, lessonId, active, tutor, onCheckResult
 
 function StepBody({ step, active, tutor, onCheckResults, itemStates, revealedLines, lineResults }: Omit<StepProps, "topicId" | "lessonId">) {
   useLang();
-  const offer = (itemId: string, reason: "wrong_twice" | "idle") => tutor.onOfferTutor(itemId, step.id, reason);
-  const ask = (itemId: string) => tutor.onAskTutor(itemId, step.id);
+  const offer = tutor && ((itemId: string, reason: "wrong_twice" | "idle") => tutor.onOfferTutor(itemId, step.id, reason));
+  const ask = tutor && ((itemId: string) => tutor.onAskTutor(itemId, step.id));
   switch (step.kind) {
     case "activate":
       return (
@@ -151,7 +152,7 @@ function StepBody({ step, active, tutor, onCheckResults, itemStates, revealedLin
         </>
       );
     case "worked_example":
-      return <WorkedExample step={step} revealedLines={revealedLines} lineResults={lineResults} onAnswerLine={(line) => tutor.onAnswerLine(step.id, line)} />;
+      return <WorkedExample step={step} revealedLines={revealedLines} lineResults={lineResults} onAnswerLine={(line) => tutor?.onAnswerLine(step.id, line)} />;
     case "practice":
       return (
         <ItemView item={step.item} mode="practice" context="practice" active={active} initial={itemStates[step.item.id]} onOfferTutor={offer} onAskTutor={ask} />

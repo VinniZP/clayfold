@@ -3,6 +3,7 @@ import type { LessonSummary } from "../../shared/api";
 import { db } from "../db";
 import { lessonCitedPublishers, MIN_PUBLISHERS } from "../gates/diversity";
 import { publisherCounts } from "../publishers";
+import { videoStatus } from "./video";
 
 export type LessonRow = {
   id: string;
@@ -83,5 +84,6 @@ export function lessonSummary(l: LessonRow, database: Database = db()): LessonSu
     sourcesStale,
     supersededBy,
     learnerStatus: learnerStatus(l.id, database),
+    video: videoStatus(l.id, database),
   };
 }

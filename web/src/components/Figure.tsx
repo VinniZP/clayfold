@@ -71,7 +71,7 @@ function MermaidFigure({ code, theme }: { code: string; theme: Theme }) {
       if (cancelled) return;
       try {
         const { default: mermaid } = await import("mermaid");
-        const t = tokens(["surface", "surface-2", "text", "text-muted", "primary", "lilac-soft", "border-strong", "peach-soft", "pistachio-soft", ...FIG_TOKENS]);
+        const t = tokens(["surface", "surface-2", "text", "text-muted", "primary", "lilac-soft", "border-strong", "peach-soft", "pistachio-soft", ...FIG_TOKENS], ref.current);
         mermaid.initialize({
           startOnLoad: false,
           securityLevel: "strict",
@@ -137,7 +137,7 @@ function ChartFigure({ spec, theme }: { spec: Record<string, unknown>; theme: Th
     (async () => {
       try {
         const { default: embed } = await import("vega-embed");
-        const t = tokens(["text", "text-muted", "border", "border-strong", ...FIG_TOKENS]);
+        const t = tokens(["text", "text-muted", "border", "border-strong", ...FIG_TOKENS], ref.current);
         const font = getComputedStyle(document.body).fontFamily;
         const figs = FIG_TOKENS.map((k) => t[k]);
         if (cancelled || !ref.current) return;
@@ -184,14 +184,13 @@ function ChartFigure({ spec, theme }: { spec: Record<string, unknown>; theme: Th
 
 const WIDGET_CSP = "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:";
 
-function widgetDoc(html: string, channel: string): string {
-  const t = tokens(["text", "text-muted", "surface", "surface-2", "border", "border-strong", "primary", "on-primary", "focus", "lilac-soft", ...FIG_TOKENS]);
+function widgetDoc(html: string, channel: string, theme: Theme, from: Element | null): string {
+  const t = tokens(["text", "text-muted", "surface", "surface-2", "border", "border-strong", "primary", "on-primary", "focus", "lilac-soft", ...FIG_TOKENS], from);
   const vars = Object.entries(t)
     .map(([k, v]) => `--${k}:${v};`)
     .join("");
-  const scheme = document.documentElement.dataset.theme === "dark" ? "dark" : "light";
   const reporter = `<script>(function(){var c=${JSON.stringify(channel)};function s(){parent.postMessage({clayfoldWidget:c,height:Math.ceil(document.body.getBoundingClientRect().height)},"*")}new ResizeObserver(s).observe(document.body);addEventListener("load",s);s()})()</script>`;
-  return `<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="${WIDGET_CSP}"><style>:root{${vars}color-scheme:${scheme}}html,body{margin:0;background:transparent;}body{display:flow-root;color:var(--text);font:15px/1.5 system-ui,sans-serif}*:focus-visible{outline:2px solid var(--focus);outline-offset:2px}</style></head><body>${html}${reporter}</body></html>`;
+  return `<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="${WIDGET_CSP}"><style>:root{${vars}color-scheme:${theme}}html,body{margin:0;background:transparent;}body{display:flow-root;color:var(--text);font:15px/1.5 system-ui,sans-serif}*:focus-visible{outline:2px solid var(--focus);outline-offset:2px}</style></head><body>${html}${reporter}</body></html>`;
 }
 
 function WidgetFigure({ html, title, theme }: { html: string; title: string; theme: Theme }) {
@@ -200,7 +199,7 @@ function WidgetFigure({ html, title, theme }: { html: string; title: string; the
   const [height, setHeight] = useState(240);
   const [doc, setDoc] = useState("");
 
-  useEffect(() => setDoc(widgetDoc(html, channel)), [html, channel, theme]);
+  useEffect(() => setDoc(widgetDoc(html, channel, theme, frame.current)), [html, channel, theme]);
 
   useEffect(() => {
     const onMessage = (e: MessageEvent) => {
@@ -215,8 +214,10 @@ function WidgetFigure({ html, title, theme }: { html: string; title: string; the
   return <iframe ref={frame} sandbox="allow-scripts" srcDoc={doc} title={title} {...stylex.props(s.widget, s.widgetHeight(height))} />;
 }
 
-export function FigureView({ figure }: { figure: PublicFigure }) {
-  const theme = useTheme();
+/** `theme` pins the figure's palette, as in a video that keeps its own; otherwise it follows the app. */
+export function FigureView({ figure, theme: pinned }: { figure: PublicFigure; theme?: Theme }) {
+  const appTheme = useTheme();
+  const theme = pinned ?? appTheme;
   const body = (() => {
     switch (figure.kind) {
       case "mermaid":

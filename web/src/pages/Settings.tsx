@@ -31,6 +31,7 @@ export function SettingsPage() {
     <div {...stylex.props(s.page)}>
       <ClaudeSettings settings={settings.data} onChange={onChange} />
       <NarrationSettings settings={settings.data} onChange={onChange} />
+      <VideoSettings settings={settings.data} onChange={onChange} />
     </div>
   );
 }
@@ -258,6 +259,24 @@ function NarrationSettings({ settings, onChange }: { settings: Settings; onChang
         </>
       )}
 
+      <SaveStatus error={error} saved={saved} />
+    </section>
+  );
+}
+
+function VideoSettings({ settings, onChange }: { settings: Settings; onChange: (next: Settings) => void }) {
+  useLang();
+  const { busy, error, saved, save } = useSave(onChange);
+  const enabled = settings.video.enabled;
+  return (
+    <section aria-labelledby="settings-video" {...stylex.props(card.base, s.card)}>
+      <CardHead id="settings-video" title={t("settings.video")} />
+      <p {...stylex.props(text.muted, s.intro)}>{t("settings.videoIntro")}</p>
+      <label {...stylex.props(field.inline)}>
+        <input type="checkbox" checked={enabled} disabled={busy} onChange={(e) => void save(() => api.setSettings({ videoEnabled: e.target.checked }))} />
+        {t("settings.videoToggle")}
+      </label>
+      {enabled && !settings.narration.keySet && <p {...stylex.props(text.small, text.muted, s.intro)}>{t("settings.videoNeedsKey")}</p>}
       <SaveStatus error={error} saved={saved} />
     </section>
   );

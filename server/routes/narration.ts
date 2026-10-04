@@ -64,7 +64,7 @@ export function scriptPrompt(title: string, blocks: string[]): string {
   ].join("\n\n");
 }
 
-const MARKUP = /[`*#|]|\]\(|https?:\/\//;
+export const MARKUP = /[`*#|]|\]\(|https?:\/\//;
 
 export function scriptProblem(parts: ScriptPart[], blockCount: number): string | null {
   let last = 0;
