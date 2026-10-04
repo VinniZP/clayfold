@@ -19,13 +19,15 @@ export function goalMinutes(database: Database): GoalMinutes {
   return row ? (JSON.parse(row.value) as GoalMinutes) : DEFAULT_GOAL;
 }
 
-/** Walks every day from the first answered item or reviewed card; today extends the streak only once active. */
+/** Walks every day from the first answered item, test question or reviewed card; today extends the streak only once active. */
 function streak(at: Date, database: Database): TodayView["streak"] {
   const first = database
     .query<{ first: string | null }, []>(
       `SELECT min(t) AS first FROM (
          SELECT min(created_at) AS t FROM attempts WHERE gave_up = 0
-         UNION ALL SELECT min(reviewed_at) FROM reviews)`,
+         UNION ALL SELECT min(reviewed_at) FROM reviews
+         UNION ALL SELECT min(q.answered_at) FROM practice_test_items q JOIN practice_tests p ON p.id = q.test_id
+           WHERE p.submitted_at IS NOT NULL AND q.answer IS NOT NULL)`,
     )
     .get()!.first;
   const today = startOfDay(at);

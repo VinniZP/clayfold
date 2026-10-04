@@ -31,6 +31,12 @@ export function activity(days: number, topicId: string | null, at: Date = new Da
        WHERE a.created_at >= ? ${topicFilter}`,
     )
     .all(...args, ...args);
+  const testAnswers = database
+    .query<{ created_at: string; correct: number | null; duration_ms: number | null }, string[]>(
+      `SELECT q.answered_at AS created_at, q.correct, q.duration_ms FROM practice_test_items q JOIN practice_tests t ON t.id = q.test_id
+       WHERE t.submitted_at IS NOT NULL AND q.answer IS NOT NULL AND q.answered_at >= ? ${topicId ? "AND q.topic_id = ?" : ""}`,
+    )
+    .all(...args);
   const reviews = database
     .query<{ reviewed_at: string; duration_ms: number | null }, string[]>(
       `SELECT r.reviewed_at, r.duration_ms FROM reviews r JOIN cards i ON i.id = r.card_id
@@ -38,7 +44,7 @@ export function activity(days: number, topicId: string | null, at: Date = new Da
     )
     .all(...args);
   const ms = new Map<string, number>();
-  for (const a of attempts) {
+  for (const a of [...attempts, ...testAnswers]) {
     const day = out.get(localDate(new Date(a.created_at)));
     if (!day) continue;
     day.attempts++;

@@ -1,5 +1,5 @@
 import * as stylex from "@stylexjs/stylex";
-import { ArrowRight, ChevronDown, Flag, Paperclip, Repeat2, Search, Sparkles } from "lucide-react";
+import { ArrowRight, ChevronDown, Flag, GraduationCap, Paperclip, Repeat2, Search, Sparkles } from "lucide-react";
 import { useId, useState } from "react";
 import { Link, useNavigate } from "react-router";
 import { MATERIAL_LIMITS, type TopicSummary } from "@shared/api";
@@ -240,6 +240,11 @@ export function TopicCard({ topic, tone }: { topic: TopicSummary; tone: Tone }) 
           {topic.running && (
             <span {...stylex.props(chip.base, s.chipOnCard)}>
               <span aria-hidden="true" {...stylex.props(s.dot)} /> {t("topics.working")}
+            </span>
+          )}
+          {topic.final?.passed && (
+            <span {...stylex.props(chip.base, s.chipOnCard)}>
+              <GraduationCap size={13} aria-hidden="true" /> {t("final.chip", { percent: topic.final.percent })}
             </span>
           )}
           {topic.dueCards > 0 && (

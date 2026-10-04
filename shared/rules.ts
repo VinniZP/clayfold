@@ -19,6 +19,8 @@ export const RULES = {
   L17: "Tutor context includes recent attempts, unmastered prerequisites and the last 24 h",
   L18: "Tutor steers from 'do it for me' to explanation and asks for confidence",
   L19: "Lessons use the field's established terms, each marked and defined in the topic glossary",
+  L20: "A practice test spans the finished lessons, interleaved across nodes, unaided, with results only after submission",
+  L21: "A topic closes with a final exam once every node passed its exit check; a retake waits until the weak nodes are practised again",
   L22: "Mistakes come back as unaided retries; a correct retry a day or more after the last error resolves one",
   L23: "Graded answers take an optional confidence rating; a confident error is corrected, retested a day later and flagged to the tutor",
   V1: "No decorative visuals; each figure states what it teaches",

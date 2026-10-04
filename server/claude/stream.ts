@@ -24,7 +24,7 @@ export type Effect =
 
 export type ActivityLabels = { label: string; doneLabel: string };
 
-type Activity = "webSearch" | "webFetch" | "readNotes" | "sourceAdd" | "sourceSearch" | "materialRead" | "graphSet" | "goalPlan" | "glossarySet" | "workedLine" | "lessonPlan" | "lessonFinish" | "cardsPropose" | "learnerState" | "placement" | "itemReplace" | "recordWrite" | "recordEdit" | "mission" | "resources" | "glossary" | "notes" | "files";
+type Activity = "webSearch" | "webFetch" | "readNotes" | "sourceAdd" | "sourceSearch" | "materialRead" | "graphSet" | "goalPlan" | "glossarySet" | "workedLine" | "lessonPlan" | "lessonFinish" | "practiceBrief" | "cardsPropose" | "learnerState" | "placement" | "itemReplace" | "recordWrite" | "recordEdit" | "mission" | "resources" | "glossary" | "notes" | "files";
 
 const ACTIVITIES: Record<string, Activity> = {
   WebSearch: "webSearch",
@@ -42,6 +42,7 @@ const ACTIVITIES: Record<string, Activity> = {
   worked_line_record: "workedLine",
   lesson_plan: "lessonPlan",
   lesson_finish: "lessonFinish",
+  practice_brief: "practiceBrief",
   cards_propose: "cardsPropose",
   get_learner_state: "learnerState",
   placement_record: "placement",

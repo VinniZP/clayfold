@@ -159,7 +159,7 @@ function pending(database: Database): Task[] {
   const lessons = database
     .query<{ id: string; topic_id: string; title: string; objective: string; outline: string; node_ids: string; challenge_idx: number | null; course: string }, []>(
       `SELECT l.id, l.topic_id, l.title, l.objective, l.outline, l.node_ids, l.challenge_idx, t.title AS course FROM lessons l JOIN topics t ON t.id = l.topic_id
-       WHERE l.status IN ('ready','finished') AND NOT EXISTS (SELECT 1 FROM rewards r WHERE r.source = 'lesson' AND r.ref = l.id)`,
+       WHERE l.status IN ('ready','finished') AND l.practice IS NULL AND NOT EXISTS (SELECT 1 FROM rewards r WHERE r.source = 'lesson' AND r.ref = l.id)`,
     )
     .all()
     .filter((l) => supersedingLesson(l, database) === null);

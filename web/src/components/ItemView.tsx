@@ -1,5 +1,5 @@
 import * as stylex from "@stylexjs/stylex";
-import { ArrowDown, ArrowRight, ArrowUp, CircleCheck, CircleX, Compass, GripVertical, Info, Lightbulb, MessageCircle, X } from "lucide-react";
+import { ArrowDown, ArrowRight, ArrowUp, CircleCheck, CircleX, Compass, Dumbbell, GripVertical, Info, Lightbulb, MessageCircle, X } from "lucide-react";
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { CONFIDENCE_LEVELS, type AttemptRequest, type AttemptResponse, type Confidence, type GiveUpResponse, type ItemState } from "@shared/api";
 import type { Answer, PublicItem } from "@shared/schemas";
@@ -24,7 +24,7 @@ export type ItemMode = "practice" | "activate" | "check" | "review" | "retry";
 
 export type ItemResult = { response: AttemptResponse; gaveUp: GiveUpResponse | null };
 
-type Draft =
+export type Draft =
   | { format: "single"; choice: number | null }
   | { format: "multi"; choices: number[] }
   | { format: "order"; sequence: string[] }
@@ -34,7 +34,7 @@ type Draft =
   | { format: "number"; value: string }
   | { format: "short"; text: string };
 
-function initialDraft(item: PublicItem): Draft {
+export function initialDraft(item: PublicItem): Draft {
   switch (item.format) {
     case "single":
       return { format: "single", choice: null };
@@ -55,11 +55,34 @@ function initialDraft(item: PublicItem): Draft {
   }
 }
 
+/** The draft that shows a stored answer; number values keep their digits. */
+export function draftFromAnswer(item: PublicItem, answer: Answer | null): Draft {
+  if (!answer || answer.format !== item.format) return initialDraft(item);
+  switch (answer.format) {
+    case "single":
+      return { format: "single", choice: answer.choice };
+    case "multi":
+      return { format: "multi", choices: answer.choices };
+    case "order":
+      return { format: "order", sequence: answer.sequence };
+    case "match":
+      return { format: "match", pairs: answer.pairs };
+    case "sort":
+      return { format: "sort", placed: answer.categories };
+    case "cloze":
+      return { format: "cloze", blanks: answer.blanks };
+    case "number":
+      return { format: "number", value: String(answer.value) };
+    case "short":
+      return { format: "short", text: answer.text };
+  }
+}
+
 function countBlanks(text: string): number {
   return new Set([...text.matchAll(/\{\{(\d+)\}\}/g)].map((m) => m[1])).size;
 }
 
-function toAnswer(d: Draft): Answer | null {
+export function toAnswer(d: Draft): Answer | null {
   switch (d.format) {
     case "single":
       return d.choice === null ? null : { format: "single", choice: d.choice };
@@ -192,6 +215,7 @@ const s = stylex.create({
   hint: { paddingBlock: 11, paddingInline: 16, borderRadius: radius.field, backgroundColor: color.butter },
   hintLabel: { display: "block", marginBottom: 2, fontSize: 12, fontWeight: 750, color: color.warning },
   feedbackRegion: { display: "grid", gap: 10 },
+  more: { justifySelf: "start" },
   feedback: {
     display: "grid",
     gridTemplateColumns: "auto minmax(0, 1fr)",
@@ -248,6 +272,8 @@ type Props = {
   onResult?: (itemId: string, result: ItemResult) => void;
   onOfferTutor?: (itemId: string, reason: "wrong_twice" | "idle") => void;
   onAskTutor?: (itemId: string) => void;
+  /** practice mode: offered after a wrong answer or a give-up, to ask for a practice set like this item. */
+  onPractiseMore?: (itemId: string) => void;
   /** check mode: show the graded result (after the whole check is submitted). */
   revealed?: boolean;
   number?: number;
@@ -259,7 +285,7 @@ type Props = {
   | { context?: undefined; send: (answer: Answer, durationMs: number) => Promise<AttemptResponse> }
 );
 
-export function ItemView({ item, mode, context, active = true, onResult, onOfferTutor, onAskTutor, revealed, number, initial, send }: Props) {
+export function ItemView({ item, mode, context, active = true, onResult, onOfferTutor, onAskTutor, revealed, number, initial, send, onPractiseMore }: Props) {
   useLang();
   const [draft, setDraft] = useState<Draft>(() => initialDraft(item));
   const [restored] = useState(() => restoredResponse(initial, mode));
@@ -465,6 +491,12 @@ export function ItemView({ item, mode, context, active = true, onResult, onOffer
           </FeedbackBox>
         )}
       </div>
+
+      {onPractiseMore && mode === "practice" && (wrongCount > 0 || gaveUp) && (
+        <button type="button" onClick={() => onPractiseMore(item.id)} {...stylex.props(btn.base, btn.ghost, btn.sm, s.more)}>
+          <Dumbbell size={14} aria-hidden="true" /> {t("practiceSet.thisMore")}
+        </button>
+      )}
     </div>
   );
 }
@@ -592,7 +624,7 @@ function CheckMark() {
   );
 }
 
-function AnswerInput({
+export function AnswerInput({
   item,
   draft,
   wrong,

@@ -7,7 +7,7 @@ const parse = (kind: Parameters<typeof toolArgs>[0]) => {
   const short = (list: string[]) => list.map((t) => t.replace("mcp__plugin_clayfold_clayfold__", "")).sort();
   return { tools: value("--tools").sort(), allowed: short(value("--allowedTools")), denied: short(value("--disallowedTools")) };
 };
-const AUTHORING = ["cards_propose", "item_replace", "lesson_finish", "lesson_plan", "step_submit"];
+const AUTHORING = ["cards_propose", "item_replace", "lesson_finish", "lesson_plan", "practice_brief", "step_submit"];
 
 test("tutor: memory tools, the tutoring tools and goal_note; every authoring tool removed", () => {
   const t = parse("tutor");

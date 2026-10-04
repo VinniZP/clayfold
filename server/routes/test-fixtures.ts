@@ -91,6 +91,12 @@ export function seed(database: Database): void {
     .run();
 }
 
+export function insertLesson(database: Database, id: string, nodeIds: string[] = ["a"]): void {
+  database
+    .query("INSERT INTO lessons (id, topic_id, title, objective, level, node_ids, outline) VALUES (?, 'tp1', ?, 'Objective of the lesson', 'novice', ?, '[]')")
+    .run(id, `Lesson ${id}`, JSON.stringify(nodeIds));
+}
+
 const ROLE: Record<string, string> = { activate: "activate", explain: "explain_check", practice: "practice", check: "check" };
 
 const reversed = (n: number) => Array.from({ length: n }, (_, i) => n - 1 - i);

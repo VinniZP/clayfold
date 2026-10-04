@@ -18,11 +18,13 @@ import type {
 } from "../../shared/api";
 import type { TopicEvent } from "../../shared/events";
 import type { Card } from "../../shared/schemas";
+import { FINAL_PASS_SHARE } from "../../shared/api";
 import { isTopicRunning, runTurn } from "../claude/runner";
 import { db, newId, now } from "../db";
 import { materialViews, storeMaterials, type Material } from "../gates/materials";
 import { t } from "../i18n";
 import { publish, subscribe } from "../hub";
+import { bestFinalShare } from "../review/practice-test";
 import { createWorkspace, listMemory, uniqueSlug, watchWorkspace } from "../workspace";
 import { fail, parseBody, readBody } from "./http";
 import { lessonSummary, type LessonRow } from "./lesson-summary";
@@ -38,6 +40,8 @@ export function topicRow(topicId: string): TopicRow {
   if (!row) fail(404, "topic not found");
   return row;
 }
+
+const finalSummary = (best: number | null): TopicSummary["final"] => (best === null ? null : { percent: Math.round(best * 100), passed: best >= FINAL_PASS_SHARE });
 
 function summary(t: TopicRow): TopicSummary {
   const counts = db()
@@ -66,6 +70,7 @@ function summary(t: TopicRow): TopicSummary {
     kind: t.kind,
     goalId: t.goal_id,
     plan,
+    final: finalSummary(bestFinalShare(t.id)),
   };
 }
 

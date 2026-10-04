@@ -1,0 +1,29 @@
+=== src_progit_basics
+A Git project has three main sections: the working tree, the staging area, and the Git directory. The working tree is a single checkout of one version of the project. The staging area is a file in the Git directory that records what will go into your next commit; it is also called the index. The Git directory is where Git stores the metadata and object database for your project.
+
+Files in a Git project can be in three states: modified, staged, and committed. Modified means you have changed the file but have not committed it yet. Staged means you have marked a modified file in its current version to go into your next commit. Committed means the data is safely stored in your local database.
+
+The basic workflow is: you modify files in your working tree, you stage the changes you want in the next commit, and you commit, which stores the staged snapshot permanently in the Git directory.
+
+=== src_progit_recording
+Each file in your working directory is either tracked or untracked. Tracked files are files Git already knows about from the last snapshot; untracked files are everything else.
+
+The git status command shows which files are in which state. Changes listed under "Changes to be committed" are staged. Changes listed under "Changes not staged for commit" are modified in the working tree but not staged.
+
+To stage a file, run git add with the file name. The git add command adds the content of the file as it is at that moment to the staging area. If you change the file again after running git add, the new change is not staged; run git add again to stage the latest version.
+
+The git commit command records a snapshot of the staging area. Anything you did not stage stays modified in your working tree and is not part of the commit. Use git commit -m followed by a message to give the commit a short description.
+
+=== src_progit_undo
+To unstage a file, use git restore --staged with the file name. The change stays in your working tree; only its staged copy is removed from the staging area.
+
+To discard changes in your working tree and return a file to the version in the last commit, use git restore with the file name. This is a dangerous command: any local changes you made to that file are lost.
+
+If you commit too early or forget to add a file, you can stage the missing change and run git commit --amend. The amended commit replaces the previous one.
+
+=== src_course_staging
+Think of the staging area as a draft of your next commit. You decide what goes into the draft, one change at a time, and the commit records exactly that draft.
+
+A common mistake is to assume that a commit saves everything you changed since the last commit. It does not: only staged changes are saved, and everything else stays in your working directory as it was.
+
+Staging lets you split unrelated work into separate commits. For example, if you fixed a typo in your thesis and also started a new analysis script, stage and commit the typo fix first, then stage and commit the script when it is ready. Each commit then describes one change.

@@ -1,6 +1,6 @@
 import type { HabitId, Outfit, OutfitItemId, OutfitSlot, RewardCondition, Tier } from "./game";
 import type { Lang } from "./i18n";
-import type { Answer, Card, GoalPlanEntry, GraphNode, Level, PublicFigure, PublicItem, PublicStep, Resident } from "./schemas";
+import { COURSE_PRACTICE_SIZES, PRACTICE_SIZES, type Answer, type Card, type GoalPlanEntry, type GraphNode, type Level, type PracticeFocus, type PracticeSize, type PublicFigure, type PublicItem, type PublicStep, type Resident } from "./schemas";
 
 // REST contract. All routes are under /api and exchange JSON.
 // Errors: non-2xx with body ApiError.
@@ -25,6 +25,8 @@ export type TopicSummary = {
   goalId: string | null;
   /** Goals only: plan entries, and how many of them are opened as topics. */
   plan: { total: number; opened: number } | null;
+  /** Best graded final exam of the topic, in percent; null before one. */
+  final: { percent: number; passed: boolean } | null;
 };
 
 /** Onboarding stages, derived from stored state (workspace files, sources, graph, placement). */
@@ -61,6 +63,8 @@ export type LessonSummary = {
   learnerStatus: "not_started" | "in_progress" | "completed";
   /** The lesson's video, if one was requested. */
   video: VideoStatus | null;
+  /** Set for a practice set: a lesson of practice steps only, with no exit check. */
+  practice: { size: number; focus: PracticeFocus } | null;
 };
 
 // POST /api/lessons/:lessonId/resume -> StartLessonResponse (continues a failed lesson in its own authoring
@@ -169,6 +173,37 @@ export type MemoryFile = { path: string; content: string; updatedAt: string };
 // POST /api/topics/:topicId/lessons { nodeId? } -> StartLessonResponse (starts a lesson-author run)
 export type StartLessonRequest = { nodeId?: string };
 export type StartLessonResponse = { lessonId: string | null; conversationId: string };
+
+// Practice sets: fresh practice items on demand, written by a practice-set run and gated like lesson steps.
+// GET  /api/practice/scope?topicId=&nodeId= | ?lessonId= | ?itemId= | ?courseId= -> PracticeScope (the nodes a set from there covers)
+// POST /api/practice PracticeRequest -> StartLessonResponse (lessonId set: the set exists at once, its steps follow)
+// GET  /api/lessons/:lessonId/practice -> PracticeResults (practice sets only)
+/**
+ * Where the learner asked for practice: a graph node, a lesson's nodes, the node of an item ("more like this"),
+ * or every node of a course that passed its exit check.
+ */
+export type PracticeFrom = { topicId: string; nodeId: string } | { lessonId: string } | { itemId: string } | { courseId: string };
+
+export function practiceSizes(from: PracticeFrom): readonly PracticeSize[] {
+  return "courseId" in from ? COURSE_PRACTICE_SIZES : PRACTICE_SIZES;
+}
+export type PracticeRequest = { from: PracticeFrom; size: PracticeSize; focus: PracticeFocus };
+export type PracticeScope = {
+  topicId: string;
+  nodes: { id: string; title: string }[];
+  /** Items on these nodes the learner answered wrongly or gave up on; the "mistakes" focus needs at least one. */
+  mistakes: number;
+  /** A course set only: nodes its latest final exam found weak, which get more items. */
+  weakNodeIds: string[];
+};
+/** First try: correct on the first attempt, without hints. */
+export type PracticeResults = {
+  total: number;
+  answered: number;
+  firstTry: number;
+  solved: number;
+  nodes: { nodeId: string; title: string; total: number; firstTry: number; solved: number }[];
+};
 
 // GET /api/lessons/:lessonId -> LessonView
 export type LessonView = {
@@ -297,6 +332,120 @@ export type ReviewRating = 1 | 2 | 3 | 4;
 export type CardView = ReviewCard & { status: "proposed" | "active" | "suspended" | "rejected"; due: string | null; lapses: number };
 // POST /api/cards/:cardId/accept | /suspend | /reject ; PATCH /api/cards/:cardId { front, back }
 
+// Practice tests (L20): a cumulative, unaided test over the finished lessons of a topic, or of every topic of a goal.
+// GET    /api/topics/:topicId/tests -> PracticeTestOverview
+// POST   /api/topics/:topicId/tests PracticeTestRequest -> PracticeTestView (201; 409 while a test of the topic is open
+//        or when it has no finished lesson)
+// GET    /api/tests/:testId -> PracticeTestView (submits an open test whose time is up; restarts grading a server restart stopped)
+// PATCH  /api/tests/:testId/questions/:idx PracticeAnswerUpdate -> 204 (409 once the test is submitted or its time is up)
+// POST   /api/tests/:testId/submit -> PracticeTestView (short answers are graded in the background: status "grading")
+// POST   /api/tests/:testId/regrade -> PracticeTestView (grades the answers whose grading failed again)
+// DELETE /api/tests/:testId -> 204 (open tests only)
+// GET    /api/topics/:topicId/final -> FinalExamView
+// POST   /api/topics/:topicId/final -> PracticeTestView (201; 409 unless FinalExamView.canStart)
+// Test answers stay out of `attempts`: first-try results, exit checks and learner signals do not see them.
+
+export const PRACTICE_LENGTHS = [10, 20, 30] as const;
+/** Questions in an "all" test at most. */
+export const PRACTICE_MAX_QUESTIONS = 100;
+export const PRACTICE_TIME_LIMITS = [10, 20, 30, 60] as const;
+
+export type PracticeTestRequest = {
+  length: (typeof PRACTICE_LENGTHS)[number] | "all";
+  /** Minutes; null for an untimed test. */
+  timeLimitMin: (typeof PRACTICE_TIME_LIMITS)[number] | null;
+};
+
+/** Fields left out stay as they are; `spentMs` adds to the time spent on the question. */
+export type PracticeAnswerUpdate = { answer?: Answer | null; flagged?: boolean; spentMs?: number };
+
+export type PracticeTestSummary = {
+  id: string;
+  topicId: string;
+  kind: "practice" | "final";
+  status: "open" | "grading" | "done";
+  questions: number;
+  answered: number;
+  /** Graded correct answers; null while the test is open. */
+  correct: number | null;
+  createdAt: string;
+  submittedAt: string | null;
+  timeLimitMin: number | null;
+  /** When the time is up; null for an untimed test. */
+  endsAt: string | null;
+};
+
+export type PracticeTestOverview = {
+  /** Questions a new test can draw on. */
+  eligible: number;
+  lessonsFinished: number;
+  open: PracticeTestSummary | null;
+  /** Submitted tests, newest first. */
+  history: PracticeTestSummary[];
+};
+
+/** A final exam holds at least this many questions, or one per node of a larger course. */
+export const FINAL_MIN_QUESTIONS = 30;
+/** Share of a final answered right to pass it, and the share under which a node is weak: the L12 threshold. */
+export const FINAL_PASS_SHARE = 0.8;
+
+/** The closing test of a topic (L21): it opens once every node has passed its exit check. */
+export type FinalExamView = {
+  nodesPassed: number;
+  nodesTotal: number;
+  /** Questions a final started now would hold. */
+  questions: number;
+  /** The topic's open test of either kind: one test runs at a time. */
+  open: PracticeTestSummary | null;
+  /** Best graded final. */
+  best: PracticeTestSummary | null;
+  /** Latest final, while it is being graded or after. */
+  latest: PracticeTestSummary | null;
+  passed: boolean;
+  /** Nodes under the pass share in the latest final; a retake waits until each is practised again after it. */
+  weakNodes: { nodeId: string; title: string; lessonId: string | null; practised: boolean }[];
+  canStart: boolean;
+};
+
+/** Present once the test is submitted (L9, L11). */
+export type PracticeResult = {
+  /** null while grading runs or after it failed. */
+  correct: boolean | null;
+  gradingFailed: boolean;
+  /** The chosen option's feedback, or the rubric verdict of a short answer. */
+  feedback: string | null;
+  correctAnswer: string;
+  solution: string;
+  topicId: string;
+  nodeId: string;
+  nodeTitle: string;
+  lessonId: string | null;
+  lessonTitle: string | null;
+};
+
+export type PracticeQuestion = { idx: number; item: PublicItem; answer: Answer | null; flagged: boolean; result: PracticeResult | null };
+
+export type PracticeNodeScore = {
+  topicId: string;
+  topicTitle: string;
+  nodeId: string;
+  title: string;
+  correct: number;
+  total: number;
+  /** Lessons the node's questions came from. */
+  lessons: { id: string; title: string }[];
+};
+
+export type PracticeTestView = {
+  test: PracticeTestSummary;
+  scope: { id: string; title: string; kind: TopicSummary["kind"] };
+  questions: PracticeQuestion[];
+  /** Weakest node first; empty while the test is open. */
+  breakdown: PracticeNodeScore[];
+  /** Missed questions come back in Review from this time; null while open or with nothing missed. */
+  reviewFrom: string | null;
+};
+
 // Notes: POST /api/notes NoteRequest -> NoteView ; PATCH /api/notes/:noteId { text } -> 204 ; GET /api/topics/:topicId/notes -> NoteView[]
 /** text may be empty when the note keeps a quote. */
 export type NoteRequest = { topicId: string; lessonId?: string; stepId?: string; quote?: string; text: string };
@@ -315,8 +464,8 @@ export type AuditEntry = {
 export type AuditVerdict = { verdict: "ok" | "missed_defect"; note?: string };
 
 // Stats: GET /api/stats/activity?days=7&topicId= -> ActivityDay[] (oldest first, one entry per local day,
-// days without activity included with zeros). Attempts include notebook retries. Minutes are the sum of attempt and
-// retry durations and review time.
+// days without activity included with zeros). Attempts include notebook retries and the answers of submitted practice
+// tests. Minutes are the sum of attempt and retry durations, time on practice-test answers and review time.
 export type ActivityDay = { date: string; attempts: number; correct: number; reviews: number; minutes: number };
 
 // Calibration: GET /api/stats/calibration -> CalibrationView

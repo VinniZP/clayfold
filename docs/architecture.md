@@ -40,7 +40,7 @@ A change to a contract file changes every module that uses it; make it there fir
 | `server/claude/runner.ts` | One `claude -p` process per conversation turn; queue; cancel; `session_id` for `--resume` |
 | `server/claude/stream.ts` | stream-json lines to `TopicEvent`s and stored chat messages |
 | `server/routes/*` | REST handlers; server-side grading; review; notes; reports; audit |
-| `server/review/*` | FSRS scheduling (ts-fsrs, retention 0.90), mastery (L12), learner signals to `regen_queue` |
+| `server/review/*` | FSRS scheduling (ts-fsrs, retention 0.90), mastery (L12), learner signals to `regen_queue`, practice-test assembly (L20) |
 | `server/mcp/index.ts` | `handleMcp(req: Request, topicId: string): Promise<Response>`; one stateless MCP server per request |
 | `server/gates/*` | Deterministic checks, source fetching, learner materials and quote verification, critic |
 | `plugin/` | Tutor output style, skills, eval suite |
@@ -60,7 +60,7 @@ claude -p "<text>" --output-format stream-json --verbose --include-partial-messa
 cwd: data/workspaces/<slug>     stdin: /dev/null     env: childEnv({ CLAYFOLD_MCP_URL, CLAYFOLD_TOPIC_ID })
 ```
 
-- The first turn of a conversation starts with the skill command: `/clayfold:onboard <request>`, `/clayfold:goal-plan <request>` for a goal, `/clayfold:lesson-author <nodeId|next>`, `/clayfold:review-session`.
+- The first turn of a conversation starts with the skill command: `/clayfold:onboard <request>`, `/clayfold:goal-plan <request>` for a goal, `/clayfold:lesson-author <nodeId|next>`, `/clayfold:practice-set <lessonId>`, `/clayfold:review-session`.
 - A goal (`topics.kind = 'goal'`) holds no lessons: its onboarding conversation runs with the `goal` tool scope and stores a plan of topics with `goal_plan_set`. Opening a plan entry creates a topic with `goal_id` set and starts its onboarding with the entry's brief. Conversations of such a topic record facts for the goal with `goal_note`; the goal page sends the unseen ones to the goal conversation when the learner asks.
 - Term marks `[[surface|Term]]` in model-written text resolve against `glossary_terms`, filled with `glossary_set`; the step gate rejects a mark whose term the topic glossary lacks (L19), the web Markdown renderer turns marks into terms, and one popover (`web/src/components/TermPopover.tsx`) shows their definitions.
 - A worked-example blank whose answer is in plain words (an open blank with `criteria`, or an older blank with a phrase among its `answers`) is answered through the tutor: the tutor turn carries the line and its criteria, and the tutor records the verdict with `worked_line_record`, which publishes `worked.answered`. Closed blanks keep exact checking in `server/routes/grading.ts`. Tutor turns carry no skill command; the server prepends the tutor context (L17).
@@ -123,6 +123,25 @@ Optional gamification, off by default (`settings.gamification`). Catalogs and co
 - An entry's `readyAt` is a day after its latest wrong attempt, give-up or wrong retry; the first correct retry at or after it resolves the entry (L20). A later wrong attempt moves `readyAt` past that retry and reopens the entry. `TodayView.mistakes` counts open entries and those past `readyAt` for the home page.
 - Patterns are distractors of open single-choice entries chosen at least twice (`CONFIRMED_MISCONCEPTION_TIMES` of `server/review/signals.ts`), counting attempts and retries.
 - The page (`web/src/pages/Mistakes.tsx`) lists entries by topic and node with topic and open/resolved filters. A retry and the "Retry all open" session use `ItemView` in `retry` mode: one answer, no hints, give-up or tutor. The session goes round-robin across nodes.
+
+## Practice tests
+
+- A practice test (L20) belongs to a topic, or to a goal and then spans the topics its plan opened. `assembleTest` (`server/review/practice-test.ts`) picks graded items of the lessons whose exit check is fully answered and interleaves them across nodes; one test per topic or goal is open at a time.
+- `practice_test_items` copies each item's content and display order, so `item_replace` leaves a test as the learner took it. The browser gets `PublicItem`s while the test is open, and results with solutions only after submission.
+- Answers are saved one question at a time and the test resumes from them. A timed test ends at `created_at` plus the limit; a later save is refused, and the next read of the test submits it.
+- Submission grades closed answers at once with `gradeClosedItem`; short answers go to `gradeShort`, three at a time, in the background, and the test stays `grading` until each one is graded or failed. A failed one is graded again on request; a `grading` test with no grading running in this process restarts it when read.
+- Test answers are not written to `attempts`, so first-try results, exit checks, lesson progress and learner signals do not see them. A correct answer at least a day after the node's exit check masters the node (L12). Answers of submitted tests count as activity for the day and the streak. An item whose latest test answer was wrong joins the Review session a day after that test, until a review attempt answers it.
+- A final exam (L21) is a practice test with `kind = 'final'` on a topic whose nodes all passed the exit check. `GET /api/topics/:topicId/final` (`finalView`) reports the node progress, the best and latest finals and the weak nodes of the latest one; `POST` starts a final only when `canStart` holds. One test of either kind is open per topic at a time. `TopicSummary.final` carries the best result for the course cards and the goal page.
+
+## Practice sets
+
+A practice set is a lesson whose outline holds only practice steps; `lessons.practice` holds its focus and the item it started from, and is NULL for a lesson.
+
+1. `POST /api/practice` (`server/routes/practice.ts`) takes where the learner asked from (a graph node, a lesson's nodes, the node of an item they missed, which becomes the seed, or a whole course: its nodes past the exit check), a size of 3, 5 or 8, or 10, 15 or 20 for a course, and a focus: `same`, `harder` or `mistakes`. It writes the lesson with a placeholder outline and a `lesson` conversation linked to it, and starts `/clayfold:practice-set <lessonId>`. The page opens the set at once and follows it through the lesson events (`step.status`, `step.published`, `lesson.finished`).
+2. `practice_brief` gives the run the nodes, size, focus, level, seed, the nodes a course set weights double (`weakNodeIds`: under 80% in the course's latest final exam, L21), the misconceptions the learner chose on these nodes (`targets`), the items they missed and the prompts of the topic's items on these nodes. Prequestion attempts are left out: they come before the teaching (L2).
+3. `step_submit` gates each item as a lesson step. A set has no check step, so its last index checks Q5 across the set and the L13 mix of recall and choice; a `harder` set needs `apply` or higher on every item. `lesson_finish` closes the set; it proposes no cards.
+
+Set items have the `practice` role: attempts feed learner signals and move a node from `new` to `learning`, but never pass the exit check (L12 counts `check` items). A set neither supersedes a lesson nor is superseded, is never stale, has no video, and is completed once every item is solved or given up. `GET /api/lessons/:lessonId/practice` returns first-try results per node. Stopping the run fails the set like a cancelled lesson run, and Retry resumes it in its session. The run uses the `lesson` role's model and effort.
 
 ## Narration
 

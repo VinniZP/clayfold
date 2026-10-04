@@ -342,6 +342,66 @@ describe("tools", () => {
   });
 });
 
+describe("practice sets", () => {
+  const fresh = (prompt: string, overrides: Partial<Item> = {}) =>
+    practiceStep(sourceId, {
+      ...singleItem(sourceId),
+      prompt,
+      options: [
+        { text: "Put the new version in the index", feedback: "Right: add puts it into the index." },
+        { text: "Send the new version with a push", misconception: "Confuses sending to the server with preparing a commit", feedback: "push sends commits that exist." },
+        { text: "Fetch the new version with a pull", misconception: "Thinks pull prepares local changes", feedback: "pull brings in other commits." },
+      ],
+      ...overrides,
+    } as Item);
+
+  async function seedSet(focus: "same" | "harder" | "mistakes") {
+    await call("graph_set", { nodes: [node("git-index")] });
+    const { body } = await call("lesson_plan", { plan: { title: "The index", objective: "Understand what the index does", nodeIds: ["git-index"], level: "intermediate", sourceIds: [sourceId], outline: ["activate", "explain", "practice", "check"].map((kind) => ({ kind, title: `Step ${kind}` })) } });
+    await call("step_submit", { lessonId: body.lessonId, index: 0, step: activateStep(sourceId) });
+    await call("step_submit", { lessonId: body.lessonId, index: 2, step: fresh("You fixed a typo in the README of your bike-repair notes. What makes the fix part of the commit you are about to make?") });
+    const ids = (db.query("SELECT id, role FROM items ORDER BY rowid").all() as { id: string; role: string }[]);
+    const pre = ids.find((i) => i.role === "activate")!.id;
+    const practice = ids.find((i) => i.role === "practice")!.id;
+    const attempt = db.query("INSERT INTO attempts (id, item_id, answer, correct, misconception, gave_up, context, created_at) VALUES (?, ?, '{}', ?, ?, ?, 'practice', ?)");
+    attempt.run("a1", pre, 0, "Guessed before the lesson", 0, "2026-10-01T10:00:00Z");
+    attempt.run("a2", practice, 0, "Confuses sending to the server with preparing a commit", 0, "2026-10-01T10:01:00Z");
+    attempt.run("a3", practice, 0, "Confuses sending to the server with preparing a commit", 0, "2026-10-02T10:00:00Z");
+    attempt.run("a4", practice, 0, null, 1, "2026-10-02T10:01:00Z");
+    db.query(
+      `INSERT INTO lessons (id, topic_id, title, objective, level, node_ids, outline, practice) VALUES ('les_p', ?, 'Practice: the index', '3 items', 'intermediate', '["git-index"]', ?, ?)`,
+    ).run(topicId, JSON.stringify([0, 1, 2].map((i) => ({ kind: "practice", title: `Item ${i + 1}` }))), JSON.stringify({ focus, seedItemId: practice }));
+    return { lessonId: body.lessonId as string, practice };
+  }
+
+  test("practice_brief targets the misconceptions the learner chose after the lesson taught the idea", async () => {
+    const { lessonId, practice } = await seedSet("mistakes");
+    const brief = (await call("practice_brief", { lessonId: "les_p" })).body;
+    expect(brief).toMatchObject({ lessonId: "les_p", size: 3, focus: "mistakes", level: "intermediate", nodes: [{ id: "git-index", title: "Node git-index", mastery: "new" }] });
+    expect(brief.seed).toMatchObject({ itemId: practice, nodeId: "git-index", format: "single", misconceptions: ["Confuses sending to the server with preparing a commit", "Thinks pull prepares local changes"] });
+    expect(brief.targets).toEqual([{ misconception: "Confuses sending to the server with preparing a commit", nodeId: "git-index", count: 2, lastAt: "2026-10-02T10:00:00Z" }]);
+    expect(brief.missed).toEqual([expect.objectContaining({ itemId: practice, gaveUp: true, solvedLater: false, misconception: "Confuses sending to the server with preparing a commit", at: "2026-10-02T10:01:00Z" })]);
+    expect(brief.existingPrompts).toHaveLength(3);
+    expect((await call("practice_brief", { lessonId })).body.error).toContain("not a practice set");
+  });
+
+  test("step_submit gates a harder set item by item and closes it on its last index", async () => {
+    await seedSet("harder");
+    const easy = await call("step_submit", { lessonId: "les_p", index: 0, step: fresh("Your thesis chapter is edited. What do you run first so the chapter lands in the next snapshot?", { bloom: "remember" }) });
+    expect(easy.body).toEqual({ status: "rejected", attempt: 1, violations: [expect.objectContaining({ rule: "Q5", path: "item.bloom" })] });
+    expect((await call("step_submit", { lessonId: "les_p", index: 0, step: fresh("Your thesis chapter is edited. What do you run first so the chapter lands in the next snapshot?") })).body.status).toBe("published");
+    expect((await call("step_submit", { lessonId: "les_p", index: 1, step: fresh("A lab script changed overnight. Which command prepares exactly that script for the commit you make next?") })).body.status).toBe("published");
+
+    const allChoice = await call("step_submit", { lessonId: "les_p", index: 2, step: fresh("Two recipe files changed in your cooking blog. Which command picks one recipe for the coming commit?") });
+    expect(allChoice.body.violations).toEqual([expect.objectContaining({ rule: "L13", path: "item.format" })]);
+    const order: Item = { format: "order", prompt: "In what order does a new recipe file reach the blog's history?", sequence: ["Write the recipe file", "Stage it with git add", "Record it with git commit"], bloom: "apply", solution: "The edit comes first, then the index, then the commit.", hints: ["Where does every change start?", "What records the index?"], cites: [{ sourceId, quote: QUOTE_ADD }], nodeId: "git-index" };
+    expect((await call("step_submit", { lessonId: "les_p", index: 2, step: practiceStep(sourceId, order) })).body.status).toBe("published");
+
+    expect((db.query("SELECT role FROM items WHERE lesson_id = 'les_p'").all() as { role: string }[]).map((r) => r.role)).toEqual(["practice", "practice", "practice"]);
+    expect((await call("lesson_finish", { lessonId: "les_p", summary: "Three cases of staging a change." })).body).toEqual({ ok: true, published: 3, dropped: 0 });
+  });
+});
+
 describe("Q8 source diversity", () => {
   const addSource = (id: string, url: string, title = `Title ${id}`) =>
     db.query("INSERT INTO sources (id, topic_id, url, title, kind, note, text, status) VALUES (?, ?, ?, ?, 'docs', 'note', ?, 'ok')").run(id, topicId, url, title, SOURCE_TEXT);

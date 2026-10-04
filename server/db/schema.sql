@@ -77,7 +77,7 @@ CREATE TABLE IF NOT EXISTS sources (           -- B (A adds and removes learner 
   UNIQUE (topic_id, url)
 );
 
-CREATE TABLE IF NOT EXISTS lessons (           -- B (A sets status 'failed' when a run dies)
+CREATE TABLE IF NOT EXISTS lessons (           -- B (A creates practice sets and sets status 'failed' when a run dies)
   id TEXT PRIMARY KEY,
   topic_id TEXT NOT NULL REFERENCES topics(id) ON DELETE CASCADE,
   title TEXT NOT NULL,
@@ -92,7 +92,8 @@ CREATE TABLE IF NOT EXISTS lessons (           -- B (A sets status 'failed' when
   planned_sources TEXT,                         -- JSON source ids from lesson_plan (Q8)
   sources_at_plan INTEGER,                      -- ok sources of the topic when the lesson was planned
   announced_sources TEXT,                       -- JSON source ids the lesson author has been told about
-  challenge_idx INTEGER                         -- outline index of the challenge step (gamification, G1)
+  challenge_idx INTEGER,                        -- outline index of the challenge step (gamification, G1)
+  practice TEXT                                 -- JSON {focus, seedItemId} for a practice set; NULL for a lesson
 );
 
 CREATE TABLE IF NOT EXISTS steps (             -- B
@@ -327,6 +328,35 @@ CREATE TABLE IF NOT EXISTS retries (           -- A; mistakes-notebook retries, 
   created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
 );
 
+CREATE TABLE IF NOT EXISTS practice_tests (    -- A
+  id TEXT PRIMARY KEY,
+  topic_id TEXT NOT NULL REFERENCES topics(id) ON DELETE CASCADE,  -- a topic, or a goal: the test then spans the goal's topics
+  kind TEXT NOT NULL DEFAULT 'practice' CHECK (kind IN ('practice','final')),  -- final: the closing test of a completed topic
+  status TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open','grading','done')),
+  time_limit_min INTEGER,                       -- NULL: untimed
+  created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+  submitted_at TEXT
+);
+
+CREATE TABLE IF NOT EXISTS practice_test_items ( -- A
+  test_id TEXT NOT NULL REFERENCES practice_tests(id) ON DELETE CASCADE,
+  idx INTEGER NOT NULL,
+  item_id TEXT NOT NULL,                        -- items.id; content and display order are copies, so item_replace leaves a test as taken
+  topic_id TEXT NOT NULL,
+  lesson_id TEXT,
+  node_id TEXT NOT NULL,
+  content TEXT NOT NULL,                        -- JSON authoring Item
+  display_order TEXT,
+  answer TEXT,                                  -- JSON Answer; NULL while unanswered
+  answered_at TEXT,
+  flagged INTEGER NOT NULL DEFAULT 0,
+  duration_ms INTEGER NOT NULL DEFAULT 0,
+  correct INTEGER,                              -- NULL until graded
+  feedback TEXT,
+  grade_error TEXT,                             -- the grader failed; the learner can grade again
+  PRIMARY KEY (test_id, idx)
+);
+
 CREATE INDEX IF NOT EXISTS idx_messages_conv ON messages(conversation_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_attempts_item ON attempts(item_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_cards_due ON cards(status, due);
@@ -335,3 +365,5 @@ CREATE INDEX IF NOT EXISTS idx_hint_views_item ON hint_views(item_id, created_at
 CREATE INDEX IF NOT EXISTS idx_worked_answers_step ON worked_answers(step_id);
 CREATE INDEX IF NOT EXISTS idx_alternatives_step ON alternatives(step_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_retries_item ON retries(item_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_practice_tests_topic ON practice_tests(topic_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_practice_test_items_item ON practice_test_items(item_id);

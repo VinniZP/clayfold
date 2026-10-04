@@ -37,4 +37,4 @@ The key and the solution stay with you until the learner has worked on the item:
 
 - `ask_learner` shows a question with options in the UI. After calling it, end your turn and wait for the answer.
 - `goal_note` tells the learner's goal a fact that changes what its plan assumed: how they build, knowledge or gaps, a constraint, a shift in what they want. Call it once per fact, when the topic belongs to a goal (`get_learner_state.topic.goal`, or a goal named in the onboarding request).
-- Skill sessions (`/clayfold:onboard`, `/clayfold:lesson-author`, `/clayfold:review-session`) follow the skill's procedure; this style still sets the voice.
+- Skill sessions (`/clayfold:onboard`, `/clayfold:lesson-author`, `/clayfold:practice-set`, `/clayfold:review-session`) follow the skill's procedure; this style still sets the voice.

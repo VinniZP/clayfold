@@ -2,6 +2,7 @@ import type { Database } from "bun:sqlite";
 import type { LessonSummary } from "../../shared/api";
 import { db } from "../db";
 import { lessonCitedPublishers, MIN_PUBLISHERS } from "../gates/diversity";
+import type { PracticeSpec } from "../mcp/tools/practice";
 import { publisherCounts } from "../publishers";
 import { videoStatus } from "./video";
 
@@ -16,20 +17,22 @@ export type LessonRow = {
   status: LessonSummary["status"];
   created_at: string;
   sources_at_plan: number | null;
+  practice: string | null;
 };
 
 const nodeSet = (nodeIdsJson: string) => JSON.stringify([...new Set(JSON.parse(nodeIdsJson) as string[])].sort());
 
 /**
  * The newest later lesson of the topic on the same set of nodes. Only a complete version supersedes: while
- * a new version is generating, the learner keeps the old lesson as the current one.
+ * a new version is generating, the learner keeps the old lesson as the current one. Practice sets neither
+ * supersede nor are superseded.
  */
 export function supersedingLesson(l: Pick<LessonRow, "id" | "node_ids">, database: Database = db()): string | null {
   const nodes = nodeSet(l.node_ids);
   const later = database
     .query<{ id: string; node_ids: string }, [string]>(
       `SELECT other.id, other.node_ids FROM lessons self JOIN lessons other ON other.topic_id = self.topic_id
-       WHERE self.id = ? AND other.id != self.id AND other.status IN ('ready','finished')
+       WHERE self.id = ? AND self.practice IS NULL AND other.practice IS NULL AND other.id != self.id AND other.status IN ('ready','finished')
          AND (other.created_at > self.created_at OR (other.created_at = self.created_at AND other.rowid > self.rowid))
        ORDER BY other.created_at DESC, other.rowid DESC`,
     )
@@ -37,13 +40,17 @@ export function supersedingLesson(l: Pick<LessonRow, "id" | "node_ids">, databas
   return later.find((other) => nodeSet(other.node_ids) === nodes)?.id ?? null;
 }
 
-/** Completed once every item of the published check step has an attempt; in progress after any learner action. */
-export function learnerStatus(lessonId: string, database: Database = db()): LessonSummary["learnerStatus"] {
+/**
+ * Completed once every item of the published check step has an attempt, or for a practice set once every item
+ * is solved or given up; in progress after any learner action.
+ */
+export function learnerStatus(lessonId: string, database: Database = db(), practice = false): LessonSummary["learnerStatus"] {
+  const done = practice ? "a.item_id = i.id AND (a.correct = 1 OR a.gave_up = 1)" : "a.item_id = i.id";
   const check = database
     .query<{ items: number; attempted: number }, [string]>(
-      `SELECT count(*) AS items, count(*) FILTER (WHERE EXISTS (SELECT 1 FROM attempts a WHERE a.item_id = i.id)) AS attempted
+      `SELECT count(*) AS items, count(*) FILTER (WHERE EXISTS (SELECT 1 FROM attempts a WHERE ${done})) AS attempted
        FROM steps s JOIN items i ON i.step_id = s.id
-       WHERE s.lesson_id = ? AND s.kind = 'check' AND s.status = 'published'`,
+       WHERE s.lesson_id = ? AND s.kind = '${practice ? "practice" : "check"}' AND s.status = 'published'`,
     )
     .get(lessonId)!;
   if (check.items > 0 && check.attempted === check.items) return "completed";
@@ -69,7 +76,8 @@ export function lessonSummary(l: LessonRow, database: Database = db()): LessonSu
   const citesOnePublisher = lessonCitedPublishers(database, l.id).size < MIN_PUBLISHERS;
   const sourcesGrew =
     l.sources_at_plan === null ? Object.keys(publisherCounts(l.topic_id, database)).length >= MIN_PUBLISHERS : okNow > l.sources_at_plan;
-  const sourcesStale = supersededBy === null && sourcesGrew && citesOnePublisher;
+  const sourcesStale = l.practice === null && supersededBy === null && sourcesGrew && citesOnePublisher;
+  const practice = l.practice ? { size: (JSON.parse(l.outline) as unknown[]).length, focus: (JSON.parse(l.practice) as PracticeSpec).focus } : null;
   return {
     id: l.id,
     topicId: l.topic_id,
@@ -83,7 +91,8 @@ export function lessonSummary(l: LessonRow, database: Database = db()): LessonSu
     stepsTotal: (JSON.parse(l.outline) as unknown[]).length,
     sourcesStale,
     supersededBy,
-    learnerStatus: learnerStatus(l.id, database),
+    learnerStatus: learnerStatus(l.id, database, practice !== null),
     video: videoStatus(l.id, database),
+    practice,
   };
 }

@@ -5,6 +5,7 @@ import { Link, useNavigate, useParams, useSearchParams } from "react-router";
 import type { ConversationKind, LessonSummary, TopicDetail } from "@shared/api";
 import type { MessageKey } from "@shared/i18n";
 import { Chat } from "../components/Chat";
+import { FinalExamCard } from "../components/FinalExamCard";
 import { useHeader } from "../components/header";
 import { GraphLegend, KnowledgeGraph } from "../components/KnowledgeGraph";
 import { LessonList } from "../components/LessonList";
@@ -12,8 +13,10 @@ import { MaterialsSection } from "../components/Materials";
 import { StaleSources, readyLine } from "../components/LessonStatus";
 import { CourseResident } from "../components/meerkat/CourseGame";
 import { OnboardingStepper } from "../components/OnboardingStepper";
+import { PracticeButton } from "../components/Practice";
 import { GoalBanner, GoalView } from "./Goal";
 import { NewTopicForm, TopicCard, toneAt, topicObject } from "../components/Topics";
+import { TrainingCard } from "../components/TrainingCard";
 import { CardHead, Empty, ErrorBox, PageLoading, Spinner } from "../components/ui";
 import { api, errorText } from "../lib/api";
 import { formatDate, masteryLabel } from "../lib/format";
@@ -42,7 +45,7 @@ const s = stylex.create({
   errorGap: { marginBottom: 12 },
   detail: { display: "grid", gap: 10, marginTop: 14, paddingBlock: 18, paddingInline: 20, borderRadius: radius.inner, backgroundColor: color.surface2 },
   detailHead: { display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 },
-  start: { justifySelf: "start" },
+  nodeActions: { display: "flex", flexWrap: "wrap", gap: 8 },
   mLearning: { backgroundColor: color.lilacSoft, color: color.accentText },
   mExit: { backgroundColor: color.warningSoft, color: color.warning },
   mMastered: { backgroundColor: color.primary, color: color.onPrimary },
@@ -222,6 +225,10 @@ export function TopicPage() {
   };
 
   const busy = starting !== null;
+  const lessons = d.lessons.filter((l) => !l.practice);
+  const practiceSets = d.lessons.filter((l) => l.practice);
+  const convLabel = (c: TopicDetail["conversations"][number]) =>
+    t(c.kind === "lesson" && practiceSets.some((l) => l.id === c.lessonId) ? "topic.conv.practice" : CONV_LABEL[c.kind]);
 
   return (
     <div {...stylex.props(s.page)}>
@@ -263,9 +270,12 @@ export function TopicPage() {
                     {prereqTitles.length > 0 && <> · {t("topic.buildsOn", { titles: prereqTitles.join(", ") })}</>}
                     {node.placement && <> · {t("topic.yourRating", { placement: t(PLACEMENT[node.placement]) })}</>}
                   </p>
-                  <button type="button" disabled={busy} onClick={() => startLesson(node.id)} {...stylex.props(btn.base, btn.primary, btn.sm, s.start)}>
-                    {starting?.nodeId === node.id ? <Spinner /> : <BookOpen size={14} aria-hidden="true" />} {t("topic.nodeLesson")}
-                  </button>
+                  <div {...stylex.props(s.nodeActions)}>
+                    <button type="button" disabled={busy} onClick={() => startLesson(node.id)} {...stylex.props(btn.base, btn.primary, btn.sm)}>
+                      {starting?.nodeId === node.id ? <Spinner /> : <BookOpen size={14} aria-hidden="true" />} {t("topic.nodeLesson")}
+                    </button>
+                    <PracticeButton from={{ topicId, nodeId: node.id }} label={t("topic.practiceNode")} small />
+                  </div>
                 </div>
               ) : (
                 <p {...stylex.props(text.small, text.muted)}>{t("topic.pickNode")}</p>
@@ -276,14 +286,19 @@ export function TopicPage() {
 
         <section aria-labelledby="lessons-title" {...stylex.props(card.base)}>
           <CardHead title={t("topic.lessons")} id="lessons-title" />
-          {d.lessons.length === 0 ? (
+          {lessons.length === 0 ? (
             <Empty title={t("topic.noLessonsTitle")}>{t("topic.noLessonsBody")}</Empty>
           ) : (
-            <LessonList lessons={d.lessons} />
+            <LessonList lessons={lessons} />
           )}
         </section>
 
         <MaterialsSection topicId={topicId} materials={d.materials} reload={detail.reload} />
+
+
+        {d.nodes.length > 0 && <FinalExamCard key={`final-${topicId}`} topicId={topicId} />}
+
+        {d.lessons.length > 0 && <TrainingCard key={`training-${topicId}`} topicId={topicId} sets={practiceSets} />}
 
         <section aria-labelledby="sources-title" {...stylex.props(card.base)}>
           <CardHead title={t("topic.sources")} id="sources-title" />
@@ -318,7 +333,7 @@ export function TopicPage() {
                   .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
                   .map((c) => (
                     <option key={c.id} value={c.id}>
-                      {t(CONV_LABEL[c.kind])} · {formatDate(c.createdAt)}
+                      {convLabel(c)} · {formatDate(c.createdAt)}
                     </option>
                   ))}
               </select>

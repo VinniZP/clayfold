@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { Card, CourseReward, GlossaryTerm, GoalPlanEntry, GraphNode, Item, LessonPlan, LessonReward, Resident, Slug, StageTrophy, Step } from "./schemas";
+import { Card, CourseReward, GlossaryTerm, GoalPlanEntry, GraphNode, Item, LessonPlan, LessonReward, Resident, Slug, StageTrophy, Step, type Level, type PracticeFocus } from "./schemas";
 import type { RuleId, Violation } from "./rules";
 
 // MCP tool contract between the plugin skills and the server.
@@ -76,6 +76,7 @@ export const TOOL_INPUTS = {
     outcome: z.enum(["correct", "gave_up"]),
   },
   get_learner_state: { nodeIds: z.array(Slug).max(20).optional() },
+  practice_brief: { lessonId: z.string().min(1) },
   item_replace: {
     queueId: z.string().min(1),
     item: Item.optional(),
@@ -190,6 +191,28 @@ export type LearnerState = {
   glossary: { term: string; definition: string; original: string | null }[];
 };
 
-export type RegenReason = "possible_leak" | "dead_distractor" | "leech" | "learner_report";
+/** What a practice set asks for: its nodes, size and focus, and the learner's errors to target. */
+export type PracticeBrief = {
+  lessonId: string;
+  /** Items to write: one practice step per outline index 0..size-1. */
+  size: number;
+  focus: PracticeFocus;
+  level: Level;
+  nodes: { id: string; title: string; summary: string; mastery: LearnerState["nodes"][number]["mastery"] }[];
+  /** Nodes under 80% in the course's latest final exam (L21); they get about twice the items of the others. */
+  weakNodeIds: string[];
+  /** The item the learner asked for more practice like; write new cases of the same skill, never a variant of it. */
+  seed: { itemId: string; nodeId: string; format: string; bloom: string; prompt: string; misconceptions: string[] } | null;
+  /** Misconceptions the learner chose on these nodes, most frequent and most recent first. */
+  targets: PracticeTarget[];
+  /** Items on these nodes the learner answered wrongly or gave up on, most recent first. */
+  missed: { itemId: string; nodeId: string; prompt: string; misconception: string | null; gaveUp: boolean; solvedLater: boolean; at: string }[];
+  /** Prompts of the topic's active items on these nodes; new items test other cases (Q7). */
+  existingPrompts: { nodeId: string; prompt: string }[];
+};
+
+export type PracticeTarget = { misconception: string; nodeId: string; count: number; lastAt: string };
+
+export type RegenReason ="possible_leak" | "dead_distractor" | "leech" | "learner_report";
 
 export type { RuleId };

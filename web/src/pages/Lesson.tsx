@@ -2,17 +2,19 @@ import * as stylex from "@stylexjs/stylex";
 import { ArrowLeft, ArrowRight, BookOpen, Check, CircleSlash, Clapperboard, Copy, MessageCircle, NotebookText, PanelRightClose, RotateCcw, ShieldCheck, TriangleAlert } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { Link, useParams, useSearchParams } from "react-router";
-import type { LessonView } from "@shared/api";
+import type { LessonView, PracticeFrom } from "@shared/api";
 import type { MessageKey } from "@shared/i18n";
 import type { PublicItem, PublicStep } from "@shared/schemas";
 import { Chat } from "../components/Chat";
 import { DayProgress } from "../components/DayProgress";
+import { FinalInvite } from "../components/FinalExamCard";
 import { GenProgress, type Rejection } from "../components/GenProgress";
 import { LearnerChip } from "../components/LessonList";
 import { ChallengeBanner, LessonCompanion, LessonReward, useLessonFocus } from "../components/meerkat/LessonGame";
 import { StaleSources } from "../components/LessonStatus";
 import { useHeader } from "../components/header";
 import type { ItemResult } from "../components/ItemView";
+import { FOCUS_LABEL, PracticeDialog, PracticeEnd, PracticeOffer } from "../components/Practice";
 import { ProposedCards } from "../components/ProposedCards";
 import { SelectionActions, type SelectedText } from "../components/SelectionActions";
 import { StepView, type LineResults, type TutorHooks } from "../components/Steps";
@@ -30,6 +32,10 @@ import { bp, color, font, radius } from "../theme/tokens.stylex";
 import { banner, btn, card, chip, layout, shadow, text } from "../theme/ui";
 
 type StepState = LessonView["stepStatus"][number];
+
+/** First-try share of the exit check that passes it (L12, server/review/mastery.ts). */
+const CROWN_SHARE = 0.8;
+
 type Offer = { itemId: string; stepId: string; reason: "wrong_twice" | "idle" };
 
 function itemsOf(step: PublicStep): PublicItem[] {
@@ -269,6 +275,18 @@ export function LessonPage() {
   const v = view.data;
   const [resuming, setResuming] = useState(false);
   const [resumeError, setResumeError] = useState<string | null>(null);
+  const [practiceFrom, setPracticeFrom] = useState<PracticeFrom | null>(null);
+  const [stopping, setStopping] = useState(false);
+  const practice = v?.lesson.practice ?? null;
+  const stop = async () => {
+    if (!v?.authorConversationId) return;
+    setStopping(true);
+    try {
+      await api.cancel(v.authorConversationId);
+    } catch {
+      setStopping(false);
+    }
+  };
   const resume = async () => {
     setResuming(true);
     setResumeError(null);
@@ -339,6 +357,11 @@ export function LessonPage() {
           return;
         case "lesson.finished":
           if (e.lessonId === lessonId) setSummary(e.summary);
+          return;
+        case "conv.done":
+          if (e.conversationId !== v?.authorConversationId) return;
+          setStopping(false);
+          void view.reload();
           return;
         case "worked.answered":
           if (e.lessonId !== lessonId) return;
@@ -472,7 +495,7 @@ export function LessonPage() {
             >
               <Marker n={i + 1} st={st} done={ready && i < pos} current={i === pos && ready} />
               <span {...stylex.props(s.itemText)}>
-                <span {...stylex.props(s.itemTitle, !ready && s.itemTitleMuted, st === "dropped" && s.itemTitleDropped)}>{o.title}</span>
+                <span {...stylex.props(s.itemTitle, !ready && s.itemTitleMuted, st === "dropped" && s.itemTitleDropped)}>{steps[i]?.title ?? o.title}</span>
                 <span {...stylex.props(s.itemSub)}>
                   {o.kind === "check" ? t("lesson.noHints") : kindLabel(o.kind)}
                   {!ready && <> · {t(retrying[i] && st === "checking" ? "lesson.step.retrying" : STATUS_TEXT[st])}</>}
@@ -488,7 +511,7 @@ export function LessonPage() {
           <button type="button" aria-current={isEnd ? "step" : undefined} onClick={() => go(total)} {...stylex.props(s.item, isEnd && s.itemCurrent)}>
             <Marker n={null} st="published" done={false} current={isEnd} />
             <span {...stylex.props(s.itemText)}>
-              <span {...stylex.props(s.itemTitle)}>{t("lesson.summaryAndCards")}</span>
+              <span {...stylex.props(s.itemTitle)}>{t(practice ? "practiceSet.results" : "lesson.summaryAndCards")}</span>
             </span>
           </button>
         </li>
@@ -507,7 +530,7 @@ export function LessonPage() {
           ["notes", "lesson.tab.notes", <NotebookText key="i" size={20} aria-hidden="true" />],
         ] as const
       )
-        .filter(([key]) => key !== "video" || videoOn)
+        .filter(([key]) => (key !== "video" || videoOn) && !(practice && (key === "video" || key === "cards")))
         .map(([key, label, icon]) => (
         <button
           key={key}
@@ -574,14 +597,16 @@ export function LessonPage() {
         <aside ref={outlineRef} aria-label={t("lesson.outline")} {...stylex.props(card.base, s.outline)}>
           <p {...stylex.props(s.outlineTitle)}>{topicTitle ?? t("lesson.plan")}</p>
           <p {...stylex.props(s.outlineMeta, text.small, text.muted, text.tnum)}>
-            {t("lesson.outlineMeta", { level: levelLabel(v.lesson.level), ready: published, total })}
+            {practice
+              ? t("practiceSet.outlineMeta", { focus: t(FOCUS_LABEL[practice.focus]), ready: published, total })
+              : t("lesson.outlineMeta", { level: levelLabel(v.lesson.level), ready: published, total })}
           </p>
           <p {...stylex.props(s.outlineMeta)}>
             <LearnerChip status={v.lesson.learnerStatus} />
             {streamStatus === "reconnecting" && <span {...stylex.props(chip.base, chip.xs, chip.butter)}> {t("lesson.reconnecting")}</span>}
           </p>
           <details {...stylex.props(s.mobileOnly)}>
-            <summary {...stylex.props(s.mobileSummary)}>{isEnd ? t("lesson.summaryTitle") : t("lesson.stepOf", { n: pos + 1, total })} · {t("lesson.contents")}</summary>
+            <summary {...stylex.props(s.mobileSummary)}>{isEnd ? t(practice ? "practiceSet.results" : "lesson.summaryTitle") : t("lesson.stepOf", { n: pos + 1, total })} · {t("lesson.contents")}</summary>
             {outlineList}
           </details>
           <nav aria-label={t("lesson.steps")} {...stylex.props(s.desktopOnly)}>
@@ -593,7 +618,9 @@ export function LessonPage() {
           {v.lesson.status === "failed" && (
             <div role="alert" {...stylex.props(banner.base, banner.danger, s.interrupted)}>
               <TriangleAlert size={16} aria-hidden="true" />
-              <span {...stylex.props(s.interruptedText)}>{resumeError ? t("lesson.resumeFailed", { error: resumeError }) : t("lesson.interrupted")}</span>
+              <span {...stylex.props(s.interruptedText)}>
+                {resumeError ? t("lesson.resumeFailed", { error: resumeError }) : t(practice ? "practiceSet.interrupted" : "lesson.interrupted")}
+              </span>
               <button type="button" disabled={resuming} onClick={resume} {...stylex.props(btn.base, btn.danger, btn.sm)}>
                 {resuming ? <Spinner /> : <RotateCcw size={14} aria-hidden="true" />} {t("lesson.resume")}
               </button>
@@ -607,10 +634,16 @@ export function LessonPage() {
           ) : (
             <>
               {v.lesson.status !== "failed" && status.some((st) => st === "pending" || st === "checking") && (
-                <GenProgress outline={outline} status={status} checkingSince={checkingSince} rejection={rejection} />
+                <GenProgress
+                  outline={outline.map((o, i) => ({ title: steps[i]?.title ?? o.title }))}
+                  status={status}
+                  checkingSince={checkingSince}
+                  rejection={rejection}
+                  practice={practice && v.authorConversationId ? { onStop: stop, stopping } : undefined}
+                />
               )}
               <div {...stylex.props(s.progressRow)}>
-                <span {...stylex.props(text.small, text.muted, text.tnum)}>{isEnd ? t("lesson.summaryShort") : t("lesson.stepOf", { n: pos + 1, total })}</span>
+                <span {...stylex.props(text.small, text.muted, text.tnum)}>{isEnd ? t(practice ? "practiceSet.results" : "lesson.summaryShort") : t("lesson.stepOf", { n: pos + 1, total })}</span>
                 <div {...stylex.props(s.progressBar)}>
                   <Progress value={done} max={total} label={t("lesson.stepsDone")} />
                 </div>
@@ -637,6 +670,7 @@ export function LessonPage() {
                     active={st.idx === pos && !isEnd}
                     tutor={tutorHooks}
                     onCheckResults={(_, r) => setCheckResults(r)}
+                    onPractiseMore={(itemId) => setPracticeFrom({ itemId })}
                     itemStates={v.itemStates}
                     revealedLines={v.revealedLines[st.id] ?? []}
                     lineResults={lineResults[st.id]}
@@ -664,9 +698,12 @@ export function LessonPage() {
                 </div>
               )}
 
-              {isEnd && (
-                <LessonEnd summary={summary} generating={v.lesson.status === "generating" && !summary} checkResults={checkResults} topicId={topicId} lessonId={lessonId} />
-              )}
+              {isEnd &&
+                (practice ? (
+                  <PracticeEnd lessonId={lessonId} topicId={topicId} summary={summary} generating={v.lesson.status === "generating" && !summary} />
+                ) : (
+                  <LessonEnd lessonId={lessonId} summary={summary} generating={v.lesson.status === "generating" && !summary} checkResults={checkResults} topicId={topicId} />
+                ))}
 
               <nav aria-label={t("lesson.stepNav")} {...stylex.props(s.nav)}>
                 <button type="button" disabled={prevPos < 0} onClick={() => go(prevPos)} {...stylex.props(btn.base, btn.ghost, s.navBtn)}>
@@ -689,6 +726,8 @@ export function LessonPage() {
             <p {...stylex.props(text.small, text.muted)}>{t("lesson.checkNoTutorBody")}</p>
           </aside>
         )}
+
+        <PracticeDialog from={practiceFrom} defaultFocus="mistakes" onClose={() => setPracticeFrom(null)} />
 
         {showTutor && topicId && (
           <aside ref={tutorRef} aria-label={t("lesson.aiTutor")} {...stylex.props(card.base, s.tutor, !docked && s.tutorFloating, !docked && shadow.pop)}>
@@ -798,17 +837,17 @@ function LessonNotes({ topicId, lessonId }: { topicId: string; lessonId: string 
 }
 
 function LessonEnd({
+  lessonId,
   summary,
   generating,
   checkResults,
   topicId,
-  lessonId,
 }: {
+  lessonId: string;
   summary: string | null;
   generating: boolean;
   checkResults: { item: PublicItem; result: ItemResult | undefined }[] | null;
   topicId: string | null;
-  lessonId: string;
 }) {
   useLang();
   const correct = checkResults?.filter((r) => r.result?.response.correct === true).length ?? 0;
@@ -826,6 +865,8 @@ function LessonEnd({
         </div>
       )}
       <LessonReward lessonId={lessonId} end />
+      <PracticeOffer lessonId={lessonId} belowCrown={!!checkResults && checkResults.length > 0 && correct / checkResults.length < CROWN_SHARE} />
+      {topicId && <FinalInvite topicId={topicId} />}
       <DayProgress />
       {summary ? (
         <Markdown src={summary} />
