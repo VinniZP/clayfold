@@ -1,11 +1,12 @@
 import * as stylex from "@stylexjs/stylex";
-import { ArrowLeft, Bell, BookA, Brain, CircleArrowUp, House, Layers, Menu, Moon, Repeat2, Search, Settings, ShieldCheck, Snowflake, SquareTerminal, Sun, X } from "lucide-react";
+import { ArrowLeft, Bell, BookA, Brain, CircleArrowUp, House, Layers, Menu, Moon, PawPrint, Repeat2, Search, Settings, ShieldCheck, Snowflake, SquareTerminal, Sun, X } from "lucide-react";
 import { useCallback, useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { Link, NavLink, Outlet, useLocation, useNavigate } from "react-router";
 import type { TodayView, TopicSummary, UpdateMode, UpdateView } from "@shared/api";
 import { LANGS, translate, type Lang, type MessageKey } from "@shared/i18n";
 import { api, errorText } from "../lib/api";
 import { setClaudeMode, useClaudeMode } from "../lib/claudeMode";
+import { refreshGame, useGame } from "../lib/game";
 import { lang, setLang, t, useLang } from "../lib/i18n";
 import { useOverlayScroll } from "../lib/overlayScroll";
 import { setTheme, useTheme } from "../lib/theme";
@@ -13,7 +14,9 @@ import { bp, color, font, motion, radius } from "../theme/tokens.stylex";
 import { btn, layout, shadow, text } from "../theme/ui";
 import { AppRoot } from "./AppRoot";
 import { ClaudePanel } from "./ClaudePanel";
+import { Celebrations } from "./meerkat/Celebrations";
 import { HeaderProvider, type HeaderInfo } from "./header";
+import { Intro } from "./Intro";
 import { Clay } from "./ui";
 
 const pulse = stylex.keyframes({
@@ -334,12 +337,14 @@ function LogoMark({ size = 44 }: { size?: number }) {
   );
 }
 
-const NAV: { to: string; label: MessageKey; icon: ReactNode; end?: boolean; due?: boolean }[] = [
+// game: shown only while the meerkat is on.
+const NAV: { to: string; label: MessageKey; icon: ReactNode; end?: boolean; due?: boolean; game?: boolean }[] = [
   { to: "/", label: "nav.home", icon: <House size={22} />, end: true },
   { to: "/topics", label: "nav.topics", icon: <Layers size={22} /> },
   { to: "/review", label: "nav.review", icon: <Repeat2 size={22} />, due: true },
   { to: "/memory", label: "nav.memory", icon: <Brain size={22} /> },
   { to: "/glossary", label: "nav.glossary", icon: <BookA size={22} /> },
+  { to: "/meerkat", label: "nav.meerkat", icon: <PawPrint size={22} />, game: true },
   { to: "/audit", label: "nav.audit", icon: <ShieldCheck size={22} /> },
   { to: "/settings", label: "nav.settings", icon: <Settings size={22} /> },
 ];
@@ -349,6 +354,7 @@ const dueLabel = (n: number) => t("nav.due", { cards: t("count.cards", { count: 
 function Rail({ due }: { due: number }) {
   useLang();
   const theme = useTheme();
+  const { on: game } = useGame();
   return (
     <aside {...stylex.props(s.railCol)}>
       <div {...stylex.props(s.rail)}>
@@ -357,7 +363,7 @@ function Rail({ due }: { due: number }) {
       </Link>
       <nav aria-label={t("nav.sections")}>
         <ul {...stylex.props(layout.plainList, s.railNav)}>
-          {NAV.map((it) => (
+          {NAV.filter((it) => game || !it.game).map((it) => (
             <li key={it.to}>
               <NavLink
                 to={it.to}
@@ -852,9 +858,11 @@ export function Layout() {
   const running = useRunningTopics();
   const [update, setUpdate] = useUpdate();
   const claudeMode = useClaudeMode();
+  const { on: game } = useGame();
   useOverlayScroll(drawer);
 
   useEffect(() => {
+    refreshGame();
     api.review().then(
       (r) => setDue(r.cards.length + r.items.length),
       () => setDue(0),
@@ -899,7 +907,7 @@ export function Layout() {
             </div>
             <nav aria-label={t("nav.sections")}>
               <ul {...stylex.props(layout.plainList, s.drawerNav)}>
-                {NAV.map((it) => (
+                {NAV.filter((it) => game || !it.game).map((it) => (
                   <li key={it.to}>
                     <NavLink
                       to={it.to}
@@ -959,6 +967,8 @@ export function Layout() {
         </main>
       </div>
       {claudeMode && <ClaudePanel />}
+      <Intro />
+      <Celebrations />
     </AppRoot>
   );
 }

@@ -56,7 +56,7 @@ claude -p "<text>" --output-format stream-json --verbose --include-partial-messa
   --tools "Read,Write,Edit,Glob,Grep,WebSearch,WebFetch"
   --allowedTools "Read,Write,Edit,Glob,Grep,WebSearch,WebFetch,mcp__plugin_clayfold_clayfold__*"
   --permission-mode dontAsk --permission-prompts none --model <model> [--effort <level>] --max-budget-usd <n>
-  --append-system-prompt "<language instruction>" --system-prompt-snapshot off
+  --append-system-prompt "<language instruction>[, meerkat tasks]" --system-prompt-snapshot off
 cwd: data/workspaces/<slug>     stdin: /dev/null     env: childEnv({ CLAYFOLD_MCP_URL, CLAYFOLD_TOPIC_ID })
 ```
 
@@ -90,6 +90,15 @@ While an update runs, the UI polls `/api/update` every 2 seconds and reloads the
 3. `lesson_finish` closes the lesson; `cards_propose` sends cards through the same gates and on to the learner for acceptance.
 
 Published items are copied to `items` with a shuffled `display_order`. The browser receives only `PublicStep`/`PublicItem`; grading runs in `server/routes`.
+
+## Meerkat
+
+Optional gamification, off by default (`settings.gamification`). Catalogs and conditions: `shared/game.ts`; rules G1–G2: `docs/learning-design.md`.
+
+- Claude designs the rewards in the runs that build content; there are no extra runs. While the meerkat is on, `appendedPrompt` in `server/claude/runner.ts` adds `gameInstruction` (`server/game/prompt.ts`) for lesson, course onboarding and goal runs, and the MCP server lists the `GAME_FIELDS` of `shared/tools.ts`: `lesson_plan` takes a `challenge` step index and a lesson `reward`, `graph_set` takes course `rewards` and a `resident`, `goal_plan_set` takes stage `trophies`. While it is off, the schemas leave these fields out.
+- Content built before the meerkat was on gets its rewards from `POST /api/game/backfill` (`server/game/backfill.ts`): one `runJsonPrompt` call (purpose `game`) per course, goal and lesson that lacks them; a lesson's challenge becomes its last practice step with an apply-or-higher item.
+- Rewards go to `rewards`, residents to `residents`. `GET /api/game` (`server/game/view.ts`) works out every condition from learning data, stamps first unlocks, and records habit and rank unlocks in `unlocks`; turning the meerkat on rewards earlier learning at once.
+- The web app keeps the state in `web/src/lib/game.ts` and fetches it only while the meerkat is on. Unlocks show one at a time in `Celebrations`, held back while a lesson page is open until its end.
 
 ## Narration
 

@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
 import type { ApiError } from "../../shared/api";
 import { conversations } from "./conversations";
+import { game } from "./game";
 import { glossary } from "./glossary";
 import { items } from "./items";
 import { lessons } from "./lessons";
@@ -32,6 +33,7 @@ api.route("/", todayRoutes);
 api.route("/", settings);
 api.route("/", system);
 api.route("/", update);
+api.route("/", game);
 
 api.onError((err, c) => {
   if (err instanceof HTTPException) return c.json({ error: err.message } satisfies ApiError, err.status);

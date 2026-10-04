@@ -30,7 +30,7 @@ export const DUPLICATE_JACCARD = 0.8;
 export const CAPTION_OVERLAP = 0.6;
 export const CARD_BACK_MAX = 120;
 
-const HIGHER_BLOOM = new Set<Bloom>(["apply", "analyze", "evaluate", "create"]);
+export const HIGHER_BLOOM = new Set<Bloom>(["apply", "analyze", "evaluate", "create"]);
 const RULES = Object.values(CONTENT_RULES);
 const ABSOLUTES = new Set(RULES.flatMap((r) => r.absolutes));
 const YES_NO = new Set(RULES.flatMap((r) => r.yesNoBack));

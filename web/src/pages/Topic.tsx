@@ -9,6 +9,7 @@ import { useHeader } from "../components/header";
 import { GraphLegend, KnowledgeGraph } from "../components/KnowledgeGraph";
 import { LessonList } from "../components/LessonList";
 import { StaleSources, readyLine } from "../components/LessonStatus";
+import { CourseResident } from "../components/meerkat/CourseGame";
 import { OnboardingStepper } from "../components/OnboardingStepper";
 import { GoalBanner, GoalView } from "./Goal";
 import { NewTopicForm, TopicCard, toneAt, topicObject } from "../components/Topics";
@@ -225,6 +226,7 @@ export function TopicPage() {
     <div {...stylex.props(s.page)}>
       <div {...stylex.props(s.left)}>
         {d.goal && <GoalBanner goal={d.goal} />}
+        <CourseResident topicId={topicId} />
         {d.onboarding.some((p) => p.status !== "done") && <OnboardingStepper phases={d.onboarding} />}
         <section aria-labelledby="graph-title" {...stylex.props(card.base)}>
           <CardHead title={t("topic.graph")} id="graph-title">

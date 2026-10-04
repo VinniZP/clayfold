@@ -75,6 +75,20 @@ Mayer numbers: Cambridge Handbook of Multimedia Learning, 2nd ed., chapters on e
 
 No controlled studies of LLM-written flashcards or LLM-drawn teaching diagrams were found; C- and V-rules are defaults that learner data (regeneration queue, reports, audit) has to confirm.
 
+## Motivation (G)
+
+The meerkat is optional and off by default (Settings). While it is on:
+
+| ID | Rule | Evidence | Enforced by |
+|---|---|---|---|
+| G1 | A lesson's challenge is one practice step before the exit check whose item is apply or higher; the gold crown needs it right on the first try without hints. | [D] | `lesson_plan`, step gate |
+| G2 | A reward, trophy or resident Claude draws is a self-contained SVG on a 100 × 100 canvas without text; the browser shows it as an image. | [D] | `lesson_plan`, `graph_set`, `goal_plan_set` |
+
+- Rewards follow learning actions only: answered items, exit checks, mastery (L12), reviews, days with the daily goal met, a question to the tutor, a lesson finished without leaving it for more than two minutes. Nothing rewards speed, clicks or time spent in the app. [D]
+- A lesson crown needs 80% of the exit check right on the first attempt, the L12 threshold. [D]
+- Lesson steps carry no game elements (V1): the app frames the challenge step, and rewards appear outside the steps.
+- Unlocks wait for the end of a lesson, and the companion says nothing about exit-check answers before their results show (L11). [D]
+
 ## Learner signals
 
 | Signal | Action |

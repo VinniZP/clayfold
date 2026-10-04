@@ -1,11 +1,12 @@
 import * as stylex from "@stylexjs/stylex";
-import { Snowflake } from "lucide-react";
+import { Crown, Snowflake } from "lucide-react";
 import { useLayoutEffect, useRef, useState, type KeyboardEvent, type PointerEvent } from "react";
 import type { ActivityDay, TodayView } from "@shared/api";
 import { dateFormat, dayKey } from "../lib/format";
 import { t, useLang } from "../lib/i18n";
 import { bp, color, font, motion } from "../theme/tokens.stylex";
 import { layout } from "../theme/ui";
+import { useDayCrowns } from "./meerkat/Crowns";
 import { Clay } from "./ui";
 
 export type CalendarDay = {
@@ -168,6 +169,7 @@ const s = stylex.create({
   month: { fontSize: 11.5, fontWeight: 650, color: color.textMuted, whiteSpace: "nowrap", lineHeight: 1, paddingBottom: 2 },
   weekday: { fontSize: 11.5, fontWeight: 600, color: color.textMuted, paddingRight: 4, lineHeight: 1 },
   cell: { position: "relative", aspectRatio: "1", cursor: "default" },
+  dayCrown: { position: "absolute", top: "6%", left: "50%", zIndex: 2, display: "flex", transform: "translateX(-50%)", pointerEvents: "none", filter: "drop-shadow(0 1px 1px rgb(50 37 63 / 0.35))" },
 
   // Ribbon
   halo: {
@@ -181,8 +183,9 @@ const s = stylex.create({
     animationFillMode: "backwards",
     animationDelay: "450ms",
   },
-  haloCurrent: { backgroundColor: `color-mix(in oklab, ${color.chart2} 62%, transparent)` },
-  haloPast: { backgroundColor: `color-mix(in oklab, ${color.chart1} 24%, transparent)` },
+  // Opaque, so the overlapping pieces of one run (a halo per day, a bridge between days) show no seams.
+  haloCurrent: { backgroundColor: `color-mix(in oklab, ${color.chart2} 26%, ${color.surface})` },
+  haloPast: { backgroundColor: `color-mix(in oklab, ${color.chart1} 16%, ${color.surface})` },
   bridgeDown: { inset: "auto", left: -4, right: -4, top: "50%", height: `calc(100% + ${GAP}px)`, borderRadius: 0 },
   bridgeRight: { inset: "auto", top: -4, bottom: -4, left: "50%", width: `calc(100% + ${GAP}px)`, borderRadius: 0 },
   tile: {
@@ -208,7 +211,7 @@ const s = stylex.create({
   hot1: { backgroundColor: `color-mix(in oklab, ${color.chart2} 38%, ${color.chartTrack})` },
   hot2: { backgroundColor: `color-mix(in oklab, ${color.chart2} 62%, ${color.chartTrack})` },
   hot3: { backgroundColor: `color-mix(in oklab, ${color.chart2} 86%, ${color.chartTrack})` },
-  hot4: { backgroundColor: color.chart2, boxShadow: `inset 0 0 0 2px color-mix(in oklab, ${color.chart2} 60%, ${color.text})` },
+  hot4: { backgroundColor: color.chart2, boxShadow: `inset 0 0 0 2px color-mix(in oklab, ${color.chart2} 55%, white)` },
   tileFrozen: { backgroundColor: `color-mix(in oklab, ${color.fig4} 26%, ${color.surface})`, color: color.fig4 },
   tileFuture: { backgroundColor: "transparent", borderWidth: 1.5, borderStyle: "dashed", borderColor: color.border },
   tileToday: {
@@ -351,6 +354,8 @@ export function ActivityCalendar({ days, variant, goal, label }: { days: Calenda
   const shown = active !== null && !days[active]!.future ? active : null;
   const lastPast = days.findLastIndex((d) => !d.future);
   const months = monthLabels(days);
+  const crowned = useDayCrowns();
+  const describeDay = (d: CalendarDay) => (crowned?.has(d.key) ? `${describe(d)} · ${t("game.dayCrown")}` : describe(d));
 
   useLayoutEffect(() => {
     const wrap = wrapRef.current;
@@ -467,6 +472,11 @@ export function ActivityCalendar({ days, variant, goal, label }: { days: Calenda
             return (
               <div key={d.key} data-idx={i} {...stylex.props(s.cell)}>
                 {cell(d, i)}
+                {crowned?.has(d.key) && !d.head && (
+                  <span aria-hidden="true" {...stylex.props(s.dayCrown)}>
+                    <Crown size={10} strokeWidth={2.2} color="#865000" fill="#F6C453" />
+                  </span>
+                )}
               </div>
             );
           }),
@@ -474,11 +484,11 @@ export function ActivityCalendar({ days, variant, goal, label }: { days: Calenda
       </div>
       {tip && shown !== null && (
         <div key={shown} {...stylex.props(s.tip, s.tipPos(tip.x, tip.y))}>
-          {describe(days[shown]!)}
+          {describeDay(days[shown]!)}
         </div>
       )}
       <p aria-live="polite" {...stylex.props(layout.srOnly)}>
-        {cursor !== null && hover === null && !days[cursor]!.future ? describe(days[cursor]!) : ""}
+        {cursor !== null && hover === null && !days[cursor]!.future ? describeDay(days[cursor]!) : ""}
       </p>
     </div>
   );

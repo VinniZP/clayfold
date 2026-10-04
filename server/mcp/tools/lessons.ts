@@ -1,20 +1,22 @@
 import type { GateOutcome } from "../../../shared/tools";
-import type { Level } from "../../../shared/schemas";
+import type { Violation } from "../../../shared/rules";
+import type { LessonPlan, LessonReward, Level } from "../../../shared/schemas";
 import { newId, now } from "../../db";
 import { displayOrderFor, stepItems } from "../../gates/content";
 import { checkLessonPlan } from "../../gates/deterministic";
 import { checkPlanSources, okSources } from "../../gates/diversity";
 import { criticOutage, gateStep, recordGates } from "../../gates/pipeline";
+import { checkDrawing, storeLessonReward } from "../../game/rewards";
 import { publisherOf } from "../../publishers";
 import { defineTool, ToolError, type ToolContext } from "../context";
 
 export const MAX_ATTEMPTS = 3;
 
-type LessonRow = { id: string; status: string; level: Level; outline: string };
+type LessonRow = { id: string; status: string; level: Level; outline: string; challenge_idx: number | null };
 
 function lessonOf(ctx: ToolContext, lessonId: string): LessonRow & { outlineList: { kind: string; title: string }[] } {
   const row = ctx.db
-    .query<LessonRow, [string, string]>("SELECT id, status, level, outline FROM lessons WHERE id = ? AND topic_id = ?")
+    .query<LessonRow, [string, string]>("SELECT id, status, level, outline, challenge_idx FROM lessons WHERE id = ? AND topic_id = ?")
     .get(lessonId, ctx.topicId);
   if (!row) throw new ToolError(`lesson "${lessonId}" does not exist in this topic; call lesson_plan first`);
   return { ...row, outlineList: JSON.parse(row.outline) };
@@ -37,18 +39,35 @@ export function announceNewSources(ctx: ToolContext, lessonId: string): string |
   return `${fresh.length} new sources were added to this topic after the lesson was planned: ${list}; consider citing them in the remaining steps.`;
 }
 
+/** G1: the challenge is a practice step before the exit check; G2: the reward's drawing; a gold reward needs a challenge. */
+export function checkLessonGame(plan: LessonPlan, challenge: number | undefined, reward: LessonReward | undefined): Violation[] {
+  const out: Violation[] = [];
+  if (challenge !== undefined && plan.outline[challenge]?.kind !== "practice") {
+    out.push({ rule: "G1", message: `outline entry ${challenge} is not a practice step; the challenge is one practice step`, path: "challenge" });
+  }
+  if (reward) {
+    out.push(...checkDrawing(reward.svg, "reward"));
+    if (reward.earnedBy === "gold" && challenge === undefined) {
+      out.push({ rule: "G1", message: 'a "gold" reward needs a challenge step; set challenge or earn it with "silver"', path: "reward.earnedBy" });
+    }
+  }
+  return out;
+}
+
 export const lessonPlan = defineTool({
   name: "lesson_plan",
   description: `Start a lesson: store its title, objective, graph nodes, learner level, the sources it will cite and the outline of steps (kind + title per step). The learner sees the outline at once.
 The outline must start with an 'activate' step (2-3 ungraded prequestions, L2) and end with a 'check' step (unaided exit check, L11); every nodeId must already be in the graph.
 sourceIds: ok sources of this topic (see get_learner_state). When the topic's sources come from two or more publishers, the planned sources must too (Q8), and the lesson's cites must span at least two publishers by the check step, which the gates enforce.
 Returns {lessonId}. Then submit the steps in order with step_submit (index = position in the outline), and close with lesson_finish.`,
-  handler(ctx, { plan }) {
+  gameDescription: `Gamification is on. challenge: the outline index of one practice step, the lesson's hardest item (G1). reward: the meerkat wearable this lesson awards, drawn per the system prompt (G2); earnedBy "complete" (the exit check answered), "silver" (its crown) or "gold" (crown plus the challenge right on the first try, only with a challenge).`,
+  handler(ctx, { plan, challenge, reward }) {
     const known = new Set(
       ctx.db.query<{ id: string }, [string]>("SELECT id FROM nodes WHERE topic_id = ?").all(ctx.topicId).map((r) => r.id),
     );
     const sources = okSources(ctx.db, ctx.topicId);
     const violations = [...checkLessonPlan(plan, known), ...checkPlanSources(plan.sourceIds, sources)];
+    if (ctx.game) violations.push(...checkLessonGame(plan, challenge, reward));
     if (violations.length > 0) throw new ToolError("the lesson plan is invalid; nothing was stored", violations);
     const lessonId = newId("les");
     ctx.db
@@ -68,6 +87,10 @@ Returns {lessonId}. Then submit the steps in order with step_submit (index = pos
         sources.length,
         JSON.stringify(sources.map((s) => s.id)),
       );
+    if (ctx.game) {
+      if (challenge !== undefined) ctx.db.query("UPDATE lessons SET challenge_idx = ? WHERE id = ?").run(challenge, lessonId);
+      if (reward) storeLessonReward(ctx.db, ctx.topicId, lessonId, reward);
+    }
     ctx.publish({ type: "lesson.planned", lessonId, title: plan.title, outline: plan.outline });
     return { result: { lessonId } };
   },
@@ -108,7 +131,14 @@ Returns {status, attempt, violations}. "published": go on to the next index. "re
     const displayOrders = items.map(({ item }) => displayOrderFor(item));
     let run;
     try {
-      run = await gateStep({ db: ctx.db, critic: ctx.critic }, { topicId: ctx.topicId, lessonId, level: lesson.level, step, displayOrders });
+      run = await gateStep({ db: ctx.db, critic: ctx.critic }, {
+        topicId: ctx.topicId,
+        lessonId,
+        level: lesson.level,
+        step,
+        displayOrders,
+        challenge: lesson.challenge_idx === index,
+      });
     } catch (e) {
       ctx.db.query("UPDATE steps SET status = 'rejected' WHERE id = ?").run(stepId);
       throw e;

@@ -8,6 +8,7 @@ import { t, useLang } from "../lib/i18n";
 import { bp, color, radius, space } from "../theme/tokens.stylex";
 import { chip, text } from "../theme/ui";
 import { StaleSources, readyLine } from "./LessonStatus";
+import { LessonBadges } from "./meerkat/Crowns";
 import { Spinner } from "./ui";
 
 type Learner = LessonSummary["learnerStatus"];
@@ -156,6 +157,7 @@ export function LessonList({ lessons }: { lessons: LessonSummary[] }) {
                       <Clapperboard size={12} aria-hidden="true" /> {t("video.ready")}
                     </span>
                   )}
+                  <LessonBadges lessonId={l.id} />
                 </div>
                 <span {...stylex.props(text.small, text.muted)}>
                   {levelLabel(l.level)} · {formatDate(l.createdAt)}

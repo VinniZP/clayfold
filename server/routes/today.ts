@@ -13,7 +13,7 @@ const DEFAULT_GOAL: GoalMinutes = 10;
 const startOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate());
 const nextDayStart = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1);
 
-function goalMinutes(database: Database): GoalMinutes {
+export function goalMinutes(database: Database): GoalMinutes {
   const row = database.query<{ value: string }, []>("SELECT value FROM settings WHERE key = 'goal_minutes'").get();
   return row ? (JSON.parse(row.value) as GoalMinutes) : DEFAULT_GOAL;
 }

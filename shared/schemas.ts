@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { OUTFIT_SLOTS } from "./game";
 
 // Authoring schemas: what Claude submits through MCP tools. They carry answer keys and
 // solutions, so they never reach the browser. Public* schemas below are the browser view.
@@ -265,6 +266,55 @@ export const GoalPlanEntry = z
   })
   .strict();
 export type GoalPlanEntry = z.infer<typeof GoalPlanEntry>;
+
+// ---------- Meerkat rewards (gamification only) ----------
+
+/** A wearable Claude designs for the learner's meerkat. */
+const Wearable = {
+  name: z.string().min(2).max(60),
+  /** What earning it means, in one sentence. */
+  description: z.string().min(10).max(200),
+  slot: z.enum(OUTFIT_SLOTS),
+  /** `<svg viewBox="0 0 100 100">` with the item alone; no text, scripts or external references (G2). */
+  svg: z.string().min(40).max(12000),
+};
+
+/** The reward of one lesson: complete (every exit-check item answered), silver or gold crown. */
+export const LessonReward = z.object({ ...Wearable, earnedBy: z.enum(["complete", "silver", "gold"]) }).strict();
+export type LessonReward = z.infer<typeof LessonReward>;
+
+/** A course milestone: unlocked when every listed node reaches the mastery level. */
+export const CourseReward = z
+  .object({ ...Wearable, key: Slug, nodeIds: z.array(Slug).min(1).max(12), mastery: z.enum(["exit_passed", "mastered"]) })
+  .strict();
+export type CourseReward = z.infer<typeof CourseReward>;
+
+/** A character who lives in the course's chamber of the meerkat's burrow and cheers the learner on in its lessons. */
+export const Resident = z
+  .object({
+    name: z.string().min(2).max(40),
+    /** The animal, e.g. "owl", "octopus". */
+    species: z.string().min(2).max(40),
+    /** Who they are and why they care about this subject, in one or two sentences. */
+    bio: z.string().min(10).max(300),
+    /** `<svg viewBox="0 0 100 100">`: the whole character standing, facing the viewer (G2). */
+    svg: z.string().min(40).max(16000),
+    /** Short lines in the character's voice: on meeting, after a right answer, after a wrong one, inviting back to study. */
+    lines: z
+      .object({
+        greet: z.array(z.string().min(3).max(140)).min(1).max(3),
+        cheer: z.array(z.string().min(3).max(140)).min(2).max(5),
+        support: z.array(z.string().min(3).max(140)).min(2).max(5),
+        nudge: z.array(z.string().min(3).max(140)).min(1).max(3),
+      })
+      .strict(),
+  })
+  .strict();
+export type Resident = z.infer<typeof Resident>;
+
+/** The trophy of one stage of a goal's plan, as written in the entries' `stage`. */
+export const StageTrophy = z.object({ ...Wearable, stage: z.string().min(2).max(80) }).strict();
+export type StageTrophy = z.infer<typeof StageTrophy>;
 
 export const Level = z.enum(["novice", "intermediate", "advanced"]);
 export type Level = z.infer<typeof Level>;

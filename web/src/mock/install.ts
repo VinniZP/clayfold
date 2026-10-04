@@ -1,10 +1,12 @@
 import { CLAUDE_ROLES, type Effort } from "@shared/api";
 import type { AttemptRequest, AttemptResponse, ChatMessage, ItemState, LessonView, NarrationView, NoteRequest, ReviewSession, Settings, SettingsUpdate, TodayView, TopicDetail, TopicSummary, VideoExportView, VideoView, VoiceView } from "@shared/api";
 import type { TopicEvent } from "@shared/events";
+import type { OutfitRef, OutfitSlot } from "@shared/game";
 import type { PublicStep } from "@shared/schemas";
 import { marked } from "marked";
 import { lang, t } from "../lib/i18n";
 import * as fx from "./fixtures";
+import { mockBackfill, mockCrowns, mockGameOn, mockGameView, mockIntroSeen, mockSeen, mockWear, setMockGameOn, setMockIntroSeen, startMockBackfill } from "./game";
 import * as sim from "./sim";
 
 // Dev-only stand-in for the server: answers /api/* from fixtures and drives the topic
@@ -157,6 +159,7 @@ function lessonView(id: string): LessonView | null {
       tutorConversationId: null,
       itemStates: { ...fx.itemStates },
       revealedLines: { ...fx.revealedLines },
+      challengeIdx: 7,
     };
   }
   if (id === "l-cond") {
@@ -169,6 +172,7 @@ function lessonView(id: string): LessonView | null {
       tutorConversationId: null,
       itemStates: { ...fx.itemStates },
       revealedLines: {},
+      challengeIdx: 3,
     };
   }
   if (id === "l-bayes-v1") {
@@ -181,6 +185,7 @@ function lessonView(id: string): LessonView | null {
       tutorConversationId: null,
       itemStates: {},
       revealedLines: {},
+      challengeIdx: null,
     };
   }
   if (id === "l-git-rebase") {
@@ -200,6 +205,7 @@ function lessonView(id: string): LessonView | null {
       tutorConversationId: null,
       itemStates: {},
       revealedLines: {},
+      challengeIdx: null,
     };
   }
   if (id === "l-git") {
@@ -212,6 +218,7 @@ function lessonView(id: string): LessonView | null {
       tutorConversationId: null,
       itemStates: {},
       revealedLines: {},
+      challengeIdx: null,
     };
   }
   return null;
@@ -219,12 +226,14 @@ function lessonView(id: string): LessonView | null {
 
 // The language survives the reload that follows a switch through the web app's stored copy.
 let settings: Settings = {
+  gamification: mockGameOn(),
+  introSeen: mockIntroSeen(),
   language: lang(),
   narration: { keySet: false, voiceId: null, model: "eleven_v4" },
   // On in the mock so the Video tab can be looked at; the server default is off.
   video: { enabled: true },
   claude: Object.fromEntries(
-    CLAUDE_ROLES.map((role) => [role, { model: null, effort: null, defaultModel: ["critic", "grading", "narration", "video"].includes(role) ? "sonnet" : "opus", defaultEffort: ({ onboard: "medium", lesson: "high", critic: "high", video: "medium" } as Record<string, Effort>)[role] ?? "low" }]),
+    CLAUDE_ROLES.map((role) => [role, { model: null, effort: null, defaultModel: ["critic", "grading", "narration", "video", "game"].includes(role) ? "sonnet" : "opus", defaultEffort: ({ onboard: "medium", lesson: "high", critic: "high", video: "medium", game: "medium" } as Record<string, Effort>)[role] ?? "low" }]),
   ) as Settings["claude"],
 };
 
@@ -281,6 +290,21 @@ async function route(method: string, path: string, body: Record<string, unknown>
   const p = url.pathname;
   let m: RegExpMatchArray | null;
 
+  if (p.startsWith("/api/game")) {
+    if (!settings.gamification) return json({ error: t("game.off") }, 409);
+    if (p === "/api/game") return json(mockGameView());
+    if (p === "/api/game/crowns") return json(mockCrowns());
+    if (p === "/api/game/outfit") {
+      const view = mockWear(body.slot as OutfitSlot, (body.item ?? null) as OutfitRef | null);
+      return view ? json(view) : json({ error: t("game.notWearable") }, 400);
+    }
+    if (p === "/api/game/seen") {
+      mockSeen(body);
+      return json(undefined, 204);
+    }
+    if (p === "/api/game/focus") return json(undefined, 204);
+    if (p === "/api/game/backfill") return json(method === "POST" ? startMockBackfill() : mockBackfill(), method === "POST" ? 202 : 200);
+  }
   if (p === "/api/topics" && method === "GET") return json(summaries());
   if (p === "/api/topics" && method === "POST") {
     const kind = body.kind === "goal" ? "goal" : "topic";
@@ -472,8 +496,11 @@ async function route(method: string, path: string, body: Record<string, unknown>
   if (p === "/api/today") return json(fx.today);
   if (p === "/api/settings") {
     if (method === "PUT") {
-      const { language, voiceId, ttsModel, videoEnabled, claudeRole } = body as SettingsUpdate;
+      const { language, voiceId, ttsModel, videoEnabled, claudeRole, gamification, introSeen } = body as SettingsUpdate;
+      if (gamification !== undefined) setMockGameOn(gamification);
       settings = {
+        gamification: gamification ?? settings.gamification,
+        introSeen: introSeen ? setMockIntroSeen(introSeen) : settings.introSeen,
         language: language ?? settings.language,
         narration: { ...settings.narration, voiceId: voiceId ?? settings.narration.voiceId, model: ttsModel ?? settings.narration.model },
         video: { enabled: videoEnabled ?? settings.video.enabled },

@@ -1,5 +1,6 @@
+import type { HabitId, Outfit, OutfitItemId, OutfitSlot, RewardCondition, Tier } from "./game";
 import type { Lang } from "./i18n";
-import type { Answer, Card, GoalPlanEntry, GraphNode, Level, PublicFigure, PublicItem, PublicStep } from "./schemas";
+import type { Answer, Card, GoalPlanEntry, GraphNode, Level, PublicFigure, PublicItem, PublicStep, Resident } from "./schemas";
 
 // REST contract. All routes are under /api and exchange JSON.
 // Errors: non-2xx with body ApiError.
@@ -132,6 +133,8 @@ export type LessonView = {
   itemStates: Record<string, ItemState>;
   /** Faded worked-example lines already answered: stepId -> line indices, with their revealed text. */
   revealedLines: Record<string, { idx: number; text: string }[]>;
+  /** Outline index of the lesson's challenge step, planned while gamification was on (G1). */
+  challengeIdx: number | null;
 };
 
 export type ItemState = {
@@ -283,7 +286,7 @@ export type Effort = (typeof EFFORTS)[number];
 /** Haiku models take no effort parameter (supportedModels of the Claude API effort docs). */
 export const supportsEffort = (model: string): boolean => !model.includes("haiku");
 
-export const CLAUDE_ROLES = ["onboard", "lesson", "tutor", "review", "critic", "grading", "narration", "video"] as const satisfies readonly ClaudeInstanceKind[];
+export const CLAUDE_ROLES = ["onboard", "lesson", "tutor", "review", "critic", "grading", "narration", "video", "game"] as const satisfies readonly ClaudeInstanceKind[];
 
 /** Null fields use the server defaults: CLAYFOLD_MODEL or CLAYFOLD_CRITIC_MODEL, and the role's default effort. */
 export type ClaudeRoleSetting = { model: ClaudeModel | null; effort: Effort | null };
@@ -294,9 +297,24 @@ export type Settings = {
   /** Video lessons; they use the narration key, voice and model. */
   video: { enabled: boolean };
   claude: Record<ClaudeInstanceKind, ClaudeRoleSetting & { defaultModel: string; defaultEffort: Effort }>;
+  /** The meerkat; off by default. While on, goal plans carry trophies and lessons a challenge step. */
+  gamification: boolean;
+  /** Entries of the "What's new" tour already seen. */
+  introSeen: IntroFeature[];
 };
 
+/**
+ * Entries of the "What's new" tour, shown on entering the app like a changelog: each entry the learner has not
+ * seen yet, oldest first. A new optional feature adds an entry here with its release date.
+ */
+export const INTRO_FEATURES = ["video", "game"] as const;
+export type IntroFeature = (typeof INTRO_FEATURES)[number];
+export const INTRO_RELEASED: Record<IntroFeature, string> = { video: "2026-10-04", game: "2026-10-04" };
+
 export type SettingsUpdate = {
+  gamification?: boolean;
+  /** Replaces the list of tour entries seen; an empty list shows the whole tour again. */
+  introSeen?: IntroFeature[];
   language?: Lang;
   voiceId?: string;
   ttsModel?: TtsModel;
@@ -305,6 +323,89 @@ export type SettingsUpdate = {
 };
 
 export type VoiceView = { id: string; name: string; previewUrl: string | null };
+
+// Meerkat (gamification). Every route answers 409 while Settings.gamification is off.
+// GET /api/game -> GameView (first unlocks every reward and habit whose condition holds now)
+// PUT /api/game/outfit { slot, item: OutfitRef | null } -> GameView (400 for a locked item or one of another slot)
+// POST /api/game/seen { rewards?: string[], habits?: HabitId[], ranks?: number[], residents?: string[] (topic ids) } -> 204
+// POST /api/game/focus { lessonId, longestAwayMs } -> 204 (sent when the learner completes a lesson)
+// GET /api/game/crowns -> CrownsView
+
+/** A reward Claude designed with a lesson, a course or a goal. */
+export type RewardView = {
+  id: string;
+  /** The course or goal it belongs to. */
+  topicId: string;
+  topicTitle: string;
+  source: "lesson" | "course" | "stage";
+  name: string;
+  description: string;
+  slot: OutfitSlot;
+  svg: string;
+  tier: Tier;
+  condition: RewardCondition;
+  /** Progress: check items answered (complete) or right on the first try (crowns), nodes reached, courses of the stage completed. */
+  done: number;
+  total: number;
+  unlockedAt: string | null;
+  /** The learner has seen the unlock. */
+  seen: boolean;
+};
+
+export type HabitView = {
+  id: HabitId;
+  item: OutfitItemId;
+  tier: Tier;
+  /** Progress towards `target`, capped at it. */
+  done: number;
+  target: number;
+  unlockedAt: string | null;
+  seen: boolean;
+};
+
+// GET /api/game/backfill -> GameBackfillView ; POST -> GameBackfillView (starts one Claude call per course, goal and
+// lesson that was built before the meerkat was on and lacks its rewards; a running backfill is left alone)
+export type GameBackfillView = {
+  running: boolean;
+  done: number;
+  total: number;
+  /** Titles of the courses, goals and lessons whose rewards could not be made. */
+  failed: string[];
+  finishedAt: string | null;
+  /** Courses, goals and lessons still without their rewards. */
+  missing: number;
+};
+
+/** silver: at least CROWN_SHARE of the exit check right on the first attempt; gold: also the challenge right on the first attempt without hints. */
+export type Crown = "silver" | "gold";
+
+/** Lesson crowns by lesson id; days are local dates on which the daily goal was met. */
+export type CrownsView = { lessons: Record<string, Crown>; days: string[] };
+
+/** The learning step the meerkat points at. */
+export type GameNudge =
+  | { kind: "continue"; lessonId: string; title: string }
+  | { kind: "review"; count: number }
+  | { kind: "start"; lessonId: string; title: string }
+  | { kind: "new" };
+
+/** A course's resident; befriended once the learner completes a lesson of the course. */
+export type ResidentView = Resident & { befriendedAt: string | null; seen: boolean };
+
+/** A course as a chamber of the burrow: it grows with the nodes past the exit check. */
+export type BurrowRoom = { topicId: string; title: string; passed: number; total: number; goalId: string | null; resident: ResidentView | null };
+
+export type GameView = {
+  outfit: Outfit;
+  rewards: RewardView[];
+  habits: HabitView[];
+  /** Points of every unlock by tier; the rank indexes RANKS; next is the points of the next rank. */
+  rank: { rank: number; points: number; next: number | null; seen: boolean };
+  crowns: { silver: number; gold: number; days: number };
+  rooms: BurrowRoom[];
+  nudge: GameNudge;
+};
+
 
 // Narration: POST /api/steps/:stepId/narration -> NarrationView (explain steps only; 409 without a key)
 // The first call writes a spoken script and synthesises it; later calls with the same voice and model return the stored audio.
@@ -372,7 +473,7 @@ export type VideoExportView =
 // Claude Code mode: GET /api/system -> SystemView
 // The running server and every `claude` process it controls.
 
-export type ClaudeInstanceKind = ConversationKind | "critic" | "grading" | "narration" | "video";
+export type ClaudeInstanceKind = ConversationKind | "critic" | "grading" | "narration" | "video" | "game";
 
 export type ClaudeInstance = {
   pid: number;

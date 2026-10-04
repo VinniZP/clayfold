@@ -11,12 +11,14 @@ import { AuditPage } from "./pages/Audit";
 import { GlossaryPage } from "./pages/Glossary";
 import { Home } from "./pages/Home";
 import { LessonPage } from "./pages/Lesson";
+import { MeerkatPage } from "./pages/Meerkat";
 import { MemoryIndex, MemoryPage } from "./pages/Memory";
 import { ReviewPage } from "./pages/Review";
 import { SettingsPage } from "./pages/Settings";
 import { TopicPage, TopicsPage } from "./pages/Topic";
 import "overlayscrollbars/overlayscrollbars.css";
 import "./styles/global.css";
+import { initGame } from "./lib/game";
 import { initLang, t, useLang } from "./lib/i18n";
 import { initPageScrollbars } from "./lib/overlayScroll";
 
@@ -69,6 +71,7 @@ const router = createBrowserRouter([
       { path: "/audit", element: <AuditPage /> },
       { path: "/glossary", element: <GlossaryPage /> },
       { path: "/settings", element: <SettingsPage /> },
+      { path: "/meerkat", element: <MeerkatPage /> },
       { path: "*", element: <NotFound /> },
     ],
   },
@@ -79,7 +82,7 @@ async function start() {
     const { installMock } = await import("./mock/install");
     installMock();
   }
-  await initLang();
+  await Promise.all([initLang(), initGame()]);
   initPageScrollbars();
   createRoot(document.getElementById("root")!).render(
     <StrictMode>

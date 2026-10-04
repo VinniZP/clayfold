@@ -12,7 +12,7 @@ import { lessonSummary, type LessonRow as SummaryRow } from "./lesson-summary";
 import { createConversation } from "./topics";
 import { buildTutorContext } from "./tutor-context";
 
-type LessonRow = SummaryRow & { summary: string | null };
+type LessonRow = SummaryRow & { summary: string | null; challenge_idx: number | null };
 
 function lessonRow(id: string): LessonRow {
   const row = db().query<LessonRow, [string]>("SELECT * FROM lessons WHERE id = ?").get(id);
@@ -57,6 +57,7 @@ lessons.get("/:lessonId", (c) => {
     tutorConversationId: latestConversation(lesson.id, "tutor"),
     itemStates: lessonItemStates(lesson.id),
     revealedLines: lessonRevealedLines(lesson.id),
+    challengeIdx: lesson.challenge_idx,
   } satisfies LessonView);
 });
 

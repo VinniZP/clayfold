@@ -6,7 +6,7 @@ import { effortArgs, roleRun } from "./roles";
 
 export type OneShotResult<T> = { ok: true; value: T; costUsd: number | null } | { ok: false; error: string };
 
-export type JsonPromptPurpose = "critic" | "grading" | "narration" | "video";
+export type JsonPromptPurpose = "critic" | "grading" | "narration" | "video" | "game";
 
 type ActiveCall = { pid: number; purpose: JsonPromptPurpose; model: string; effort: Effort | null; startedAt: string };
 

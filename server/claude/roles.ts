@@ -4,7 +4,7 @@ import { config } from "../config";
 import { db } from "../db";
 
 const KEY = "claude_roles";
-const ONE_SHOT: readonly ClaudeInstanceKind[] = ["critic", "grading", "narration", "video"];
+const ONE_SHOT: readonly ClaudeInstanceKind[] = ["critic", "grading", "narration", "video", "game"];
 
 // Lesson authoring is the long agentic run and the critic is the quality check; the learner waits on tutor, review and grading turns.
 const DEFAULT_EFFORT: Record<ClaudeInstanceKind, Effort> = {
@@ -16,6 +16,7 @@ const DEFAULT_EFFORT: Record<ClaudeInstanceKind, Effort> = {
   grading: "low",
   narration: "low",
   video: "medium",
+  game: "medium",
 };
 
 const defaultModel = (role: ClaudeInstanceKind): string => (ONE_SHOT.includes(role) ? config.criticModel : config.model);

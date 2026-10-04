@@ -1,6 +1,6 @@
 import { Window } from "happy-dom";
 import type { Figure } from "../../shared/schemas";
-import type { Violation } from "../../shared/rules";
+import type { RuleId, Violation } from "../../shared/rules";
 
 type Mermaid = { parse(code: string): Promise<unknown> };
 let mermaidLoad: Promise<Mermaid> | null = null;
@@ -57,10 +57,11 @@ const SVG_ALLOWED = new Set(
  * Structural and safety checks on an SVG figure. DOMPurify itself is not run here: under happy-dom 20 it
  * reads nodeName through Node.prototype (empty for elements) and drops the root, and under linkedom it is
  * unsupported and returns its input; the allowlist above reproduces its element decisions instead.
+ * A figure needs labels (V2); a meerkat drawing is checked under G2 and needs none.
  */
-export function checkSvg(svg: string, path: string): Violation[] {
+export function checkSvg(svg: string, path: string, opts: { rule: RuleId; labels: boolean } = { rule: "V6", labels: true }): Violation[] {
   const p = `${path}.svg`;
-  const v = (message: string): Violation => ({ rule: "V6", message, path: p });
+  const v = (message: string): Violation => ({ rule: opts.rule, message, path: p });
   const win = new Window();
   try {
     const doc = new win.DOMParser().parseFromString(svg, "image/svg+xml");
@@ -73,7 +74,7 @@ export function checkSvg(svg: string, path: string): Violation[] {
     const out: Violation[] = [];
     if (!root.getAttribute("viewBox")) out.push(v("root <svg> has no viewBox (needed to scale to the column)"));
     const all = [root, ...Array.from(root.querySelectorAll("*"))];
-    if (!all.some((el) => el.localName === "text")) out.push(v("svg has no <text> element; label the parts inside the figure (V2)"));
+    if (opts.labels && !all.some((el) => el.localName === "text")) out.push(v("svg has no <text> element; label the parts inside the figure (V2)"));
     const removed = new Set<string>();
     for (const el of all) {
       const name = el.localName.toLowerCase();

@@ -7,6 +7,9 @@ import type {
   CardView,
   ConversationView,
   CreateTopicResponse,
+  CrownsView,
+  GameBackfillView,
+  GameView,
   GiveUpResponse,
   GlossaryEntry,
   GoalMinutes,
@@ -35,6 +38,7 @@ import type {
   WeakSpot,
   WorkedLineResponse,
 } from "@shared/api";
+import type { OutfitRef, OutfitSlot } from "@shared/game";
 import { t } from "./i18n";
 
 export class ApiFailure extends Error {
@@ -137,6 +141,14 @@ export const api = {
 
   auditSample: (n = 10) => get<AuditEntry[]>(`/api/audit/sample?n=${n}`),
   audit: (itemId: string, body: AuditVerdict) => post<unknown>(`/api/audit/${e(itemId)}`, body),
+
+  game: () => get<GameView>("/api/game"),
+  gameCrowns: () => get<CrownsView>("/api/game/crowns"),
+  wear: (slot: OutfitSlot, item: OutfitRef | null) => request<GameView>("PUT", "/api/game/outfit", { slot, item }),
+  gameSeen: (marks: { rewards?: string[]; habits?: string[]; ranks?: number[]; residents?: string[] }) => post<unknown>("/api/game/seen", marks),
+  gameFocus: (lessonId: string, longestAwayMs: number) => post<unknown>("/api/game/focus", { lessonId, longestAwayMs }),
+  gameBackfill: () => get<GameBackfillView>("/api/game/backfill"),
+  startGameBackfill: () => post<GameBackfillView>("/api/game/backfill"),
 
   system: () => get<SystemView>("/api/system"),
   update: () => get<UpdateView>("/api/update"),

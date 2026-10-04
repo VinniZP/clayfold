@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Link, useNavigate } from "react-router";
 import type { GoalPlanEntryView, OnboardingPhase, TopicDetail } from "@shared/api";
 import { Chat } from "../components/Chat";
+import { StageTrophy } from "../components/meerkat/CourseGame";
 import { Empty, Spinner } from "../components/ui";
 import { api, errorText } from "../lib/api";
 import { t, useLang } from "../lib/i18n";
@@ -202,6 +203,7 @@ export function GoalView({ detail, convId, reload }: { detail: TopicDetail; conv
               {stagesOf(detail.plan).map(({ stage, entries }) => (
                 <section key={stage} aria-label={stage} {...stylex.props(s.stage)}>
                   <h3 {...stylex.props(s.stageTitle)}>{stage}</h3>
+                  <StageTrophy goalId={detail.topic.id} stage={stage} />
                   <ol {...stylex.props(s.entries)}>
                     {entries.map(({ entry, n }) => (
                       <li key={entry.id} {...stylex.props(s.entry)}>

@@ -9,6 +9,7 @@ import { Chat } from "../components/Chat";
 import { DayProgress } from "../components/DayProgress";
 import { GenProgress, type Rejection } from "../components/GenProgress";
 import { LearnerChip } from "../components/LessonList";
+import { ChallengeBanner, LessonCompanion, LessonReward, useLessonFocus } from "../components/meerkat/LessonGame";
 import { StaleSources } from "../components/LessonStatus";
 import { useHeader } from "../components/header";
 import type { ItemResult } from "../components/ItemView";
@@ -18,6 +19,7 @@ import { CardHead, Clay, Empty, ErrorBox, Markdown, PageLoading, Progress, Spinn
 import { VideoLesson } from "../components/VideoLesson";
 import { api, errorText } from "../lib/api";
 import { formatDateTime, kindLabel, levelLabel } from "../lib/format";
+import { useCelebrationHold } from "../lib/game";
 import { t, useLang } from "../lib/i18n";
 import { useOverlayScroll } from "../lib/overlayScroll";
 import { useStreamStatus, useTopicStream } from "../lib/stream";
@@ -355,6 +357,9 @@ export function LessonPage() {
   const current = steps[pos];
   const isEnd = total > 0 && pos >= total;
   const inCheck = current?.kind === "check";
+  // A new item never interrupts an exercise: unlocks wait for the lesson end.
+  useCelebrationHold(!isEnd);
+  useLessonFocus(lessonId, isEnd && checkResults !== null);
 
   const go = (p: number) => {
     navigated.current = true;
@@ -604,6 +609,8 @@ export function LessonPage() {
 
               {Object.values(steps).map((st) => (
                 <div key={st.id} hidden={st.idx !== pos || isEnd}>
+                  {st.idx === v.challengeIdx && <ChallengeBanner />}
+                  {st.idx === 0 && <LessonReward lessonId={lessonId} />}
                   <StepView
                     step={st}
                     topicId={topicId}
@@ -638,7 +645,7 @@ export function LessonPage() {
               )}
 
               {isEnd && (
-                <LessonEnd summary={summary} generating={v.lesson.status === "generating" && !summary} checkResults={checkResults} topicId={topicId} />
+                <LessonEnd summary={summary} generating={v.lesson.status === "generating" && !summary} checkResults={checkResults} topicId={topicId} lessonId={lessonId} />
               )}
 
               <nav aria-label={t("lesson.stepNav")} {...stylex.props(s.nav)}>
@@ -724,6 +731,7 @@ export function LessonPage() {
           </aside>
         )}
       </div>
+      <LessonCompanion topicId={topicId} step={pos} total={total} />
     </>
   );
 }
@@ -765,11 +773,13 @@ function LessonEnd({
   generating,
   checkResults,
   topicId,
+  lessonId,
 }: {
   summary: string | null;
   generating: boolean;
   checkResults: { item: PublicItem; result: ItemResult | undefined }[] | null;
   topicId: string | null;
+  lessonId: string;
 }) {
   useLang();
   const correct = checkResults?.filter((r) => r.result?.response.correct === true).length ?? 0;
@@ -786,6 +796,7 @@ function LessonEnd({
           <p>{t("lesson.endScore")}</p>
         </div>
       )}
+      <LessonReward lessonId={lessonId} end />
       <DayProgress />
       {summary ? (
         <Markdown src={summary} />
