@@ -7,9 +7,9 @@ import { api, errorText } from "../lib/api";
 import { gameProgress } from "../lib/game";
 import { useConfidenceEnabled } from "../lib/confidence";
 import { t, useLang } from "../lib/i18n";
-import { isTypingTarget, type Action } from "../lib/keys";
+import { type Action, isTypingTarget } from "../lib/keys";
 import { isCurrent, useShortcuts } from "../lib/shortcuts";
-import { bp, color, motion, radius, space } from "../theme/tokens.stylex";
+import { bp, color, motion, radius, reading, space } from "../theme/tokens.stylex";
 import { btn, field, layout, text } from "../theme/ui";
 import { ItemPrompt } from "./ItemPrompt";
 import { MatchInput, SortInput } from "./MatchSort";
@@ -143,7 +143,7 @@ const s = stylex.create({
     borderColor: { default: "transparent", ":hover": color.borderStrong },
     backgroundColor: color.surface2,
     cursor: "pointer",
-    fontSize: 16,
+    fontSize: `calc(16px * ${reading.scale})`,
     transitionProperty: "border-color, background-color",
     transitionDuration: motion.fast,
   },
@@ -194,7 +194,7 @@ const s = stylex.create({
   orderIdx: { width: 22, flexShrink: 0, fontWeight: 750, color: color.textMuted, fontVariantNumeric: "tabular-nums" },
   orderText: { flexGrow: 1 },
   orderBtns: { display: "flex", gap: 4 },
-  cloze: { maxWidth: "64ch", fontSize: 17, lineHeight: 2.3 },
+  cloze: { maxWidth: "64ch", fontSize: `calc(17px * ${reading.scale})`, lineHeight: 2.3 },
   clozeInput: {
     display: "inline-block",
     minWidth: "5ch",

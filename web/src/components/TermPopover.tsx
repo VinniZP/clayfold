@@ -4,7 +4,7 @@ import { createPortal } from "react-dom";
 import type { GlossaryEntry } from "@shared/api";
 import { glossaryScope, lookupTerm } from "../lib/glossary";
 import { t, useLang } from "../lib/i18n";
-import { color, font, radius } from "../theme/tokens.stylex";
+import { color, font, radius, reading } from "../theme/tokens.stylex";
 import { shadow } from "../theme/ui";
 
 const WIDTH = 320;
@@ -29,8 +29,8 @@ const s = stylex.create({
     borderColor: color.border,
     backgroundColor: color.surface,
     color: color.text,
-    fontFamily: font.body,
-    fontSize: 14.5,
+    fontFamily: reading.font,
+    fontSize: `calc(14.5px * ${reading.scale})`,
     lineHeight: 1.45,
   },
   head: { display: "flex", flexWrap: "wrap", alignItems: "baseline", columnGap: 8, rowGap: 2 },
@@ -129,6 +129,7 @@ export function TermPopover() {
     };
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "Escape" || !current.current) return;
+      // Consumed: the Escape that closes a definition does not also leave lesson focus mode.
       e.preventDefault();
       hide();
     };

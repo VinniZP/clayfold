@@ -15,14 +15,14 @@ import { ItemView, restoredResponse, type ItemResult } from "./ItemView";
 import { NarratedBody } from "./Narration";
 import { clipQuote } from "./SelectionActions";
 import { KeyHint } from "./Shortcuts";
-import { bp, color, font, motion, radius } from "../theme/tokens.stylex";
+import { bp, color, font, motion, radius, reading } from "../theme/tokens.stylex";
 import { banner, btn, chip, field, layout, text } from "../theme/ui";
 import { Markdown, Spinner } from "./ui";
 
 const s = stylex.create({
   step: { display: "grid", gap: 22 },
   title: { fontFamily: font.display, fontSize: { default: 30, [bp.mobile]: 24 }, fontWeight: 800, letterSpacing: "-0.02em", lineHeight: 1.15, outline: "none" },
-  body: { fontSize: 17 },
+  body: { fontSize: `calc(17px * ${reading.scale})` },
   items: { display: "grid", gap: 32 },
   checks: { display: "grid", gap: 16, paddingTop: 22, borderTopWidth: 1, borderTopStyle: "solid", borderTopColor: color.border },
   checksTitle: { fontFamily: font.display, fontSize: { default: 26, [bp.mobile]: 22 }, fontWeight: 800, letterSpacing: "-0.02em" },
@@ -54,7 +54,7 @@ const s = stylex.create({
   citeCount: { fontSize: 12, fontWeight: 650, color: color.textMuted },
   citeQuote: { display: "block", marginTop: { default: 0, ":not(:first-child)": 8 } },
   citeLink: { display: "grid", placeItems: "center", width: 28, height: 28, borderRadius: "50%", color: color.accentText, backgroundColor: { default: "transparent", ":hover": color.lilacSoft } },
-  problem: { paddingBlock: 18, paddingInline: 20, borderRadius: radius.inner, backgroundColor: color.lilacSoft, fontSize: 16, fontWeight: 500 },
+  problem: { paddingBlock: 18, paddingInline: 20, borderRadius: radius.inner, backgroundColor: color.lilacSoft, fontSize: `calc(16px * ${reading.scale})`, fontWeight: 500 },
   lines: { display: "grid", gap: 10, margin: 0, padding: 0, listStyle: "none" },
   line: { display: "grid", gridTemplateColumns: "30px minmax(0, 1fr)", gap: 14, alignItems: "start", paddingBlock: 10, paddingInline: 12 },
   lineFaded: { borderWidth: 1.5, borderStyle: "dashed", borderColor: color.borderStrong, borderRadius: radius.field },
@@ -67,7 +67,7 @@ const s = stylex.create({
   fadedPrompt: { fontWeight: 650 },
   fadedRow: { display: "flex", gap: 8, maxWidth: "52ch" },
   reflect: { display: "grid", gap: 12, maxWidth: "66ch" },
-  reflectPrompt: { fontSize: 18, fontWeight: 550 },
+  reflectPrompt: { fontSize: `calc(18px * ${reading.scale})`, fontWeight: 550 },
   checkFoot: { display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: 12, paddingBlock: 14, paddingInline: 18, borderRadius: radius.inner, backgroundColor: color.surface2 },
   summary: { display: "flex", flexWrap: "wrap", alignItems: "center", gap: 18, paddingBlock: 18, paddingInline: 22, borderRadius: radius.inner, backgroundColor: color.pistachioSoft },
   score: { fontFamily: font.display, fontSize: 44, fontWeight: 800, letterSpacing: "-0.03em", lineHeight: 1, whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums" },

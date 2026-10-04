@@ -8,8 +8,8 @@ import { Empty, ErrorBox, PageLoading } from "../components/ui";
 import { api } from "../lib/api";
 import { t, useLang } from "../lib/i18n";
 import { useResource } from "../lib/useResource";
-import { bp, color, font, radius } from "../theme/tokens.stylex";
-import { card, field, layout, text } from "../theme/ui";
+import { bp, color, font, radius, reading } from "../theme/tokens.stylex";
+import { card, field, layout, readable, text } from "../theme/ui";
 
 const s = stylex.create({
   page: { display: "grid", gap: 24 },
@@ -25,7 +25,7 @@ const s = stylex.create({
   list: { display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(min(100%, 320px), 1fr))", gap: 12, margin: 0, padding: 0, listStyle: "none" },
   term: { display: "grid", gap: 6, alignContent: "start", paddingBlock: 16, paddingInline: 18, borderRadius: radius.inner, backgroundColor: color.surface2 },
   termHead: { display: "flex", flexWrap: "wrap", alignItems: "baseline", columnGap: 8, rowGap: 2 },
-  name: { fontSize: 17, fontWeight: 750 },
+  name: { fontSize: `calc(17px * ${reading.scale})`, fontWeight: 750 },
   meta: { fontSize: 13, color: color.textMuted },
 });
 
@@ -107,7 +107,7 @@ export function GlossaryPage() {
                       {g.title}
                     </Link>
                   </h2>
-                  <ul {...stylex.props(s.list)}>
+                  <ul {...stylex.props(s.list, readable.surface)}>
                     {g.entries.map((e) => (
                       <li key={e.term} {...stylex.props(s.term)}>
                         <div {...stylex.props(s.termHead)}>

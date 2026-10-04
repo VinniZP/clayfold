@@ -18,12 +18,18 @@ import { PracticeTestPage } from "./pages/PracticeTest";
 import { ReviewPage } from "./pages/Review";
 import { SettingsPage } from "./pages/Settings";
 import { TopicPage, TopicsPage } from "./pages/Topic";
+import "@fontsource/andika/400.css";
+import "@fontsource/andika/400-italic.css";
+import "@fontsource/andika/700.css";
+import "@fontsource-variable/literata/opsz.css";
+import "@fontsource-variable/literata/opsz-italic.css";
 import "overlayscrollbars/overlayscrollbars.css";
 import "./styles/global.css";
 import { initGame } from "./lib/game";
 import { initConfidence } from "./lib/confidence";
 import { initLang, t, useLang } from "./lib/i18n";
 import { initPageScrollbars } from "./lib/overlayScroll";
+import { loadReadingFont } from "./lib/reading";
 
 const s = stylex.create({
   errorPage: { maxWidth: 720, marginInline: "auto", paddingTop: 80 },
@@ -87,7 +93,7 @@ async function start() {
     const { installMock } = await import("./mock/install");
     installMock();
   }
-  await Promise.all([initLang(), initGame(), initConfidence()]);
+  await Promise.all([initLang(), initGame(), initConfidence(), loadReadingFont()]);
   initPageScrollbars();
   createRoot(document.getElementById("root")!).render(
     <StrictMode>

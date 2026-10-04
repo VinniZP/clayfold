@@ -1,5 +1,5 @@
 import * as stylex from "@stylexjs/stylex";
-import { AudioLines, Check, Clapperboard, Gauge, Keyboard, KeyRound, Play, Sparkles, TriangleAlert } from "lucide-react";
+import { AudioLines, BookOpen, Check, Clapperboard, Gauge, Keyboard, KeyRound, Play, RotateCcw, Sparkles, TriangleAlert } from "lucide-react";
 import { useId, useRef, useState } from "react";
 import { CLAUDE_MODELS, CLAUDE_ROLES, EFFORTS, TTS_MODELS, supportsEffort, type ClaudeModel, type Effort, type Settings, type SettingsUpdate } from "@shared/api";
 import { Segmented, Select, Switch } from "../components/controls";
@@ -13,9 +13,10 @@ import { setGameOn } from "../lib/game";
 import { setConfidenceEnabled } from "../lib/confidence";
 import { t, useLang } from "../lib/i18n";
 import { setKeyHints } from "../lib/shortcuts";
+import { type Reading, READING_DEFAULTS, READING_OPTIONS, setReading, useReading, useSystemReducedMotion } from "../lib/reading";
 import { useResource } from "../lib/useResource";
-import { bp, color, radius } from "../theme/tokens.stylex";
-import { banner, btn, card, chip, field, layout, text } from "../theme/ui";
+import { bp, color, font, radius, reading } from "../theme/tokens.stylex";
+import { banner, btn, card, chip, field, layout, readable, text } from "../theme/ui";
 
 const s = stylex.create({
   page: { display: "grid", gridTemplateColumns: { default: "repeat(2, minmax(0, 1fr))", [bp.mobile]: "minmax(0, 1fr)" }, gap: 20, alignItems: "stretch" },
@@ -40,7 +41,16 @@ const s = stylex.create({
   role: { display: "grid", gap: 8, padding: 14, borderRadius: radius.inner, backgroundColor: color.surface2 },
   roleName: { fontWeight: 700, fontSize: 14.5 },
   roleRow: { display: "grid", gap: 8 },
+  readingArt: { backgroundColor: color.pistachioSoft },
+  controls: { display: "flex", flexWrap: "wrap", columnGap: 32, rowGap: 20, alignItems: "flex-start" },
+  withHint: { maxWidth: 360 },
+  glyph: (px: number) => ({ fontSize: px, fontWeight: 700, lineHeight: 1 }),
+  caption: { fontFamily: font.body },
+  preview: { display: "grid", gap: 10, paddingBlock: 22, paddingInline: 24, borderWidth: 1.5, borderStyle: "solid", borderColor: color.border, borderRadius: radius.inner },
+  previewBody: { fontSize: `calc(17px * ${reading.scale})` },
 });
+
+const SIZE_GLYPH: Record<Reading["size"], number> = { s: 12, m: 15, l: 18, xl: 21, xxl: 25 };
 
 export function SettingsPage() {
   useLang();
@@ -51,6 +61,7 @@ export function SettingsPage() {
   const onChange = (next: Settings) => settings.setData(() => next);
   return (
     <div {...stylex.props(s.page)}>
+      <ReadingSettings />
       <GameSettings settings={settings.data} onChange={onChange} />
       <VideoSettings settings={settings.data} onChange={onChange} />
       <NarrationSettings settings={settings.data} onChange={onChange} />
@@ -84,6 +95,115 @@ function WhatsNew({ onChange }: { onChange: (next: Settings) => void }) {
         <Sparkles size={16} aria-hidden="true" /> {t("settings.whatsNewShow")}
       </button>
       <SaveStatus error={error} saved={false} />
+    </section>
+  );
+}
+
+/** Stored in this browser like the theme, not in the server settings, and applied as they change. */
+function ReadingSettings() {
+  useLang();
+  const pref = useReading();
+  const systemReduce = useSystemReducedMotion();
+  const [termBefore, termAfter = ""] = t("settings.reading.previewBody").split("{term}");
+  const [codeBefore, codeAfter = ""] = t("settings.reading.previewCode").split("{code}");
+  const body = stylex.props(s.previewBody);
+  const changed = (Object.keys(READING_DEFAULTS) as (keyof Reading)[]).some((key) => pref[key] !== READING_DEFAULTS[key]);
+
+  return (
+    <section aria-labelledby="settings-reading" {...stylex.props(card.base, s.card, s.wide)}>
+      <div {...stylex.props(s.feature)}>
+        <span {...stylex.props(s.featureArt, s.readingArt)}>
+          <BookOpen size={34} aria-hidden="true" />
+        </span>
+        <CardHead id="settings-reading" title={t("settings.reading")}>
+          {changed && (
+            <button type="button" onClick={() => setReading(READING_DEFAULTS)} {...stylex.props(btn.base, btn.ghost, btn.sm)}>
+              <RotateCcw size={14} aria-hidden="true" /> {t("settings.reading.reset")}
+            </button>
+          )}
+        </CardHead>
+      </div>
+      <p {...stylex.props(text.small, s.intro)}>{t("settings.readingIntro")}</p>
+      <div {...stylex.props(s.controls)}>
+        <div {...stylex.props(field.stack)}>
+          <span {...stylex.props(field.label)}>{t("settings.reading.size")}</span>
+          <Segmented
+            compact
+            label={t("settings.reading.size")}
+            value={pref.size}
+            options={READING_OPTIONS.size.map((value) => ({
+              value,
+              label: t(`settings.reading.size.${value}`),
+              content: <span {...stylex.props(s.glyph(SIZE_GLYPH[value]))}>{t("settings.reading.sizeGlyph")}</span>,
+            }))}
+            onChange={(size) => setReading({ size })}
+          />
+        </div>
+        <div {...stylex.props(field.stack)}>
+          <span {...stylex.props(field.label)}>{t("settings.reading.leading")}</span>
+          <Segmented
+            compact
+            label={t("settings.reading.leading")}
+            value={pref.leading}
+            options={READING_OPTIONS.leading.map((value) => ({ value, label: t(`settings.reading.leading.${value}`) }))}
+            onChange={(leading) => setReading({ leading })}
+          />
+        </div>
+        <div {...stylex.props(field.stack)}>
+          <span {...stylex.props(field.label)}>{t("settings.reading.measure")}</span>
+          <Segmented
+            compact
+            label={t("settings.reading.measure")}
+            value={pref.measure}
+            options={READING_OPTIONS.measure.map((value) => ({ value, label: t(`settings.reading.measure.${value}`) }))}
+            onChange={(measure) => setReading({ measure })}
+          />
+        </div>
+        <div {...stylex.props(field.stack, s.withHint)}>
+          <span {...stylex.props(field.label)}>{t("settings.reading.font")}</span>
+          <Segmented
+            compact
+            label={t("settings.reading.font")}
+            value={pref.font}
+            options={READING_OPTIONS.font.map((value) => ({ value, label: t(`settings.reading.font.${value}`) }))}
+            onChange={(font) => setReading({ font })}
+          />
+          <p {...stylex.props(text.muted, text.small)}>{t("settings.reading.fontHint")}</p>
+        </div>
+        <div {...stylex.props(field.stack, s.withHint)}>
+          <span {...stylex.props(field.label)}>{t("settings.reading.motionTitle")}</span>
+          <Switch
+            checked={systemReduce || pref.motion === "reduce"}
+            disabled={systemReduce}
+            onChange={(on) => setReading({ motion: on ? "reduce" : "system" })}
+            label={t("settings.reading.motion")}
+          />
+          <p {...stylex.props(text.muted, text.small)}>{t(systemReduce ? "settings.reading.motionSystem" : "settings.reading.motionHint")}</p>
+        </div>
+      </div>
+      <figure aria-labelledby="settings-reading-preview" {...stylex.props(s.preview, readable.surface)}>
+        <figcaption id="settings-reading-preview" {...stylex.props(field.label, s.caption)}>
+          {t("settings.reading.preview")}
+        </figcaption>
+        <div className={`prose ${body.className ?? ""}`} style={body.style}>
+          <h3>{t("settings.reading.previewTitle")}</h3>
+          <p>
+            {termBefore}
+            <span className="term">{t("settings.reading.previewTerm")}</span>
+            {termAfter}
+          </p>
+          <ul>
+            <li>{t("settings.reading.previewStep1")}</li>
+            <li>{t("settings.reading.previewStep2")}</li>
+            <li>{t("settings.reading.previewStep3")}</li>
+          </ul>
+          <p>
+            {codeBefore}
+            <code>{t("settings.reading.previewCodeSample")}</code>
+            {codeAfter}
+          </p>
+        </div>
+      </figure>
     </section>
   );
 }

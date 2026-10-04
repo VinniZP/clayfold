@@ -121,6 +121,7 @@ function rows(section: Section): Row[] {
         { keys: [["T"]], label: "keys.tutor" },
         { keys: [["N"]], label: "keys.note" },
         { keys: [["L"]], label: "keys.narration" },
+        { keys: [["F"]], label: "keys.focus" },
       ];
     case "review":
       return [

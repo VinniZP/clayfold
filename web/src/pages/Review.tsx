@@ -15,8 +15,8 @@ import { gameProgress } from "../lib/game";
 import { t, useLang } from "../lib/i18n";
 import { useShortcutPage, useShortcuts } from "../lib/shortcuts";
 import { useResource } from "../lib/useResource";
-import { bp, color, font, radius } from "../theme/tokens.stylex";
-import { btn, card, chip, field, layout, text } from "../theme/ui";
+import { bp, color, font, radius, reading } from "../theme/tokens.stylex";
+import { btn, card, chip, field, layout, readable, text } from "../theme/ui";
 
 const st = stylex.create({
   page: { display: "grid", gridTemplateColumns: "repeat(12, minmax(0, 1fr))", gap: 24, alignItems: "start" },
@@ -25,7 +25,7 @@ const st = stylex.create({
   full: { gridColumn: "1 / -1" },
   flash: { display: "grid", justifyItems: "center", gap: 20, paddingBlock: "24px 8px", textAlign: "center" },
   front: { maxWidth: "30ch", fontFamily: font.display, fontSize: { default: 30, [bp.mobile]: 23 }, fontWeight: 800, lineHeight: 1.2, letterSpacing: "-0.02em", textWrap: "balance" },
-  back: { width: "100%", maxWidth: "56ch", paddingBlock: 22, paddingInline: 26, borderRadius: radius.card, backgroundColor: color.pistachioSoft, fontSize: 19, outline: "none" },
+  back: { width: "100%", maxWidth: "56ch", paddingBlock: 22, paddingInline: 26, borderRadius: radius.card, backgroundColor: color.pistachioSoft, fontSize: `calc(19px * ${reading.scale})`, outline: "none" },
   rates: { display: "grid", gridTemplateColumns: { default: "repeat(4, minmax(0, 1fr))", [bp.phone]: "repeat(2, minmax(0, 1fr))" }, gap: 8, width: "100%", maxWidth: 600 },
   rate: { height: 54, borderRadius: 18, borderColor: { default: "transparent", ":hover": "currentColor" } },
   again: { backgroundColor: color.dangerSoft, color: color.danger },
@@ -199,7 +199,7 @@ export function ReviewPage() {
 
   return (
     <div {...stylex.props(st.page)}>
-      <section aria-labelledby="review-title" {...stylex.props(card.base, st.main)}>
+      <section aria-labelledby="review-title" {...stylex.props(card.base, st.main, readable.surface)}>
         <CardHead title={t(finished ? "review.sessionDone" : "review.session")} id="review-title">
           {filter}
         </CardHead>

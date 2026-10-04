@@ -17,6 +17,10 @@
         var dark = pref ? pref === "dark" : window.matchMedia("(prefers-color-scheme: dark)").matches;
         document.documentElement.dataset.theme = dark ? "dark" : "light";
         try { var lang = localStorage.getItem("clayfold-lang"); if (lang) document.documentElement.lang = lang; } catch (e) {}
+        try {
+          var reading = JSON.parse(localStorage.getItem("clayfold-reading") || "{}");
+          for (var k in reading) if (typeof reading[k] === "string") document.documentElement.dataset["reading" + k.charAt(0).toUpperCase() + k.slice(1)] = reading[k];
+        } catch (e) {}
       })();
     </script>
   </head>

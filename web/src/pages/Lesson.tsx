@@ -1,5 +1,5 @@
 import * as stylex from "@stylexjs/stylex";
-import { ArrowLeft, ArrowRight, BookOpen, Check, CircleSlash, Clapperboard, Copy, Headphones, MessageCircle, NotebookText, PanelRightClose, RotateCcw, ShieldCheck, TriangleAlert } from "lucide-react";
+import { ArrowLeft, ArrowRight, BookOpen, Check, CircleSlash, Clapperboard, Copy, Headphones, Maximize2, MessageCircle, Minimize2, NotebookText, PanelRightClose, RotateCcw, ShieldCheck, TriangleAlert } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { Link, useParams, useSearchParams } from "react-router";
 import type { LessonView, PracticeFrom } from "@shared/api";
@@ -24,18 +24,20 @@ import { StepView, type LineResults, type TutorHooks } from "../components/Steps
 import { CardHead, Clay, Empty, ErrorBox, Markdown, PageLoading, Progress, Spinner } from "../components/ui";
 import { VideoLesson } from "../components/VideoLesson";
 import { api, errorText } from "../lib/api";
+import { setFocusMode, useFocusMode } from "../lib/focusMode";
 import { formatDateTime, kindLabel, levelLabel } from "../lib/format";
 import { useCelebrationHold } from "../lib/game";
 import { t, useLang } from "../lib/i18n";
 import { useOverlayScroll } from "../lib/overlayScroll";
 import { useRecentVisit } from "../lib/recent";
+import { prefersReducedMotion } from "../lib/reading";
 import { useStreamStatus, useTopicStream } from "../lib/stream";
 import { useGlossaryScope } from "../lib/glossary";
 import { useShortcutPage, useShortcuts } from "../lib/shortcuts";
 import { itemSettled, upcoming, type Track } from "../lib/listen";
 import { useResource } from "../lib/useResource";
 import { bp, color, font, radius } from "../theme/tokens.stylex";
-import { banner, btn, card, chip, layout, shadow, text } from "../theme/ui";
+import { banner, btn, card, chip, layout, readable, shadow, text } from "../theme/ui";
 
 type StepState = LessonView["stepStatus"][number];
 
@@ -101,6 +103,9 @@ const s = stylex.create({
     scrollMarginTop: 24,
   },
   gridDocked: { gridTemplateColumns: "minmax(270px, 310px) minmax(0, 1fr) minmax(280px, 320px)", gap: 16 },
+  gridFocus: { gridTemplateColumns: "minmax(0, 1fr)", width: "100%", maxWidth: 980, marginInline: "auto" },
+  gridFocusDocked: { gridTemplateColumns: "minmax(0, 1fr) minmax(300px, 340px)", maxWidth: 1340 },
+  gone: { display: "none" },
   outline: {
     position: { default: "sticky", [bp.mobile]: "relative" },
     top: 24,
@@ -175,7 +180,7 @@ const s = stylex.create({
   itemTitleDropped: { textDecoration: "line-through" },
   itemSub: { fontSize: 12.5, color: color.textMuted },
   main: { minWidth: 0, paddingBlock: { default: 28, [bp.mobile]: 20 }, paddingInline: { default: 30, [bp.mobile]: 18 }, minHeight: 560, display: "grid", gap: 20, alignContent: "start" },
-  progressRow: { display: "flex", flexWrap: "wrap", alignItems: "center", gap: 14 },
+  progressRow: { display: "flex", flexWrap: "wrap", alignItems: "center", gap: 14, fontFamily: font.body },
   progressBar: { flexGrow: 1, flexBasis: 160 },
   interrupted: { flexWrap: "wrap" },
   interruptedText: { flexGrow: 1, flexBasis: 240 },
@@ -267,7 +272,8 @@ export function LessonPage() {
   const videoOn = settings?.video.enabled ?? false;
   const [listening, setListening] = useState(false);
   const [answered, setAnswered] = useState<Record<string, boolean>>({});
-  const docked = useMediaQuery("(min-width: 1281px)");
+  const wide = useMediaQuery("(min-width: 1281px)");
+  const focusMode = useFocusMode();
   const outlineRef = useRef<HTMLElement>(null);
   const tutorRef = useRef<HTMLElement>(null);
   const tutorToggle = useRef<HTMLButtonElement>(null);
@@ -414,6 +420,9 @@ export function LessonPage() {
   // A new item never interrupts an exercise: unlocks wait for the lesson end.
   useCelebrationHold(!isEnd);
   useLessonFocus(lessonId, isEnd && checkResults !== null);
+  const focus = focusMode && tab === "lesson" && total > 0;
+  // In focus mode the tutor stays closed until the learner opens it; a wide screen then gives it a column beside the step.
+  const docked = wide && (!focus || tutorOpen);
 
   const go = (p: number) => {
     navigated.current = true;
@@ -433,14 +442,17 @@ export function LessonPage() {
     if (!navigated.current) return;
     const el = current ? document.getElementById(`step-title-${current.id}`) : document.getElementById("step-placeholder");
     if (!document.activeElement?.closest("[data-lesson-player]")) el?.focus();
-    const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    window.scrollTo({ top: 0, behavior: reduce ? "auto" : "smooth" });
+    window.scrollTo({ top: 0, behavior: prefersReducedMotion() ? "auto" : "smooth" });
   }, [pos, current]);
 
   // L11: no tutor during the exit check.
   useEffect(() => {
     if (inCheck) setTutorOpen(false);
   }, [inCheck]);
+
+  useEffect(() => {
+    if (focus) setTutorOpen(false);
+  }, [focus]);
 
   const openOffer = useCallback((o: Offer) => {
     const key = `${o.itemId}:${o.reason}`;
@@ -531,7 +543,21 @@ export function LessonPage() {
     sub: v?.lesson.objective,
     back: topicId ? { to: `/topics/${topicId}`, label: t("lesson.backToCourse") } : undefined,
     art: "spheres",
+    focus,
   });
+
+  // F toggles focus mode and Esc leaves it. KeyF also matches the key on non-Latin layouts; keys typed into a field stay there.
+  useEffect(() => {
+    if (tab !== "lesson" || total === 0) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.defaultPrevented || e.repeat || e.ctrlKey || e.metaKey || e.altKey) return;
+      if (e.target instanceof Element && e.target.closest("input, textarea, select, [contenteditable]")) return;
+      if (e.key === "f" || e.key === "F" || e.code === "KeyF") setFocusMode(!focusMode);
+      else if (e.key === "Escape" && focusMode) setFocusMode(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [tab, total, focusMode]);
 
   if (view.loading && !v) return <PageLoading />;
   if (view.error && !v)
@@ -663,10 +689,10 @@ export function LessonPage() {
 
   return (
     <LessonAudio.Provider value={audio}>
-      {tabs}
+      {!focus && tabs}
       {stale}
-      <div role="tabpanel" id="panel-lesson" aria-labelledby="tab-lesson" {...stylex.props(s.grid, showTutor && docked && s.gridDocked)}>
-        <aside ref={outlineRef} aria-label={t("lesson.outline")} {...stylex.props(card.base, s.outline)}>
+      <div role="tabpanel" id="panel-lesson" aria-labelledby="tab-lesson" {...stylex.props(s.grid, focus && s.gridFocus, showTutor && docked && (focus ? s.gridFocusDocked : s.gridDocked))}>
+        <aside ref={outlineRef} aria-label={t("lesson.outline")} {...stylex.props(card.base, s.outline, focus && s.gone)}>
           <p {...stylex.props(s.outlineTitle)}>{topicTitle ?? t("lesson.plan")}</p>
           <p {...stylex.props(s.outlineMeta, text.small, text.muted, text.tnum)}>
             {practice
@@ -686,7 +712,7 @@ export function LessonPage() {
           </nav>
         </aside>
 
-        <section ref={mainRef} aria-label={t("lesson.step")} {...stylex.props(card.base, s.main)}>
+        <section ref={mainRef} aria-label={t("lesson.step")} {...stylex.props(card.base, s.main, readable.surface)}>
           {v.lesson.status === "failed" && (
             <div role="alert" {...stylex.props(banner.base, banner.danger, s.interrupted)}>
               <TriangleAlert size={16} aria-hidden="true" />
@@ -734,6 +760,15 @@ export function LessonPage() {
                     <ShieldCheck size={12} aria-hidden="true" /> {t("lesson.noHintsChip")}
                   </span>
                 )}
+                <button
+                  type="button"
+                  aria-keyshortcuts={focus ? "Escape" : "F"}
+                  title={t(focus ? "lesson.focusExitHint" : "lesson.focusHint")}
+                  onClick={() => setFocusMode(!focus)}
+                  {...stylex.props(btn.base, focus ? btn.soft : btn.ghost, btn.sm)}
+                >
+                  {focus ? <Minimize2 size={16} aria-hidden="true" /> : <Maximize2 size={16} aria-hidden="true" />} {t(focus ? "lesson.focusExit" : "lesson.focus")}
+                </button>
               </div>
 
               {Object.values(steps).map((st) => (
@@ -829,7 +864,7 @@ export function LessonPage() {
               <h2 tabIndex={-1} {...stylex.props(s.tutorName)}>
                 {t("lesson.aiTutor")}
               </h2>
-              {!docked && (
+              {(!docked || focus) && (
                 <button type="button" aria-label={t("lesson.closeTutor")} onClick={() => setTutorOpen(false)} {...stylex.props(btn.base, btn.icon)}>
                   <PanelRightClose size={18} aria-hidden="true" />
                 </button>
@@ -887,7 +922,7 @@ export function LessonPage() {
           </aside>
         )}
       </div>
-      <LessonCompanion topicId={topicId} step={pos} total={total} />
+      {!focus && <LessonCompanion topicId={topicId} step={pos} total={total} />}
       <SelectionActions
         roots={[mainRef, tutorRef]}
         tutorBlocked={inCheck ? t("selection.tutorOffCheck") : null}
@@ -917,7 +952,7 @@ function LessonNotes({ topicId, lessonId }: { topicId: string; lessonId: string 
       ) : mine.length === 0 ? (
         <Empty title={t("lesson.noNotesTitle")}>{t("lesson.noNotesBody")}</Empty>
       ) : (
-        <ul {...stylex.props(s.notes)}>
+        <ul {...stylex.props(s.notes, readable.surface)}>
           {mine.map((n) => (
             <li key={n.id} {...stylex.props(s.note)}>
               {n.quote && <blockquote {...stylex.props(s.quote)}>{n.quote}</blockquote>}

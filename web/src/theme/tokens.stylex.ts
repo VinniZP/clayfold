@@ -166,6 +166,14 @@ export const font = stylex.defineConsts({
   mono: 'ui-monospace, "SF Mono", Menlo, monospace',
 });
 
+/** The learner's reading preferences: styles/global.css sets these properties from lib/reading.ts. Sizes are `calc(<px> * scale)`. */
+export const reading = stylex.defineConsts({
+  font: "var(--reading-font)",
+  scale: "var(--reading-scale)",
+  leading: "var(--reading-leading)",
+  measure: "var(--reading-measure)",
+});
+
 export const radius = stylex.defineConsts({
   frame: "40px",
   card: "28px",
