@@ -7,6 +7,7 @@ import { publicItem, type ItemRow } from "../routes/public";
 const DAY_MS = 24 * 60 * 60 * 1000;
 const ITEMS_PER_NODE = 2;
 const MAX_CARDS = 100;
+const MAX_TEST_MISSES = 20;
 
 /** Groups nodes into clusters of siblings: nodes that share at least one prerequisite. */
 function siblingClusters(nodes: { id: string; prereqs: string[] }[]): string[][] {
@@ -39,7 +40,8 @@ function interleave<T>(lists: T[][]): T[] {
 }
 
 /**
- * Due cards plus delayed-retrieval items (L12) for nodes whose exit check passed at least a day ago.
+ * Due cards plus delayed-retrieval items (L12) for nodes whose exit check passed at least a day ago, then missed
+ * practice-test questions.
  * L14: items interleave only within a cluster of confusable nodes and stay blocked otherwise; siblings
  * that share a prerequisite stand in for "confusable" (a heuristic, not a measure of similarity).
  */
@@ -75,5 +77,28 @@ export function reviewSession(topicId: string | null, at: Date = new Date(), dat
     const clusters = siblingClusters(topicNodes.map((n) => ({ id: n.id, prereqs: JSON.parse(n.prereqs) as string[] })));
     for (const cluster of clusters) items.push(...interleave(cluster.map((nodeId) => pick.all(topic, nodeId).map(publicItem))));
   }
+  const queued = new Set(items.map((i) => i.id));
+  for (const row of testMisses(topicId, at, database)) if (!queued.has(row.id)) items.push(publicItem(row));
   return { cards, items };
+}
+
+/**
+ * L20: items whose latest practice-test answer was wrong come back a day after that test, until a review attempt
+ * answers them.
+ */
+function testMisses(topicId: string | null, at: Date, database: Database): ItemRow[] {
+  return database
+    .query<ItemRow, string[]>(
+      `WITH latest AS (
+         SELECT q.item_id, q.correct, t.submitted_at,
+                row_number() OVER (PARTITION BY q.item_id ORDER BY t.submitted_at DESC) AS n
+         FROM practice_test_items q JOIN practice_tests t ON t.id = q.test_id
+         WHERE t.submitted_at IS NOT NULL AND q.correct IS NOT NULL)
+       SELECT i.* FROM latest l JOIN items i ON i.id = l.item_id
+       WHERE l.n = 1 AND l.correct = 0 AND l.submitted_at <= ? AND i.status = 'active' ${topicId ? "AND i.topic_id = ?" : ""}
+         AND NOT EXISTS (SELECT 1 FROM attempts a WHERE a.item_id = i.id AND a.context = 'review' AND a.created_at > l.submitted_at)
+       ORDER BY l.submitted_at, i.rowid
+       LIMIT ${MAX_TEST_MISSES}`,
+    )
+    .all(new Date(at.getTime() - DAY_MS).toISOString(), ...(topicId ? [topicId] : []));
 }

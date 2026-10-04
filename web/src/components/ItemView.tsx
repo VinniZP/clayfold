@@ -21,7 +21,7 @@ export type ItemMode = "practice" | "activate" | "check" | "review";
 
 export type ItemResult = { response: AttemptResponse; gaveUp: GiveUpResponse | null };
 
-type Draft =
+export type Draft =
   | { format: "single"; choice: number | null }
   | { format: "multi"; choices: number[] }
   | { format: "order"; sequence: string[] }
@@ -29,7 +29,7 @@ type Draft =
   | { format: "number"; value: string }
   | { format: "short"; text: string };
 
-function initialDraft(item: PublicItem): Draft {
+export function initialDraft(item: PublicItem): Draft {
   switch (item.format) {
     case "single":
       return { format: "single", choice: null };
@@ -46,11 +46,30 @@ function initialDraft(item: PublicItem): Draft {
   }
 }
 
+/** The draft that shows a stored answer; number values keep their digits. */
+export function draftFromAnswer(item: PublicItem, answer: Answer | null): Draft {
+  if (!answer || answer.format !== item.format) return initialDraft(item);
+  switch (answer.format) {
+    case "single":
+      return { format: "single", choice: answer.choice };
+    case "multi":
+      return { format: "multi", choices: answer.choices };
+    case "order":
+      return { format: "order", sequence: answer.sequence };
+    case "cloze":
+      return { format: "cloze", blanks: answer.blanks };
+    case "number":
+      return { format: "number", value: String(answer.value) };
+    case "short":
+      return { format: "short", text: answer.text };
+  }
+}
+
 function countBlanks(text: string): number {
   return new Set([...text.matchAll(/\{\{(\d+)\}\}/g)].map((m) => m[1])).size;
 }
 
-function toAnswer(d: Draft): Answer | null {
+export function toAnswer(d: Draft): Answer | null {
   switch (d.format) {
     case "single":
       return d.choice === null ? null : { format: "single", choice: d.choice };
@@ -540,7 +559,7 @@ function CheckMark() {
   );
 }
 
-function AnswerInput({
+export function AnswerInput({
   item,
   draft,
   wrong,

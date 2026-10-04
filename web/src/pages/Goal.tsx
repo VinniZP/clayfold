@@ -5,6 +5,7 @@ import { Link, useNavigate } from "react-router";
 import type { GoalPlanEntryView, OnboardingPhase, TopicDetail } from "@shared/api";
 import { Chat } from "../components/Chat";
 import { StageTrophy } from "../components/meerkat/CourseGame";
+import { PracticeTestCard } from "../components/PracticeTestCard";
 import { Empty, Spinner } from "../components/ui";
 import { api, errorText } from "../lib/api";
 import { t, useLang } from "../lib/i18n";
@@ -243,6 +244,7 @@ export function GoalView({ detail, convId, reload }: { detail: TopicDetail; conv
             <p {...stylex.props(s.hint)}>{t("goal.changeHint")}</p>
           </>
         )}
+        <PracticeTestCard key={goalId} scopeId={goalId} embedded />
       </aside>
     </div>
   );

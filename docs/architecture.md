@@ -40,7 +40,7 @@ A change to a contract file changes every module that uses it; make it there fir
 | `server/claude/runner.ts` | One `claude -p` process per conversation turn; queue; cancel; `session_id` for `--resume` |
 | `server/claude/stream.ts` | stream-json lines to `TopicEvent`s and stored chat messages |
 | `server/routes/*` | REST handlers; server-side grading; review; notes; reports; audit |
-| `server/review/*` | FSRS scheduling (ts-fsrs, retention 0.90), mastery (L12), learner signals to `regen_queue` |
+| `server/review/*` | FSRS scheduling (ts-fsrs, retention 0.90), mastery (L12), learner signals to `regen_queue`, practice-test assembly (L20) |
 | `server/mcp/index.ts` | `handleMcp(req: Request, topicId: string): Promise<Response>`; one stateless MCP server per request |
 | `server/gates/*` | Deterministic checks, source fetching and quote verification, critic |
 | `plugin/` | Tutor output style, skills, eval suite |
@@ -99,6 +99,14 @@ Optional gamification, off by default (`settings.gamification`). Catalogs and co
 - Content built before the meerkat was on gets its rewards from `POST /api/game/backfill` (`server/game/backfill.ts`): one `runJsonPrompt` call (purpose `game`) per course, goal and lesson that lacks them; a lesson's challenge becomes its last practice step with an apply-or-higher item.
 - Rewards go to `rewards`, residents to `residents`. `GET /api/game` (`server/game/view.ts`) works out every condition from learning data, stamps first unlocks, and records habit and rank unlocks in `unlocks`; turning the meerkat on rewards earlier learning at once.
 - The web app keeps the state in `web/src/lib/game.ts` and fetches it only while the meerkat is on. Unlocks show one at a time in `Celebrations`, held back while a lesson page is open until its end.
+
+## Practice tests
+
+- A practice test (L20) belongs to a topic, or to a goal and then spans the topics its plan opened. `assembleTest` (`server/review/practice-test.ts`) picks graded items of the lessons whose exit check is fully answered and interleaves them across nodes; one test per topic or goal is open at a time.
+- `practice_test_items` copies each item's content and display order, so `item_replace` leaves a test as the learner took it. The browser gets `PublicItem`s while the test is open, and results with solutions only after submission.
+- Answers are saved one question at a time and the test resumes from them. A timed test ends at `created_at` plus the limit; a later save is refused, and the next read of the test submits it.
+- Submission grades closed answers at once with `gradeClosedItem`; short answers go to `gradeShort`, three at a time, in the background, and the test stays `grading` until each one is graded or failed. A failed one is graded again on request; a `grading` test with no grading running in this process restarts it when read.
+- Test answers are not written to `attempts`, so first-try results, exit checks, lesson progress and learner signals do not see them. A correct answer at least a day after the node's exit check masters the node (L12). Answers of submitted tests count as activity for the day and the streak. An item whose latest test answer was wrong joins the Review session a day after that test, until a review attempt answers it.
 
 ## Narration
 

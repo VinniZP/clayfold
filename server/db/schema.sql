@@ -305,9 +305,39 @@ CREATE TABLE IF NOT EXISTS focus_runs (        -- A
   created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
 );
 
+CREATE TABLE IF NOT EXISTS practice_tests (    -- A
+  id TEXT PRIMARY KEY,
+  topic_id TEXT NOT NULL REFERENCES topics(id) ON DELETE CASCADE,  -- a topic, or a goal: the test then spans the goal's topics
+  status TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open','grading','done')),
+  time_limit_min INTEGER,                       -- NULL: untimed
+  created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+  submitted_at TEXT
+);
+
+CREATE TABLE IF NOT EXISTS practice_test_items ( -- A
+  test_id TEXT NOT NULL REFERENCES practice_tests(id) ON DELETE CASCADE,
+  idx INTEGER NOT NULL,
+  item_id TEXT NOT NULL,                        -- items.id; content and display order are copies, so item_replace leaves a test as taken
+  topic_id TEXT NOT NULL,
+  lesson_id TEXT,
+  node_id TEXT NOT NULL,
+  content TEXT NOT NULL,                        -- JSON authoring Item
+  display_order TEXT,
+  answer TEXT,                                  -- JSON Answer; NULL while unanswered
+  answered_at TEXT,
+  flagged INTEGER NOT NULL DEFAULT 0,
+  duration_ms INTEGER NOT NULL DEFAULT 0,
+  correct INTEGER,                              -- NULL until graded
+  feedback TEXT,
+  grade_error TEXT,                             -- the grader failed; the learner can grade again
+  PRIMARY KEY (test_id, idx)
+);
+
 CREATE INDEX IF NOT EXISTS idx_messages_conv ON messages(conversation_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_attempts_item ON attempts(item_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_cards_due ON cards(status, due);
 CREATE INDEX IF NOT EXISTS idx_items_topic ON items(topic_id, status);
 CREATE INDEX IF NOT EXISTS idx_hint_views_item ON hint_views(item_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_worked_answers_step ON worked_answers(step_id);
+CREATE INDEX IF NOT EXISTS idx_practice_tests_topic ON practice_tests(topic_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_practice_test_items_item ON practice_test_items(item_id);

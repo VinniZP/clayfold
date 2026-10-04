@@ -217,6 +217,94 @@ export type ReviewRating = 1 | 2 | 3 | 4;
 export type CardView = ReviewCard & { status: "proposed" | "active" | "suspended" | "rejected"; due: string | null; lapses: number };
 // POST /api/cards/:cardId/accept | /suspend | /reject ; PATCH /api/cards/:cardId { front, back }
 
+// Practice tests (L20): a cumulative, unaided test over the finished lessons of a topic, or of every topic of a goal.
+// GET    /api/topics/:topicId/tests -> PracticeTestOverview
+// POST   /api/topics/:topicId/tests PracticeTestRequest -> PracticeTestView (201; 409 while a test of the topic is open
+//        or when it has no finished lesson)
+// GET    /api/tests/:testId -> PracticeTestView (submits an open test whose time is up; restarts grading a server restart stopped)
+// PATCH  /api/tests/:testId/questions/:idx PracticeAnswerUpdate -> 204 (409 once the test is submitted or its time is up)
+// POST   /api/tests/:testId/submit -> PracticeTestView (short answers are graded in the background: status "grading")
+// POST   /api/tests/:testId/regrade -> PracticeTestView (grades the answers whose grading failed again)
+// DELETE /api/tests/:testId -> 204 (open tests only)
+// Test answers stay out of `attempts`: first-try results, exit checks and learner signals do not see them.
+
+export const PRACTICE_LENGTHS = [10, 20, 30] as const;
+/** Questions in an "all" test at most. */
+export const PRACTICE_MAX_QUESTIONS = 100;
+export const PRACTICE_TIME_LIMITS = [10, 20, 30, 60] as const;
+
+export type PracticeTestRequest = {
+  length: (typeof PRACTICE_LENGTHS)[number] | "all";
+  /** Minutes; null for an untimed test. */
+  timeLimitMin: (typeof PRACTICE_TIME_LIMITS)[number] | null;
+};
+
+/** Fields left out stay as they are; `spentMs` adds to the time spent on the question. */
+export type PracticeAnswerUpdate = { answer?: Answer | null; flagged?: boolean; spentMs?: number };
+
+export type PracticeTestSummary = {
+  id: string;
+  topicId: string;
+  status: "open" | "grading" | "done";
+  questions: number;
+  answered: number;
+  /** Graded correct answers; null while the test is open. */
+  correct: number | null;
+  createdAt: string;
+  submittedAt: string | null;
+  timeLimitMin: number | null;
+  /** When the time is up; null for an untimed test. */
+  endsAt: string | null;
+};
+
+export type PracticeTestOverview = {
+  /** Questions a new test can draw on. */
+  eligible: number;
+  lessonsFinished: number;
+  open: PracticeTestSummary | null;
+  /** Submitted tests, newest first. */
+  history: PracticeTestSummary[];
+};
+
+/** Present once the test is submitted (L9, L11). */
+export type PracticeResult = {
+  /** null while grading runs or after it failed. */
+  correct: boolean | null;
+  gradingFailed: boolean;
+  /** The chosen option's feedback, or the rubric verdict of a short answer. */
+  feedback: string | null;
+  correctAnswer: string;
+  solution: string;
+  topicId: string;
+  nodeId: string;
+  nodeTitle: string;
+  lessonId: string | null;
+  lessonTitle: string | null;
+};
+
+export type PracticeQuestion = { idx: number; item: PublicItem; answer: Answer | null; flagged: boolean; result: PracticeResult | null };
+
+export type PracticeNodeScore = {
+  topicId: string;
+  topicTitle: string;
+  nodeId: string;
+  title: string;
+  correct: number;
+  total: number;
+  /** Lessons the node's questions came from. */
+  lessons: { id: string; title: string }[];
+};
+
+export type PracticeTestView = {
+  test: PracticeTestSummary;
+  scope: { id: string; title: string; kind: TopicSummary["kind"] };
+  questions: PracticeQuestion[];
+  /** Weakest node first; empty while the test is open. */
+  breakdown: PracticeNodeScore[];
+  /** Missed questions come back in Review from this time; null while open or with nothing missed. */
+  reviewFrom: string | null;
+};
+
 // Notes: POST /api/notes NoteRequest ; GET /api/topics/:topicId/notes -> NoteView[]
 export type NoteRequest = { topicId: string; lessonId?: string; stepId?: string; quote?: string; text: string };
 export type NoteView = NoteRequest & { id: string; createdAt: string };
@@ -234,7 +322,8 @@ export type AuditEntry = {
 export type AuditVerdict = { verdict: "ok" | "missed_defect"; note?: string };
 
 // Stats: GET /api/stats/activity?days=7&topicId= -> ActivityDay[] (oldest first, one entry per local day,
-// days without activity included with zeros). Minutes are the sum of attempt durations and review time.
+// days without activity included with zeros). Attempts include the answers of submitted practice tests. Minutes are the
+// sum of attempt durations, time on practice-test answers and review time.
 export type ActivityDay = { date: string; attempts: number; correct: number; reviews: number; minutes: number };
 
 // Weak spots: GET /api/weak?topicId=&limit=10 -> WeakSpot[]

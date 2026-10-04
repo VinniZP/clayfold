@@ -57,6 +57,12 @@ export function gradeClosed(item: Item, order: number[], answer: Answer): Grade 
   throw new GradingError(`format ${item.format} is not graded here`);
 }
 
+/** Grades a closed answer to an item shown in the row's display order. */
+export function gradeClosedItem(row: Pick<ItemRow, "display_order">, item: Item, answer: Answer): Grade {
+  const length = item.format === "single" || item.format === "multi" ? item.options.length : item.format === "order" ? item.sequence.length : 0;
+  return gradeClosed(item, displayOrder(row, length), answer);
+}
+
 export type JsonPromptRunner = <T>(opts: { prompt: string; schema: object; purpose: "grading" }) => Promise<OneShotResult<T>>;
 
 const SHORT_SCHEMA = {
@@ -157,8 +163,7 @@ export async function submitAttempt(
     if (req.answer.format !== "short") throw new GradingError(`answer format ${req.answer.format} does not match item format short`);
     grade = await gradeShort(item, req.answer.text, opts.runPrompt);
   } else {
-    const length = item.format === "single" || item.format === "multi" ? item.options.length : item.format === "order" ? item.sequence.length : 0;
-    grade = gradeClosed(item, displayOrder(row, length), req.answer);
+    grade = gradeClosedItem(row, item, req.answer);
   }
 
   const hintsUsed = Math.max(Math.trunc(req.hintsUsed) || 0, openHintLevel(itemId, database));

@@ -25,7 +25,7 @@ export function displayOrder(row: Pick<ItemRow, "display_order">, length: number
   return Array.from({ length }, (_, i) => i);
 }
 
-export function publicItem(row: ItemRow): PublicItem {
+export function publicItem(row: Pick<ItemRow, "id" | "content" | "display_order">): PublicItem {
   const item = JSON.parse(row.content) as Item;
   const out: PublicItem = { id: row.id, format: item.format, prompt: item.prompt, bloom: item.bloom, hintCount: item.hints.length };
   switch (item.format) {

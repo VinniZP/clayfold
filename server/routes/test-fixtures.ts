@@ -69,6 +69,12 @@ export function seed(database: Database): void {
     .run();
 }
 
+export function insertLesson(database: Database, id: string, nodeIds: string[] = ["a"]): void {
+  database
+    .query("INSERT INTO lessons (id, topic_id, title, objective, level, node_ids, outline) VALUES (?, 'tp1', ?, 'Objective of the lesson', 'novice', ?, '[]')")
+    .run(id, `Lesson ${id}`, JSON.stringify(nodeIds));
+}
+
 const ROLE: Record<string, string> = { activate: "activate", explain: "explain_check", practice: "practice", check: "check" };
 
 /** Inserts a published step and its item rows (reversed display order). Returns the step id and item ids in step order. */

@@ -21,6 +21,8 @@ export type Key = {
   solution: string;
   correctAnswer: string;
   hints: string[];
+  /** short: what a correct answer mentions; the server grades by model instead. */
+  accept?: RegExp;
 };
 
 export const keys: Record<string, Key> = {};
@@ -712,6 +714,107 @@ export const reviewItems: PublicItem[] = [
     "r1",
     { format: "single", prompt: "Besides the test's characteristics, which number do you need to find P(sick | test+)?", bloom: "remember", options: [{ text: "Prevalence of the disease" }, { text: "Number of people tested" }, { text: "Price of the test" }] },
     { correct: 0, optionFeedback: ["Correct.", "The number of people tested scales every group equally.", "The price does not affect the probability."], solution: "You need the prior probability, which is the prevalence.", correctAnswer: "Prevalence of the disease", hints: [] },
+  ),
+];
+
+// ---------- Practice test pool: graded items of the finished Bayes lessons ----------
+
+export type PracticeSource = { item: PublicItem; nodeId: string; lessonId: string };
+
+const practiceItem = (id: string, nodeId: string, lessonId: string, pub: Omit<PublicItem, "id" | "hintCount">, key: Omit<Key, "kind" | "hints">): PracticeSource => ({
+  item: item(id, pub, { ...key, hints: [] }),
+  nodeId,
+  lessonId,
+});
+
+export const practicePool: PracticeSource[] = [
+  practiceItem(
+    "pt1",
+    "prob-basics",
+    "l-cond",
+    { format: "single", prompt: "A fair die is rolled once. What is the probability of an even number?", bloom: "apply", options: [{ text: "1/6" }, { text: "1/2" }, { text: "1/3" }] },
+    { correct: 1, optionFeedback: ["That is the chance of one particular face.", "Yes: 3 of the 6 equally likely faces are even.", "That would be two faces out of six."], solution: "Even faces are 2, 4 and 6: **3 / 6 = 1/2**.", correctAnswer: "1/2" },
+  ),
+  practiceItem(
+    "pt2",
+    "prob-basics",
+    "l-cond",
+    { format: "number", prompt: "Two fair coins are tossed. What is the probability that both land heads? Give a decimal.", bloom: "apply" },
+    { correct: 0.25, tolerance: 0.001, solution: "The tosses are independent: 0.5 × 0.5 = **0.25**.", correctAnswer: "0.25" },
+  ),
+  practiceItem(
+    "pt3",
+    "prob-basics",
+    "l-cond",
+    { format: "cloze", prompt: "Fill in the blanks.", bloom: "remember", text: "A probability is never below {{1}} and never above {{2}}.", blankCount: 2 },
+    { correct: [["0", "zero"], ["1", "one"]], solution: "Probabilities run from **0** (impossible) to **1** (certain).", correctAnswer: "1: 0; 2: 1" },
+  ),
+  practiceItem(
+    "pt4",
+    "cond-prob",
+    "l-cond",
+    { format: "single", prompt: "Of 200 employees, 80 work remotely and 20 of the remote workers are managers. What is P(manager | remote)?", bloom: "apply", options: [{ text: "20/200" }, { text: "20/80" }, { text: "80/200" }] },
+    { correct: 1, optionFeedback: ["That is the joint probability over all employees.", "Yes: the condition narrows the group to the 80 remote workers.", "That is the share of remote workers."], solution: "The condition \"remote\" leaves 80 people, 20 of them managers: **20/80 = 0.25**.", correctAnswer: "20/80" },
+  ),
+  practiceItem(
+    "pt5",
+    "cond-prob",
+    "l-cond",
+    { format: "multi", prompt: "Which statements about P(A | B) are true?", bloom: "understand", options: [{ text: "It is P(A and B) divided by P(B)" }, { text: "It always equals P(B | A)" }, { text: "It only looks at cases where B happened" }] },
+    { correct: [0, 2], solution: "Conditioning on B keeps the cases where B happened; P(A | B) and P(B | A) differ in general.", correctAnswer: "1 and 3" },
+  ),
+  practiceItem(
+    "pt6",
+    "cond-prob",
+    "l-cond",
+    { format: "short", prompt: "In your own words: why is P(sick | positive) not the same as P(positive | sick)?", bloom: "understand" },
+    { correct: null, accept: /group|among|condition/i, solution: "They condition on different groups: one counts the sick **among people who tested positive**, the other the positives **among the sick**.", correctAnswer: "They count within different groups: the positives versus the sick." },
+  ),
+  practiceItem(
+    "pt7",
+    "bayes-theorem",
+    "l-bayes-v1",
+    { format: "order", prompt: "Put the steps of a natural-frequency calculation in order.", bloom: "apply", entries: ["Count the positives among the healthy", "Picture 1000 people", "Divide true positives by all positives", "Count the sick and their positives"] },
+    {
+      correct: ["Picture 1000 people", "Count the sick and their positives", "Count the positives among the healthy", "Divide true positives by all positives"],
+      solution: "Start from a concrete group, split it by the condition, count each kind of positive, then take the share.",
+      correctAnswer: "Picture 1000 → sick positives → healthy positives → divide",
+    },
+  ),
+  practiceItem(
+    "pt8",
+    "bayes-theorem",
+    "l-bayes-v1",
+    { format: "number", prompt: "Of 1000 people, 10 are sick; the test detects 9 of them and fires for 89 healthy people. What share of positives are sick, in percent?", bloom: "apply", unit: "%" },
+    { correct: 9.2, tolerance: 0.3, solution: "9 true positives out of 9 + 89 = 98 positives: **9 / 98 ≈ 9.2%**.", correctAnswer: "≈ 9.2 %" },
+  ),
+  practiceItem(
+    "pt9",
+    "bayes-theorem",
+    "l-bayes-v1",
+    { format: "single", prompt: "Which term of Bayes' formula is the prior?", bloom: "remember", options: [{ text: "P(sick)" }, { text: "P(positive | sick)" }, { text: "P(sick | positive)" }] },
+    { correct: 0, optionFeedback: ["Yes: the probability before the test result.", "That is the likelihood of the result.", "That is the posterior, what we compute."], solution: "The prior is the probability before the evidence: **P(sick)**, the prevalence.", correctAnswer: "P(sick)" },
+  ),
+  practiceItem(
+    "pt10",
+    "base-rate",
+    "l-bayes-v1",
+    { format: "single", prompt: "A screening test is used in a population where the disease becomes ten times more common. What happens to P(sick | positive)?", bloom: "analyze", options: [{ text: "It rises" }, { text: "It stays the same" }, { text: "It falls" }] },
+    { correct: 0, optionFeedback: ["Yes: true positives grow while false alarms among the healthy barely change.", "The test is the same, but the groups it sorts are not.", "More sick people means more true positives, not fewer."], solution: "With a higher base rate, true positives make up a larger share of all positives, so the posterior **rises**.", correctAnswer: "It rises" },
+  ),
+  practiceItem(
+    "pt11",
+    "base-rate",
+    "l-bayes-v1",
+    { format: "cloze", prompt: "Fill in the blank.", bloom: "understand", text: "Ignoring how common a condition is when judging a positive result is the {{1}} fallacy.", blankCount: 1 },
+    { correct: [["base rate", "base-rate"]], solution: "It is the **base rate fallacy**: the prevalence is left out of the judgement.", correctAnswer: "base rate" },
+  ),
+  practiceItem(
+    "pt12",
+    "base-rate",
+    "l-bayes-v1",
+    { format: "multi", prompt: "Which numbers do you need to find P(sick | positive)?", bloom: "apply", options: [{ text: "Prevalence" }, { text: "Sensitivity" }, { text: "False positive rate" }, { text: "Price of the test" }] },
+    { correct: [0, 1, 2], solution: "Prevalence, sensitivity and the false positive rate fix all four groups; the price plays no part.", correctAnswer: "1, 2 and 3" },
   ),
 ];
 

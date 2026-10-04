@@ -19,6 +19,10 @@ import type {
   NarrationView,
   NoteRequest,
   NoteView,
+  PracticeAnswerUpdate,
+  PracticeTestOverview,
+  PracticeTestRequest,
+  PracticeTestView,
   ReportRequest,
   ReviewRating,
   ReviewSession,
@@ -117,6 +121,15 @@ export const api = {
   cards: (topicId: string, status: CardView["status"]) => get<CardView[]>(`/api/topics/${e(topicId)}/cards?status=${status}`),
   cardAction: (cardId: string, action: "accept" | "suspend" | "reject") => post<unknown>(`/api/cards/${e(cardId)}/${action}`),
   editCard: (cardId: string, front: string, back: string) => request<unknown>("PATCH", `/api/cards/${e(cardId)}`, { front, back }),
+
+  practiceTests: (topicId: string) => get<PracticeTestOverview>(`/api/topics/${e(topicId)}/tests`),
+  startPracticeTest: (topicId: string, body: PracticeTestRequest) => post<PracticeTestView>(`/api/topics/${e(topicId)}/tests`, body),
+  practiceTest: (testId: string) => get<PracticeTestView>(`/api/tests/${e(testId)}`),
+  savePracticeAnswer: (testId: string, idx: number, body: PracticeAnswerUpdate) =>
+    request<unknown>("PATCH", `/api/tests/${e(testId)}/questions/${idx}`, body),
+  submitPracticeTest: (testId: string) => post<PracticeTestView>(`/api/tests/${e(testId)}/submit`),
+  regradePracticeTest: (testId: string) => post<PracticeTestView>(`/api/tests/${e(testId)}/regrade`),
+  discardPracticeTest: (testId: string) => request<unknown>("DELETE", `/api/tests/${e(testId)}`),
 
   notes: (topicId: string) => get<NoteView[]>(`/api/topics/${e(topicId)}/notes`),
   addNote: (body: NoteRequest) => post<unknown>("/api/notes", body),

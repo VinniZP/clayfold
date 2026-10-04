@@ -11,6 +11,7 @@ import { LessonList } from "../components/LessonList";
 import { StaleSources, readyLine } from "../components/LessonStatus";
 import { CourseResident } from "../components/meerkat/CourseGame";
 import { OnboardingStepper } from "../components/OnboardingStepper";
+import { PracticeTestCard } from "../components/PracticeTestCard";
 import { GoalBanner, GoalView } from "./Goal";
 import { NewTopicForm, TopicCard, toneAt, topicObject } from "../components/Topics";
 import { CardHead, Empty, ErrorBox, PageLoading, Spinner } from "../components/ui";
@@ -281,6 +282,8 @@ export function TopicPage() {
             <LessonList lessons={d.lessons} />
           )}
         </section>
+
+        {d.lessons.length > 0 && <PracticeTestCard key={topicId} scopeId={topicId} />}
 
         <section aria-labelledby="sources-title" {...stylex.props(card.base)}>
           <CardHead title={t("topic.sources")} id="sources-title" />

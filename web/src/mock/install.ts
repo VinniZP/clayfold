@@ -1,8 +1,30 @@
 import { CLAUDE_ROLES, type Effort } from "@shared/api";
-import type { AttemptRequest, AttemptResponse, ChatMessage, ItemState, LessonView, NarrationView, NoteRequest, ReviewSession, Settings, SettingsUpdate, TodayView, TopicDetail, TopicSummary, VideoExportView, VideoView, VoiceView } from "@shared/api";
+import type {
+  AttemptRequest,
+  AttemptResponse,
+  ChatMessage,
+  ItemState,
+  LessonView,
+  NarrationView,
+  NoteRequest,
+  PracticeAnswerUpdate,
+  PracticeNodeScore,
+  PracticeTestOverview,
+  PracticeTestRequest,
+  PracticeTestView,
+  ReviewSession,
+  Settings,
+  SettingsUpdate,
+  TodayView,
+  TopicDetail,
+  TopicSummary,
+  VideoExportView,
+  VideoView,
+  VoiceView,
+} from "@shared/api";
 import type { TopicEvent } from "@shared/events";
 import type { OutfitRef, OutfitSlot } from "@shared/game";
-import type { PublicStep } from "@shared/schemas";
+import type { Answer, PublicStep } from "@shared/schemas";
 import { marked } from "marked";
 import { lang, t } from "../lib/i18n";
 import * as fx from "./fixtures";
@@ -55,13 +77,7 @@ function stateOf(itemId: string): ItemState {
   return (fx.itemStates[itemId] ??= { attempts: 0, wrongAttempts: 0, solved: false, gaveUp: false, hints: [], lastFeedback: null });
 }
 
-function grade(itemId: string, body: AttemptRequest): AttemptResponse {
-  const key = fx.keys[itemId];
-  const st = stateOf(itemId);
-  st.attempts++;
-  const attemptNo = st.attempts;
-  if (!key) return { correct: null, feedback: "No answer key in the mock data.", attemptNo, offerTutor: false };
-  const a = body.answer;
+function check(key: fx.Key, a: Answer): { correct: boolean; feedback: string } {
   let correct = false;
   let feedback = key.feedback ?? "";
   switch (a.format) {
@@ -83,10 +99,22 @@ function grade(itemId: string, body: AttemptRequest): AttemptResponse {
       break;
     case "short":
       // The server grades short answers against the rubric; the mock accepts answers naming both groups.
-      correct = /among/i.test(a.text) && a.text.length >= 20;
+      correct = (key.accept ?? /among/i).test(a.text) && a.text.length >= 20;
       feedback = correct ? "The answer covers the reference criteria." : "The key point is missing: which group the share is computed in.";
       break;
   }
+  return { correct, feedback };
+}
+
+function grade(itemId: string, body: AttemptRequest): AttemptResponse {
+  const key = fx.keys[itemId];
+  const st = stateOf(itemId);
+  st.attempts++;
+  const attemptNo = st.attempts;
+  if (!key) return { correct: null, feedback: "No answer key in the mock data.", attemptNo, offerTutor: false };
+  const graded = check(key, body.answer);
+  const correct = graded.correct;
+  let feedback = graded.feedback;
   st.lastFeedback = feedback;
   if (body.context === "activate") {
     st.solution = key.solution;
@@ -109,6 +137,169 @@ function grade(itemId: string, body: AttemptRequest): AttemptResponse {
     attemptNo,
     offerTutor: !correct && !st.solved && st.wrongAttempts >= 2 && (body.context === "practice" || body.context === "explain"),
   };
+}
+
+// ---------- Practice tests ----------
+
+type MockTest = { view: PracticeTestView; sources: fx.PracticeSource[] };
+const practiceTests: Record<string, MockTest> = {};
+const DAY_MS = 24 * 60 * 60 * 1000;
+const PRACTICE_GRADING_MS = 2500;
+
+/** Round-robin over the nodes, each node's items shuffled. */
+function pickPractice(pool: fx.PracticeSource[], n: number): fx.PracticeSource[] {
+  const byNode = new Map<string, fx.PracticeSource[]>();
+  for (const src of [...pool].sort(() => Math.random() - 0.5)) byNode.set(src.nodeId, [...(byNode.get(src.nodeId) ?? []), src]);
+  const lists = [...byNode.values()];
+  const out: fx.PracticeSource[] = [];
+  for (let i = 0; out.length < Math.min(n, pool.length); i++) for (const l of lists) if (l[i] && out.length < n) out.push(l[i]!);
+  return out;
+}
+
+function refreshPractice(test: MockTest): PracticeTestView {
+  const v = test.view;
+  const qs = v.questions;
+  v.test.answered = qs.filter((q) => q.answer).length;
+  v.test.correct = v.test.status === "open" ? null : qs.filter((q) => q.result?.correct === true).length;
+  const scores = new Map<string, PracticeNodeScore>();
+  for (const q of qs) {
+    const r = q.result;
+    if (!r) continue;
+    const score = scores.get(r.nodeId) ?? { topicId: r.topicId, topicTitle: v.scope.title, nodeId: r.nodeId, title: r.nodeTitle, correct: 0, total: 0, lessons: [] };
+    scores.set(r.nodeId, score);
+    score.total++;
+    if (r.correct === true) score.correct++;
+    if (r.lessonId && !score.lessons.some((l) => l.id === r.lessonId)) score.lessons.push({ id: r.lessonId, title: r.lessonTitle ?? "" });
+  }
+  v.breakdown = [...scores.values()].sort((a, b) => a.correct / a.total - b.correct / b.total);
+  v.reviewFrom = v.test.submittedAt && qs.some((q) => q.result?.correct === false) ? new Date(Date.parse(v.test.submittedAt) + DAY_MS).toISOString() : null;
+  return v;
+}
+
+function startPractice(topicId: string, req: PracticeTestRequest, createdAt = new Date()): MockTest {
+  const detail = fx.topicDetails[topicId]!;
+  const pool = topicId === "t-bayes" ? fx.practicePool : [];
+  const picked = pickPractice(pool, req.length === "all" ? pool.length : req.length);
+  const id = `pt-${++seq}`;
+  const test: MockTest = {
+    sources: picked,
+    view: {
+      test: {
+        id,
+        topicId,
+        status: "open",
+        questions: picked.length,
+        answered: 0,
+        correct: null,
+        createdAt: createdAt.toISOString(),
+        submittedAt: null,
+        timeLimitMin: req.timeLimitMin,
+        endsAt: req.timeLimitMin ? new Date(createdAt.getTime() + req.timeLimitMin * 60_000).toISOString() : null,
+      },
+      scope: { id: topicId, title: detail.topic.title, kind: detail.topic.kind },
+      questions: picked.map((src, idx) => ({ idx, item: src.item, answer: null, flagged: false, result: null })),
+      breakdown: [],
+      reviewFrom: null,
+    },
+  };
+  practiceTests[id] = test;
+  return test;
+}
+
+function submitPractice(test: MockTest, at = new Date(), gradingMs = PRACTICE_GRADING_MS): void {
+  const v = test.view;
+  const detail = fx.topicDetails[v.scope.id]!;
+  const pending: number[] = [];
+  for (const q of v.questions) {
+    const src = test.sources[q.idx]!;
+    const key = fx.keys[q.item.id]!;
+    const graded = q.answer && q.item.format !== "short" ? check(key, q.answer) : null;
+    if (q.answer && q.item.format === "short") pending.push(q.idx);
+    const lesson = detail.lessons.find((l) => l.id === src.lessonId);
+    q.result = {
+      correct: q.answer ? (graded?.correct ?? null) : false,
+      gradingFailed: false,
+      feedback: graded && q.item.format === "single" ? graded.feedback : null,
+      correctAnswer: key.correctAnswer,
+      solution: key.solution,
+      topicId: v.scope.id,
+      nodeId: src.nodeId,
+      nodeTitle: detail.nodes.find((n) => n.id === src.nodeId)?.title ?? src.nodeId,
+      lessonId: src.lessonId,
+      lessonTitle: lesson?.title ?? null,
+    };
+  }
+  v.test.status = pending.length ? "grading" : "done";
+  v.test.submittedAt = at.toISOString();
+  const gradeShort = () => {
+    for (const idx of pending) {
+      const q = v.questions[idx]!;
+      const graded = check(fx.keys[q.item.id]!, q.answer!);
+      q.result = { ...q.result!, correct: graded.correct, feedback: graded.feedback };
+    }
+    v.test.status = "done";
+    refreshPractice(test);
+  };
+  if (pending.length && gradingMs > 0) setTimeout(gradeShort, gradingMs);
+  else if (pending.length) gradeShort();
+  refreshPractice(test);
+}
+
+/** The key's answer, for the seeded history. */
+function rightAnswer(key: fx.Key): Answer {
+  switch (key.kind) {
+    case "single":
+      return { format: "single", choice: key.correct as number };
+    case "multi":
+      return { format: "multi", choices: key.correct as number[] };
+    case "order":
+      return { format: "order", sequence: key.correct as string[] };
+    case "cloze":
+      return { format: "cloze", blanks: (key.correct as string[][]).map((a) => a[0]!) };
+    case "number":
+      return { format: "number", value: key.correct as number };
+    case "short":
+      return { format: "short", text: "They count within different groups: among the sick versus among the positives." };
+  }
+}
+
+let practiceHistorySeeded = false;
+
+/** Two earlier tests on the Bayes course, so the history and its trend show. */
+function seedPracticeHistory() {
+  if (practiceHistorySeeded) return;
+  practiceHistorySeeded = true;
+  for (const [daysAgo, right] of [
+    [14, 5],
+    [4, 8],
+  ] as const) {
+    const test = startPractice("t-bayes", { length: 10, timeLimitMin: null }, new Date(fx.iso(daysAgo)));
+    test.view.questions.forEach((q, i) => (q.answer = i < right ? rightAnswer(fx.keys[q.item.id]!) : null));
+    submitPractice(test, new Date(Date.parse(fx.iso(daysAgo)) + 25 * 60_000), 0);
+  }
+}
+
+function practiceOverview(topicId: string): PracticeTestOverview {
+  if (topicId === "t-bayes") seedPracticeHistory();
+  const tests = Object.values(practiceTests)
+    .filter((x) => x.view.test.topicId === topicId)
+    .map((x) => x.view.test)
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  const eligible = topicId === "t-bayes" ? fx.practicePool.length : 0;
+  return {
+    eligible,
+    lessonsFinished: eligible ? new Set(fx.practicePool.map((p) => p.lessonId)).size : 0,
+    open: tests.find((x) => x.status === "open") ?? null,
+    history: tests.filter((x) => x.status !== "open"),
+  };
+}
+
+function practiceView(id: string): MockTest | null {
+  const test = practiceTests[id];
+  if (!test) return null;
+  const end = test.view.test.endsAt;
+  if (test.view.test.status === "open" && end && Date.parse(end) + 5000 < Date.now()) submitPractice(test);
+  return test;
 }
 
 // ---------- Routes ----------
@@ -311,6 +502,41 @@ async function route(method: string, path: string, body: Record<string, unknown>
     const { id, conversationId } = createTopic(String(body.request ?? "New topic"), kind);
     setTimeout(() => (kind === "goal" ? sim.planGoal(id, conversationId) : sim.interview(id, conversationId)), 600);
     return json({ topicId: id, conversationId });
+  }
+  if ((m = p.match(/^\/api\/topics\/([^/]+)\/tests$/))) {
+    const topicId = m[1]!;
+    if (method === "GET") return json(practiceOverview(topicId));
+    const o = practiceOverview(topicId);
+    if (o.open) return json({ error: t("practice.openExists") }, 409);
+    if (!o.eligible) return json({ error: t("practice.nothingEligible") }, 409);
+    return json(startPractice(topicId, body as unknown as PracticeTestRequest).view, 201);
+  }
+  if ((m = p.match(/^\/api\/tests\/([^/]+)\/questions\/(\d+)$/))) {
+    const test = practiceView(m[1]!);
+    if (!test) return json({ error: "test not found" }, 404);
+    if (test.view.test.status !== "open") return json({ error: t("practice.submitted") }, 409);
+    const q = test.view.questions[Number(m[2])];
+    if (!q) return json({ error: "question not found" }, 404);
+    const update = body as PracticeAnswerUpdate;
+    if (update.answer !== undefined) q.answer = update.answer;
+    if (update.flagged !== undefined) q.flagged = update.flagged;
+    refreshPractice(test);
+    return json(undefined, 204);
+  }
+  if ((m = p.match(/^\/api\/tests\/([^/]+)\/(submit|regrade)$/))) {
+    const test = practiceView(m[1]!);
+    if (!test) return json({ error: "test not found" }, 404);
+    if (m[2] === "regrade") return json({ error: t("practice.notGraded") }, 409);
+    if (test.view.test.status === "open") submitPractice(test);
+    return json(test.view);
+  }
+  if ((m = p.match(/^\/api\/tests\/([^/]+)$/))) {
+    const test = practiceView(m[1]!);
+    if (!test) return json({ error: "test not found" }, 404);
+    if (method !== "DELETE") return json(refreshPractice(test));
+    if (test.view.test.status !== "open") return json({ error: t("practice.submitted") }, 409);
+    delete practiceTests[m[1]!];
+    return json(undefined, 204);
   }
   if ((m = p.match(/^\/api\/topics\/([^/]+)\/notes\/discuss$/))) {
     const goal = fx.topicDetails[m[1]!];
