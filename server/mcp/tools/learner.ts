@@ -76,11 +76,11 @@ export function learnerState(db: Database, topicId: string, nodeIds?: string[]):
     .map((m) => ({ misconception: m.misconception, count: m.count, nodeId: m.node_id }));
 
   const notes = db
-    .query<{ text: string; lesson_id: string | null; created_at: string }, [string]>(
-      "SELECT text, lesson_id, created_at FROM notes WHERE topic_id = ? ORDER BY created_at DESC LIMIT 50",
+    .query<{ text: string; quote: string | null; lesson_id: string | null; created_at: string }, [string]>(
+      "SELECT text, quote, lesson_id, created_at FROM notes WHERE topic_id = ? ORDER BY created_at DESC LIMIT 50",
     )
     .all(topicId)
-    .map((n) => ({ text: n.text, lessonId: n.lesson_id, at: n.created_at }));
+    .map((n) => ({ text: n.text, quote: n.quote, lessonId: n.lesson_id, at: n.created_at }));
 
   const regenQueue = db
     .query<{ id: string; target_type: "item" | "card"; target_id: string; reason: RegenReason }, [string]>(

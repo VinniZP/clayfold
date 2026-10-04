@@ -1,5 +1,5 @@
 import * as stylex from "@stylexjs/stylex";
-import { Check, ListChecks, SendHorizontal, Square, TriangleAlert } from "lucide-react";
+import { Check, ListChecks, SendHorizontal, Square, TriangleAlert, X } from "lucide-react";
 import { useEffect, useId, useReducer, useRef, useState, type ReactNode } from "react";
 import type { ChatMessage, ConversationView } from "@shared/api";
 import type { TopicEvent } from "@shared/events";
@@ -145,6 +145,34 @@ const s = stylex.create({
     backgroundColor: color.lilacSoft,
     whiteSpace: "pre-wrap",
   },
+  userQuote: {
+    marginBottom: 6,
+    paddingLeft: 10,
+    borderLeftWidth: 3,
+    borderLeftStyle: "solid",
+    borderLeftColor: color.accentText,
+    color: color.textMuted,
+    fontSize: 13.5,
+    fontStyle: "italic",
+    display: "-webkit-box",
+    WebkitLineClamp: 4,
+    WebkitBoxOrient: "vertical",
+    overflow: "hidden",
+  },
+  attached: { display: "flex", alignItems: "flex-start", gap: 8, paddingBlock: 8, paddingInline: "14px 6px", borderRadius: radius.field, backgroundColor: color.lilacSoft },
+  attachedText: {
+    flexGrow: 1,
+    minWidth: 0,
+    paddingTop: 5,
+    fontSize: 13.5,
+    fontStyle: "italic",
+    color: color.textMuted,
+    display: "-webkit-box",
+    WebkitLineClamp: 3,
+    WebkitBoxOrient: "vertical",
+    overflow: "hidden",
+  },
+  attachedLabel: { fontStyle: "normal", fontWeight: 650, color: color.accentText },
   assistantRow: { display: "flex", alignItems: "flex-start", gap: 10 },
   avatar: { flexShrink: 0, borderRadius: "50%", backgroundColor: color.surface2 },
   bubble: { minWidth: 0, paddingBlock: 12, paddingInline: 16, borderRadius: "6px 20px 20px 20px", backgroundColor: color.surface2 },
@@ -425,17 +453,33 @@ type Props = {
   /** Lesson the conversation authors, so step results can mark its activity lines. */
   lessonId?: string | null;
   /** Replaces the default send (POST /messages); may return the conversation it created. */
-  onSend?: (text: string) => Promise<string | void>;
+  onSend?: (text: string, quote?: string) => Promise<string | void>;
   placeholder?: string;
   empty?: ReactNode;
   label: string;
   /** Tutor presentation: avatar next to replies, an illustration while the chat is short. */
   persona?: { avatar: ClayName; illustration?: ClayName };
   /** Sends `text` once each time `nonce` changes, as if the learner typed it. */
-  autoSend?: { text: string; nonce: number } | null;
+  autoSend?: { text: string; quote?: string; nonce: number } | null;
+  /** A passage the next typed message asks about; `onRemove` runs once it is sent or dismissed. */
+  quote?: { text: string; onRemove: () => void } | null;
+  /** Focuses the message field each time it changes to a non-zero value. */
+  focusKey?: number;
 };
 
-export function Chat({ conversationId, topicId, lessonId = null, onSend, placeholder = t("chat.placeholder"), empty, label, persona, autoSend }: Props) {
+export function Chat({
+  conversationId,
+  topicId,
+  lessonId = null,
+  onSend,
+  placeholder = t("chat.placeholder"),
+  empty,
+  label,
+  persona,
+  autoSend,
+  quote,
+  focusKey = 0,
+}: Props) {
   useLang();
   const [state, dispatch] = useReducer(reducer, { messages: [], running: false, runningSince: null, currentActivity: null, cost: null, retry: null });
   const [draft, setDraft] = useState("");
@@ -476,23 +520,25 @@ export function Chat({ conversationId, topicId, lessonId = null, onSend, placeho
     if (el && stick.current) el.scrollTop = el.scrollHeight;
   }, [state.messages, state.running]);
 
-  const send = async (body0: string) => {
+  const send = async (body0: string, about?: string): Promise<boolean> => {
     const body = body0.trim();
-    if (!body) return;
+    if (!body) return false;
     setSendError(null);
-    dispatch({ type: "local", message: { id: `local-${++localSeq}`, role: "user", text: body, createdAt: now() } });
+    dispatch({ type: "local", message: { id: `local-${++localSeq}`, role: "user", text: body, quote: about, createdAt: now() } });
     dispatch({ type: "running", running: true });
     stick.current = true;
     try {
       if (onSend) {
-        const created = await onSend(body);
+        const created = await onSend(body, about);
         if (created && created !== convId) setConvId(created);
       } else if (convId) {
         await api.sendMessage(convId, body);
       }
+      return true;
     } catch (err) {
       dispatch({ type: "running", running: false });
       setSendError(errorText(err));
+      return false;
     }
   };
 
@@ -500,9 +546,14 @@ export function Chat({ conversationId, topicId, lessonId = null, onSend, placeho
   useEffect(() => {
     if (!autoSend || sentNonce.current === autoSend.nonce) return;
     sentNonce.current = autoSend.nonce;
-    void send(autoSend.text);
+    void send(autoSend.text, autoSend.quote);
     // `send` reads the latest props through state; only a new nonce should trigger it.
   }, [autoSend]);
+
+  const inputRef = useRef<HTMLTextAreaElement>(null);
+  useEffect(() => {
+    if (focusKey) inputRef.current?.focus();
+  }, [focusKey]);
 
   // The tutor often adds a short line after ask_learner, so the open question is the latest ask
   // with no learner message after it, not necessarily the last message.
@@ -549,6 +600,7 @@ export function Chat({ conversationId, topicId, lessonId = null, onSend, placeho
               <ActivityGroup key={b[0]!.id} items={b} live={state.running && i === blocks.length - 1} />
             ) : b.role === "user" ? (
               <div key={b.id} {...stylex.props(s.user)}>
+                {b.quote && <blockquote {...stylex.props(s.userQuote)}>{b.quote}</blockquote>}
                 <p>{b.text}</p>
               </div>
             ) : b.role === "assistant" ? (
@@ -596,11 +648,23 @@ export function Chat({ conversationId, topicId, lessonId = null, onSend, placeho
         </p>
       )}
 
+      {quote && (
+        <div {...stylex.props(s.attached)}>
+          <p {...stylex.props(s.attachedText)}>
+            <span {...stylex.props(s.attachedLabel)}>{t("chat.aboutPassage")}</span> {quote.text}
+          </p>
+          <button type="button" aria-label={t("steps.removeQuote")} onClick={quote.onRemove} {...stylex.props(btn.base, btn.icon, btn.iconSm)}>
+            <X size={14} aria-hidden="true" />
+          </button>
+        </div>
+      )}
+
       <form
         onSubmit={(e) => {
           e.preventDefault();
           if (state.running || !freeTextAllowed) return;
-          void send(draft);
+          const sent = quote;
+          void send(draft, sent?.text).then((ok) => ok && sent?.onRemove());
           setDraft("");
         }}
         onFocus={() => setComposerFocus(true)}
@@ -611,11 +675,12 @@ export function Chat({ conversationId, topicId, lessonId = null, onSend, placeho
           {t("chat.message")}
         </label>
         <textarea
+          ref={inputRef}
           id={inputId}
           rows={1}
           value={draft}
           disabled={!freeTextAllowed}
-          placeholder={freeTextAllowed ? placeholder : t("chat.pickOption")}
+          placeholder={!freeTextAllowed ? t("chat.pickOption") : quote ? t("chat.askAboutPassage") : placeholder}
           onChange={(e) => setDraft(e.target.value)}
           onKeyDown={(e) => {
             if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {

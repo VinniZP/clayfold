@@ -219,6 +219,8 @@ export type ChatMessage = {
   allowFree?: boolean;
   /** For role "activity": the past-tense label shown once the action is finished. */
   doneText?: string;
+  /** For role "user": the passage the learner asked about. */
+  quote?: string;
   createdAt: string;
 };
 export type ConversationView = {
@@ -258,9 +260,12 @@ export type GiveUpResponse = { solution: string; correctAnswer: string };
 export type WorkedLineResponse = { correct: boolean; text: string };
 // POST /api/steps/:stepId/reflect { text } -> 202
 
-// Tutor: POST /api/lessons/:lessonId/tutor { itemId?, stepId?, text } -> { conversationId }
-/** line: a worked-example line of stepId whose open blank the learner answers through the tutor. */
-export type TutorRequest = { itemId?: string; stepId?: string; line?: number; text: string };
+// Tutor: POST /api/lessons/:lessonId/tutor { itemId?, stepId?, line?, quote?, text } -> { conversationId }
+/**
+ * line: a worked-example line of stepId whose open blank the learner answers through the tutor.
+ * quote: text the learner selected on the page and asks about.
+ */
+export type TutorRequest = { itemId?: string; stepId?: string; line?: number; quote?: string; text: string };
 
 // Review
 // GET /api/review?topicId= -> ReviewSession
@@ -272,7 +277,8 @@ export type ReviewRating = 1 | 2 | 3 | 4;
 export type CardView = ReviewCard & { status: "proposed" | "active" | "suspended" | "rejected"; due: string | null; lapses: number };
 // POST /api/cards/:cardId/accept | /suspend | /reject ; PATCH /api/cards/:cardId { front, back }
 
-// Notes: POST /api/notes NoteRequest ; GET /api/topics/:topicId/notes -> NoteView[]
+// Notes: POST /api/notes NoteRequest -> NoteView ; PATCH /api/notes/:noteId { text } -> 204 ; GET /api/topics/:topicId/notes -> NoteView[]
+/** text may be empty when the note keeps a quote. */
 export type NoteRequest = { topicId: string; lessonId?: string; stepId?: string; quote?: string; text: string };
 export type NoteView = NoteRequest & { id: string; createdAt: string };
 

@@ -358,7 +358,7 @@ export function ItemView({ item, mode, context, active = true, onResult, onOffer
   const marks = showResult && last?.marks && submitted === draft ? last.marks : null;
 
   return (
-    <div onFocus={() => setTouch((n) => n + 1)} {...stylex.props(s.item)}>
+    <div onFocus={() => setTouch((n) => n + 1)} data-tutor-item={allowTutor ? item.id : undefined} {...stylex.props(s.item)}>
       <div id={promptId} {...stylex.props(s.prompt)}>
         {number !== undefined && <span {...stylex.props(s.num)}>{number}</span>}
         <ItemPrompt src={item.prompt} />

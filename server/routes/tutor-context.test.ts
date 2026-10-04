@@ -79,3 +79,14 @@ test("tutor context names the lenses the learner asked for and carries the last 
   expect(context).toContain("Analogy version");
   expect(context).not.toContain("Plain version");
 });
+
+test("tutor context carries the passage the learner selected, after the step it comes from", () => {
+  const database = openDb(":memory:");
+  seed(database);
+  const { stepId } = insertStep(database, 0, { kind: "reflect", title: "Reflect", purpose: "why", prompt: "Why does the prior matter?" });
+
+  const context = buildTutorContext({ lessonId: "ls1", stepId, quote: "the share among people with a positive result" }, database);
+  expect(context).toContain('The learner asks about this passage, selected on the page:\n"""\nthe share among people with a positive result\n"""');
+  expect(context.indexOf("Why does the prior matter?")).toBeLessThan(context.indexOf("asks about this passage"));
+  expect(buildTutorContext({ lessonId: "ls1", stepId }, database)).not.toContain("asks about this passage");
+});

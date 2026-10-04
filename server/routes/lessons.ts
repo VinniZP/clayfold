@@ -116,6 +116,7 @@ lessons.post("/:lessonId/tutor", async (c) => {
       itemId: z.string().min(1).optional(),
       stepId: z.string().min(1).optional(),
       line: z.number().int().min(0).max(11).optional(),
+      quote: z.string().trim().min(1).max(2000).optional(),
       text: z.string().trim().min(1).max(4000),
     }),
   );
@@ -123,7 +124,7 @@ lessons.post("/:lessonId/tutor", async (c) => {
   if (req.stepId && !db().query("SELECT 1 FROM steps WHERE id = ? AND lesson_id = ?").get(req.stepId, lesson.id)) fail(404, "step not found");
   const conversationId = latestConversation(lesson.id, "tutor") ?? createConversation(lesson.topic_id, "tutor", lesson.id);
   if (req.line !== undefined && !req.stepId) fail(400, "line needs stepId");
-  const context = buildTutorContext({ lessonId: lesson.id, itemId: req.itemId, stepId: req.stepId, line: req.line });
-  runTurn({ conversationId, text: `<context>\n${context}\n</context>\n<learner>${req.text}</learner>`, display: req.text });
+  const context = buildTutorContext({ lessonId: lesson.id, itemId: req.itemId, stepId: req.stepId, line: req.line, quote: req.quote });
+  runTurn({ conversationId, text: `<context>\n${context}\n</context>\n<learner>${req.text}</learner>`, display: req.text, quote: req.quote });
   return c.json({ conversationId }, 202);
 });

@@ -38,9 +38,18 @@ const s = stylex.create({
   meta: { fontSize: 13, color: color.textMuted },
 });
 
-type Shown = { el: HTMLElement; term: string; entry: GlossaryEntry | null; top?: number; bottom?: number; left: number };
+type Anchor = { getBoundingClientRect(): DOMRect };
+
+type Shown = { term: string; entry: GlossaryEntry | null; top?: number; bottom?: number; left: number };
 
 const termOf = (target: EventTarget | null) => (target instanceof Element ? target.closest<HTMLElement>(".term[data-term]") : null);
+
+let showAt: ((term: string, anchor: Anchor) => void) | null = null;
+
+/** Shows the definition of `term` next to `anchor`, such as a selected range, as for a term mark. */
+export function showTermDefinition(term: string, anchor: Anchor) {
+  showAt?.(term, anchor);
+}
 
 /** One popover for the whole app: the definition of a glossary term mark under the pointer, focus or tap. */
 export function TermPopover() {
@@ -48,31 +57,38 @@ export function TermPopover() {
   const id = useId();
   const [shown, setShown] = useState<Shown | null>(null);
   const popRef = useRef<HTMLDivElement>(null);
-  const current = useRef<HTMLElement | null>(null);
+  const current = useRef<Anchor | null>(null);
 
   useEffect(() => {
     let showTimer: ReturnType<typeof setTimeout> | undefined;
     let hideTimer: ReturnType<typeof setTimeout> | undefined;
 
+    const unlink = () => {
+      if (current.current instanceof HTMLElement) current.current.removeAttribute("aria-describedby");
+    };
     const hide = () => {
       clearTimeout(showTimer);
-      current.current?.removeAttribute("aria-describedby");
+      unlink();
       current.current = null;
       setShown(null);
     };
-    const show = async (el: HTMLElement) => {
+    const show = async (anchor: Anchor, term: string) => {
       clearTimeout(hideTimer);
-      if (current.current === el) return;
-      current.current?.removeAttribute("aria-describedby");
-      current.current = el;
-      const term = el.dataset.term!;
+      if (current.current === anchor) return;
+      unlink();
+      current.current = anchor;
       const entry = await lookupTerm(term).catch(() => null);
-      if (current.current !== el) return;
-      const r = el.getBoundingClientRect();
+      if (current.current !== anchor) return;
+      const r = anchor.getBoundingClientRect();
       const left = Math.max(EDGE, Math.min(r.left, window.innerWidth - WIDTH - EDGE));
       const below = window.innerHeight - r.bottom > 180 || r.top < 180;
-      el.setAttribute("aria-describedby", id);
-      setShown(below ? { el, term, entry, top: r.bottom + GAP, left } : { el, term, entry, bottom: window.innerHeight - r.top + GAP, left });
+      if (anchor instanceof HTMLElement) anchor.setAttribute("aria-describedby", id);
+      setShown(below ? { term, entry, top: r.bottom + GAP, left } : { term, entry, bottom: window.innerHeight - r.top + GAP, left });
+    };
+    // Deferred past the event that asked for it, whose click would otherwise close it at once.
+    showAt = (term, anchor) => {
+      clearTimeout(showTimer);
+      showTimer = setTimeout(() => void show(anchor, term));
     };
     const hideSoon = () => {
       clearTimeout(showTimer);
@@ -87,7 +103,7 @@ export function TermPopover() {
       if (!el) return;
       clearTimeout(hideTimer);
       clearTimeout(showTimer);
-      showTimer = setTimeout(() => void show(el), SHOW_DELAY_MS);
+      showTimer = setTimeout(() => void show(el, el.dataset.term!), SHOW_DELAY_MS);
     };
     const onOut = (e: PointerEvent) => {
       if (e.pointerType !== "mouse") return;
@@ -99,7 +115,7 @@ export function TermPopover() {
     };
     const onFocusIn = (e: FocusEvent) => {
       const el = termOf(e.target);
-      if (el) void show(el);
+      if (el) void show(el, el.dataset.term!);
     };
     const onFocusOut = (e: FocusEvent) => {
       if (termOf(e.target)) hideSoon();
@@ -108,7 +124,7 @@ export function TermPopover() {
       const el = termOf(e.target);
       if (el) {
         if (current.current === el) hide();
-        else void show(el);
+        else void show(el, el.dataset.term!);
       } else if (!popRef.current?.contains(e.target as Node)) hide();
     };
     const onKey = (e: KeyboardEvent) => {
@@ -124,6 +140,7 @@ export function TermPopover() {
     window.addEventListener("scroll", hide, true);
     window.addEventListener("resize", hide);
     return () => {
+      showAt = null;
       clearTimeout(showTimer);
       clearTimeout(hideTimer);
       document.removeEventListener("pointerover", onOver);
