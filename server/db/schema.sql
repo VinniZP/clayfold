@@ -229,6 +229,16 @@ CREATE TABLE IF NOT EXISTS audits (            -- A
   created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
 );
 
+-- The turn each conversation is running, so a server that dies without a shutdown (a watch reload, a crash)
+-- still finds it at the next start and re-runs it like a turn cut by shutdown.
+CREATE TABLE IF NOT EXISTS running_turns (     -- A
+  conversation_id TEXT PRIMARY KEY REFERENCES conversations(id) ON DELETE CASCADE,
+  turn_text TEXT NOT NULL,
+  learner_text TEXT,
+  rerun INTEGER NOT NULL DEFAULT 0,
+  started_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+);
+
 CREATE TABLE IF NOT EXISTS settings (          -- A
   key TEXT PRIMARY KEY,
   value TEXT NOT NULL                           -- JSON

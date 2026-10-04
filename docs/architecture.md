@@ -86,6 +86,7 @@ An update needs a checkout on `main` with no changes to tracked files and no com
 `POST /api/update` installs the commit the last check found: `git merge --ff-only`, `bun install --frozen-lockfile` when `package.json` or `bun.lock` changed, and `bun run build`. A failed step resets the checkout to the previous commit, repeats the steps there and keeps the server running. After a successful install the server shuts down as on SIGINT and exits with code 75, and the launcher starts the new code.
 
 - `mode: "now"` installs at once. The shutdown interrupts the running Claude turns, and the new server re-runs each of them once (`resumeInterruptedTurns`). A critic, grading or narration call in progress is lost.
+- A server that dies without a shutdown (a `dev:server` reload, a crash) leaves its turns in `running_turns`, which the runner fills when a turn starts and clears when it ends. The next start stores each as a shutdown interruption, so it is re-run once like the others; a turn that was itself a re-run is not run again.
 - `mode: "idle"` waits until no `claude` process runs, then installs. New turns can start while it waits.
 
 While an update runs, the UI polls `/api/update` every 2 seconds and reloads the page once the server reports another `version`.

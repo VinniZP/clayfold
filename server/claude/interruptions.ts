@@ -65,6 +65,31 @@ export function withNote(text: string, note: string): string {
   return text.startsWith("/") ? `${text}\n\n${note}` : `${note}\n\n${text}`;
 }
 
+/** Records the turn a conversation runs; a shutdown or the end of the run clears it. */
+export function markRunning(conversationId: string, turn: TurnInfo, database: Database = db()): void {
+  database
+    .query("INSERT OR REPLACE INTO running_turns (conversation_id, turn_text, learner_text, rerun) VALUES (?, ?, ?, ?)")
+    .run(conversationId, turn.text, turn.learnerText, turn.rerun ? 1 : 0);
+}
+
+export function clearRunning(conversationId: string, database: Database = db()): void {
+  database.query("DELETE FROM running_turns WHERE conversation_id = ?").run(conversationId);
+}
+
+/**
+ * Turns that an earlier server process left running: it died without a shutdown, so no interruption was stored.
+ * Takes them out of running_turns; the caller stores each as a shutdown interruption.
+ */
+export function takeLostTurns(database: Database = db()): { conversationId: string; turn: TurnInfo }[] {
+  return database.transaction(() => {
+    const rows = database
+      .query<{ conversation_id: string; turn_text: string; learner_text: string | null; rerun: number }, []>("SELECT * FROM running_turns ORDER BY started_at, rowid")
+      .all();
+    database.query("DELETE FROM running_turns").run();
+    return rows.map((r) => ({ conversationId: r.conversation_id, turn: { text: r.turn_text, learnerText: r.learner_text, rerun: r.rerun === 1 } }));
+  })();
+}
+
 /**
  * Turns cut by a server shutdown that get one automatic re-run: the interruption is the conversation's
  * latest message (no newer learner message), and the interrupted turn was not itself a re-run.
