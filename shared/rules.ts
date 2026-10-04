@@ -20,6 +20,7 @@ export const RULES = {
   L18: "Tutor steers from 'do it for me' to explanation and asks for confidence",
   L19: "Lessons use the field's established terms, each marked and defined in the topic glossary",
   L20: "A practice test spans the finished lessons, interleaved across nodes, unaided, with results only after submission",
+  L21: "A topic closes with a final exam once every node passed its exit check; a retake waits until the weak nodes are practised again",
   V1: "No decorative visuals; each figure states what it teaches",
   V2: "Labels sit inside the figure next to the parts they name; no legend",
   V3: "A caption does not repeat the body text",

@@ -224,9 +224,11 @@ export function GoalView({ detail, convId, reload }: { detail: TopicDetail; conv
                                 {t("goal.toCourse")} <ArrowRight size={14} aria-hidden="true" />
                               </Link>
                               <span {...stylex.props(s.progressText)}>
-                                {entry.topic.nodesTotal
-                                  ? t("topics.masteredOf", { mastered: entry.topic.nodesMastered, count: entry.topic.nodesTotal })
-                                  : t("topics.mapBuilding")}
+                                {entry.topic.final?.passed
+                                  ? t("final.chip", { percent: entry.topic.final.percent })
+                                  : entry.topic.nodesTotal
+                                    ? t("topics.masteredOf", { mastered: entry.topic.nodesMastered, count: entry.topic.nodesTotal })
+                                    : t("topics.mapBuilding")}
                               </span>
                             </>
                           ) : (

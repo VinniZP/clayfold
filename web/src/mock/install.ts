@@ -1,8 +1,9 @@
-import { CLAUDE_ROLES, type Effort } from "@shared/api";
+import { CLAUDE_ROLES, FINAL_PASS_SHARE, type Effort } from "@shared/api";
 import type {
   AttemptRequest,
   AttemptResponse,
   ChatMessage,
+  FinalExamView,
   ItemState,
   LessonView,
   NarrationView,
@@ -11,6 +12,7 @@ import type {
   PracticeNodeScore,
   PracticeTestOverview,
   PracticeTestRequest,
+  PracticeTestSummary,
   PracticeTestView,
   ReviewSession,
   Settings,
@@ -176,7 +178,7 @@ function refreshPractice(test: MockTest): PracticeTestView {
   return v;
 }
 
-function startPractice(topicId: string, req: PracticeTestRequest, createdAt = new Date()): MockTest {
+function startPractice(topicId: string, req: PracticeTestRequest, createdAt = new Date(), kind: PracticeTestSummary["kind"] = "practice"): MockTest {
   const detail = fx.topicDetails[topicId]!;
   const pool = topicId === "t-bayes" ? fx.practicePool : [];
   const picked = pickPractice(pool, req.length === "all" ? pool.length : req.length);
@@ -187,6 +189,7 @@ function startPractice(topicId: string, req: PracticeTestRequest, createdAt = ne
       test: {
         id,
         topicId,
+        kind,
         status: "open",
         questions: picked.length,
         answered: 0,
@@ -239,10 +242,12 @@ function submitPractice(test: MockTest, at = new Date(), gradingMs = PRACTICE_GR
     }
     v.test.status = "done";
     refreshPractice(test);
+    syncTopicFinal(v.scope.id);
   };
   if (pending.length && gradingMs > 0) setTimeout(gradeShort, gradingMs);
   else if (pending.length) gradeShort();
   refreshPractice(test);
+  syncTopicFinal(v.scope.id);
 }
 
 /** The key's answer, for the seeded history. */
@@ -302,13 +307,66 @@ function practiceView(id: string): MockTest | null {
   return test;
 }
 
+// ---------- Final exam ----------
+
+const share = (x: PracticeTestSummary) => (x.questions ? (x.correct ?? 0) / x.questions : 0);
+
+function gradedFinals(topicId: string): PracticeTestView[] {
+  return Object.values(practiceTests)
+    .map((x) => x.view)
+    .filter((v) => v.test.topicId === topicId && v.test.kind === "final" && v.test.status !== "open")
+    .sort((a, b) => b.test.createdAt.localeCompare(a.test.createdAt));
+}
+
+function syncTopicFinal(topicId: string) {
+  const done = gradedFinals(topicId).filter((v) => v.test.status === "done");
+  const detail = fx.topicDetails[topicId];
+  if (!detail || !done.length) return;
+  const best = Math.max(...done.map((v) => share(v.test)));
+  detail.topic.final = { percent: Math.round(best * 100), passed: best >= FINAL_PASS_SHARE };
+}
+
+function finalView(topicId: string): FinalExamView {
+  const detail = fx.topicDetails[topicId]!;
+  const { open, eligible } = practiceOverview(topicId);
+  const finals = gradedFinals(topicId);
+  const done = finals.filter((v) => v.test.status === "done");
+  const best = done.reduce<PracticeTestView | null>((b, v) => (!b || share(v.test) > share(b.test) ? v : b), null);
+  const latest = finals[0] ?? null;
+  const since = latest?.test.submittedAt ?? "";
+  const practised = (nodeId: string) =>
+    Object.values(practiceTests).some(
+      (x) => x.view.test.kind === "practice" && (x.view.test.submittedAt ?? "") > since && x.view.questions.some((q) => q.result?.nodeId === nodeId && q.result.correct === true),
+    );
+  const weakNodes =
+    latest?.test.status === "done"
+      ? latest.breakdown
+          .filter((n) => n.correct / n.total < FINAL_PASS_SHARE)
+          .map((n) => ({ nodeId: n.nodeId, title: n.title, lessonId: n.lessons[0]?.id ?? null, practised: practised(n.nodeId) }))
+      : [];
+  // The mock Bayes course counts as complete, so its final can be taken.
+  const nodesPassed = topicId === "t-bayes" ? detail.nodes.length : detail.nodes.filter((n) => n.mastery === "exit_passed" || n.mastery === "mastered").length;
+  const complete = detail.nodes.length > 0 && nodesPassed === detail.nodes.length;
+  return {
+    nodesPassed,
+    nodesTotal: detail.nodes.length,
+    questions: eligible,
+    open,
+    best: best?.test ?? null,
+    latest: latest?.test ?? null,
+    passed: !!best && share(best.test) >= FINAL_PASS_SHARE,
+    weakNodes,
+    canStart: complete && !open && eligible > 0 && latest?.test.status !== "grading" && weakNodes.every((n) => n.practised),
+  };
+}
+
 // ---------- Routes ----------
 
 function createTopic(request: string, kind: TopicSummary["kind"], goal: TopicDetail["goal"] = null) {
   const id = `t-new-${++seq}`;
   const conversationId = `c-new-${seq}`;
   const createdAt = new Date().toISOString();
-  createdTopics[id] = { id, slug: id, title: request.slice(0, 60), createdAt, dueCards: 0, nodesMastered: 0, nodesTotal: 0, running: false, kind, goalId: goal?.id ?? null, plan: kind === "goal" ? { total: 0, opened: 0 } : null };
+  createdTopics[id] = { id, slug: id, title: request.slice(0, 60), createdAt, dueCards: 0, nodesMastered: 0, nodesTotal: 0, running: false, kind, goalId: goal?.id ?? null, plan: kind === "goal" ? { total: 0, opened: 0 } : null, final: null };
   fx.topicDetails[id] = {
     topic: createdTopics[id]!,
     nodes: [],
@@ -510,6 +568,14 @@ async function route(method: string, path: string, body: Record<string, unknown>
     if (o.open) return json({ error: t("practice.openExists") }, 409);
     if (!o.eligible) return json({ error: t("practice.nothingEligible") }, 409);
     return json(startPractice(topicId, body as unknown as PracticeTestRequest).view, 201);
+  }
+  if ((m = p.match(/^\/api\/topics\/([^/]+)\/final$/))) {
+    const topicId = m[1]!;
+    if (!fx.topicDetails[topicId] || fx.topicDetails[topicId]!.topic.kind !== "topic") return json({ error: "a goal has no final exam" }, 404);
+    if (method === "GET") return json(finalView(topicId));
+    const v = finalView(topicId);
+    if (!v.canStart) return json({ error: t(v.open ? "practice.openExists" : "final.notReady") }, 409);
+    return json(startPractice(topicId, { length: "all", timeLimitMin: null }, new Date(), "final").view, 201);
   }
   if ((m = p.match(/^\/api\/tests\/([^/]+)\/questions\/(\d+)$/))) {
     const test = practiceView(m[1]!);

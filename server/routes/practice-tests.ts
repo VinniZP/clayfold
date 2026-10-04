@@ -2,9 +2,12 @@ import type { Database } from "bun:sqlite";
 import { Hono } from "hono";
 import { z } from "zod";
 import {
+  FINAL_MIN_QUESTIONS,
+  FINAL_PASS_SHARE,
   PRACTICE_LENGTHS,
   PRACTICE_MAX_QUESTIONS,
   PRACTICE_TIME_LIMITS,
+  type FinalExamView,
   type PracticeAnswerUpdate,
   type PracticeNodeScore,
   type PracticeQuestion,
@@ -17,7 +20,7 @@ import type { Answer, Item } from "../../shared/schemas";
 import { db, newId } from "../db";
 import { t } from "../i18n";
 import { updateMasteryAfterTestAnswer } from "../review/mastery";
-import { assembleTest, eligibleCount, finishedLessons } from "../review/practice-test";
+import { assembleTest, eligibleCount, finishedLessons, practisedSince, topicNodes } from "../review/practice-test";
 import { correctAnswerText, gradeClosedItem, gradeShort, GradingError, type JsonPromptRunner } from "./grading";
 import { fail, readBody } from "./http";
 import { AnswerSchema } from "./items";
@@ -32,7 +35,7 @@ const MAX_SPENT_MS = 10 * 60 * 1000;
 const GRADING_CONCURRENCY = 3;
 const HISTORY_LIMIT = 30;
 
-type TestRow = { id: string; topic_id: string; status: PracticeTestSummary["status"]; time_limit_min: number | null; created_at: string; submitted_at: string | null };
+type TestRow = { id: string; topic_id: string; kind: PracticeTestSummary["kind"]; status: PracticeTestSummary["status"]; time_limit_min: number | null; created_at: string; submitted_at: string | null };
 
 type QuestionRow = {
   test_id: string;
@@ -74,6 +77,7 @@ function summary(t: TestRow, database: Database): PracticeTestSummary {
   return {
     id: t.id,
     topicId: t.topic_id,
+    kind: t.kind,
     status: t.status,
     questions: counts.questions,
     answered: counts.answered,
@@ -257,18 +261,14 @@ export function overview(scopeId: string, opts: Opts = {}): PracticeTestOverview
 
 // ---------- Taking a test ----------
 
-export function startTest(scopeId: string, req: PracticeTestRequest, opts: Opts & { random?: () => number } = {}): PracticeTestView {
+function createTest(scopeId: string, picked: ReturnType<typeof assembleTest>, timeLimitMin: number | null, kind: PracticeTestSummary["kind"], opts: Opts): PracticeTestView {
   const database = opts.database ?? db();
   const at = opts.at ?? new Date();
-  if (overview(scopeId, opts).open) fail(409, t("practice.openExists"));
-  const length = req.length === "all" ? PRACTICE_MAX_QUESTIONS : req.length;
-  const picked = assembleTest(scopeId, length, database, opts.random);
-  if (picked.length === 0) fail(409, t("practice.nothingEligible"));
   const testId = newId("pt");
   database.transaction(() => {
     database
-      .query("INSERT INTO practice_tests (id, topic_id, time_limit_min, created_at) VALUES (?, ?, ?, ?)")
-      .run(testId, scopeId, req.timeLimitMin, at.toISOString());
+      .query("INSERT INTO practice_tests (id, topic_id, kind, time_limit_min, created_at) VALUES (?, ?, ?, ?, ?)")
+      .run(testId, scopeId, kind, timeLimitMin, at.toISOString());
     const insert = database.query(
       `INSERT INTO practice_test_items (test_id, idx, item_id, topic_id, lesson_id, node_id, content, display_order)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -276,6 +276,64 @@ export function startTest(scopeId: string, req: PracticeTestRequest, opts: Opts 
     picked.forEach((r, idx) => insert.run(testId, idx, r.id, r.topic_id, r.lesson_id, r.node_id, r.content, r.display_order));
   })();
   return testView(testId, opts);
+}
+
+export function startTest(scopeId: string, req: PracticeTestRequest, opts: Opts & { random?: () => number } = {}): PracticeTestView {
+  const database = opts.database ?? db();
+  if (overview(scopeId, opts).open) fail(409, t("practice.openExists"));
+  const length = req.length === "all" ? PRACTICE_MAX_QUESTIONS : req.length;
+  const picked = assembleTest(scopeId, length, database, opts.random);
+  if (picked.length === 0) fail(409, t("practice.nothingEligible"));
+  return createTest(scopeId, picked, req.timeLimitMin, "practice", opts);
+}
+
+// ---------- Final exam (L21) ----------
+
+const share = (x: PracticeTestSummary) => (x.questions ? (x.correct ?? 0) / x.questions : 0);
+
+export function finalView(topicId: string, opts: Opts = {}): FinalExamView {
+  const database = opts.database ?? db();
+  const { open } = overview(topicId, opts);
+  const nodes = topicNodes(topicId, database);
+  const finals = database
+    .query<TestRow, [string]>("SELECT * FROM practice_tests WHERE topic_id = ? AND kind = 'final' AND status != 'open' ORDER BY created_at DESC, rowid DESC")
+    .all(topicId)
+    .map((x) => ({ row: x, summary: summary(x, database) }));
+  const graded = finals.filter((f) => f.row.status === "done");
+  const best = graded.reduce<(typeof graded)[number] | null>((b, f) => (!b || share(f.summary) > share(b.summary) ? f : b), null);
+  const latest = finals[0] ?? null;
+  const weakNodes =
+    latest?.row.status === "done"
+      ? breakdown(questions(latest.row, database), database)
+          .filter((n) => n.correct / n.total < FINAL_PASS_SHARE)
+          .map((n) => ({
+            nodeId: n.nodeId,
+            title: n.title,
+            lessonId: n.lessons[0]?.id ?? null,
+            practised: practisedSince(topicId, n.nodeId, latest.row.submitted_at!, database),
+          }))
+      : [];
+  const complete = nodes.total > 0 && nodes.passed === nodes.total;
+  const questionCount = Math.min(eligibleCount(topicId, database), Math.max(FINAL_MIN_QUESTIONS, nodes.total), PRACTICE_MAX_QUESTIONS);
+  return {
+    nodesPassed: nodes.passed,
+    nodesTotal: nodes.total,
+    questions: questionCount,
+    open,
+    best: best?.summary ?? null,
+    latest: latest?.summary ?? null,
+    passed: !!best && share(best.summary) >= FINAL_PASS_SHARE,
+    weakNodes,
+    canStart: complete && !open && questionCount > 0 && latest?.row.status !== "grading" && weakNodes.every((n) => n.practised),
+  };
+}
+
+/** Starts the topic's final: every node is covered before a weak node gets more questions; untimed. */
+export function startFinal(topicId: string, opts: Opts & { random?: () => number } = {}): PracticeTestView {
+  const database = opts.database ?? db();
+  const view = finalView(topicId, opts);
+  if (!view.canStart) fail(409, t(view.open ? "practice.openExists" : "final.notReady"));
+  return createTest(topicId, assembleTest(topicId, view.questions, database, opts.random), null, "final", opts);
 }
 
 export function saveAnswer(testId: string, idx: number, update: PracticeAnswerUpdate, opts: Opts = {}): void {
@@ -359,6 +417,17 @@ practiceTests.post("/topics/:topicId/tests", async (c) => {
   const req = await readBody(c, RequestSchema);
   return c.json(startTest(topic.id, req as PracticeTestRequest) satisfies PracticeTestView, 201);
 });
+
+/** A final belongs to a topic; a goal has none. */
+function finalTopic(topicId: string): string {
+  const topic = topicRow(topicId);
+  if (topic.kind !== "topic") fail(404, "a goal has no final exam");
+  return topic.id;
+}
+
+practiceTests.get("/topics/:topicId/final", (c) => c.json(finalView(finalTopic(c.req.param("topicId"))) satisfies FinalExamView));
+
+practiceTests.post("/topics/:topicId/final", (c) => c.json(startFinal(finalTopic(c.req.param("topicId"))) satisfies PracticeTestView, 201));
 
 practiceTests.get("/tests/:testId", (c) => c.json(testView(c.req.param("testId")) satisfies PracticeTestView));
 

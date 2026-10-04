@@ -7,6 +7,7 @@ import type { MessageKey } from "@shared/i18n";
 import type { PublicItem, PublicStep } from "@shared/schemas";
 import { Chat } from "../components/Chat";
 import { DayProgress } from "../components/DayProgress";
+import { FinalInvite } from "../components/FinalExamCard";
 import { GenProgress, type Rejection } from "../components/GenProgress";
 import { LearnerChip } from "../components/LessonList";
 import { ChallengeBanner, LessonCompanion, LessonReward, useLessonFocus } from "../components/meerkat/LessonGame";
@@ -810,6 +811,7 @@ function LessonEnd({
         <p {...stylex.props(text.small, text.muted)}>{t("lesson.reviewCardsHint")}</p>
         {topicId ? <ProposedCards topicId={topicId} /> : <Empty title={t("lesson.findingTopic")} />}
       </section>
+      {topicId && <FinalInvite topicId={topicId} />}
       {topicId && (
         <Link to={`/topics/${topicId}`} {...stylex.props(btn.base, btn.primary, s.start)}>
           {t("lesson.toCourseMap")} <ArrowRight size={16} aria-hidden="true" />

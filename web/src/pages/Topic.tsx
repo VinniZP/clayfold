@@ -5,6 +5,7 @@ import { Link, useNavigate, useParams, useSearchParams } from "react-router";
 import type { ConversationKind, LessonSummary, TopicDetail } from "@shared/api";
 import type { MessageKey } from "@shared/i18n";
 import { Chat } from "../components/Chat";
+import { FinalExamCard } from "../components/FinalExamCard";
 import { useHeader } from "../components/header";
 import { GraphLegend, KnowledgeGraph } from "../components/KnowledgeGraph";
 import { LessonList } from "../components/LessonList";
@@ -282,6 +283,8 @@ export function TopicPage() {
             <LessonList lessons={d.lessons} />
           )}
         </section>
+
+        {d.nodes.length > 0 && <FinalExamCard key={`final-${topicId}`} topicId={topicId} />}
 
         {d.lessons.length > 0 && <PracticeTestCard key={topicId} scopeId={topicId} />}
 

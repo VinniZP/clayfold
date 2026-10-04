@@ -527,7 +527,7 @@ const convs = (prefix: string, days: number[]) =>
 
 export const topicDetails: Record<string, TopicDetail> = {
   "t-bayes": {
-    topic: { id: "t-bayes", slug: "bayes", title: "Bayesian statistics", createdAt: iso(20), dueCards: 3, nodesMastered: 1, nodesTotal: bayesNodes.length, running: false, kind: "topic", goalId: null, plan: null },
+    topic: { id: "t-bayes", slug: "bayes", title: "Bayesian statistics", createdAt: iso(20), dueCards: 3, nodesMastered: 1, nodesTotal: bayesNodes.length, running: false, kind: "topic", goalId: null, plan: null, final: null },
     nodes: bayesNodes,
     plan: [],
     goal: null,
@@ -544,7 +544,7 @@ export const topicDetails: Record<string, TopicDetail> = {
     ],
   },
   "t-git": {
-    topic: { id: "t-git", slug: "git", title: "Git basics", createdAt: iso(40), dueCards: 2, nodesMastered: 2, nodesTotal: gitNodes.length, running: false, kind: "topic", goalId: "t-goal", plan: null },
+    topic: { id: "t-git", slug: "git", title: "Git basics", createdAt: iso(40), dueCards: 2, nodesMastered: 2, nodesTotal: gitNodes.length, running: false, kind: "topic", goalId: "t-goal", plan: null, final: null },
     nodes: gitNodes,
     plan: [],
     goal: { id: "t-goal", title: "Workout tracking app", why: "Keep every version of the app and roll back a change that broke it." },
@@ -563,7 +563,7 @@ export const topicDetails: Record<string, TopicDetail> = {
     ],
   },
   "t-stretch": {
-    topic: { id: "t-stretch", slug: "stretch", title: "Back stretches", createdAt: iso(0, 8), dueCards: 0, nodesMastered: 0, nodesTotal: 0, running: true, kind: "topic", goalId: null, plan: null },
+    topic: { id: "t-stretch", slug: "stretch", title: "Back stretches", createdAt: iso(0, 8), dueCards: 0, nodesMastered: 0, nodesTotal: 0, running: true, kind: "topic", goalId: null, plan: null, final: null },
     nodes: [],
     plan: [],
     goal: null,
@@ -580,7 +580,7 @@ export const topicDetails: Record<string, TopicDetail> = {
     ],
   },
   "t-goal": {
-    topic: { id: "t-goal", slug: "goal", title: "Workout tracking app", createdAt: iso(41), dueCards: 0, nodesMastered: 0, nodesTotal: 0, running: false, kind: "goal", goalId: null, plan: { total: 0, opened: 0 } },
+    topic: { id: "t-goal", slug: "goal", title: "Workout tracking app", createdAt: iso(41), dueCards: 0, nodesMastered: 0, nodesTotal: 0, running: false, kind: "goal", goalId: null, plan: { total: 0, opened: 0 }, final: null },
     nodes: [],
     plan: [],
     goal: null,

@@ -3,10 +3,11 @@ import type { Database } from "bun:sqlite";
 import { HTTPException } from "hono/http-exception";
 import type { Answer } from "../../shared/schemas";
 import { openDb } from "../db";
+import { bestFinalShare } from "../review/practice-test";
 import { reviewSession } from "../review/session";
 import { submitAttempt, type JsonPromptRunner } from "./grading";
 import { learnerStatus } from "./lesson-summary";
-import { discardTest, gradingOf, overview, regradeTest, saveAnswer, startTest, submitTest, testView } from "./practice-tests";
+import { discardTest, finalView, gradingOf, overview, regradeTest, saveAnswer, startFinal, startTest, submitTest, testView } from "./practice-tests";
 import { activity } from "./stats";
 import { insertItem, insertStep, items, seed } from "./test-fixtures";
 
@@ -200,5 +201,65 @@ describe("missed questions and activity", () => {
     expect(day().attempts).toBe(0);
     submitTest(view.test.id, { database, at: later(DAY), runPrompt: fakeRunner([true, true]) });
     expect(day()).toMatchObject({ attempts: 1, minutes: 1 });
+  });
+});
+
+describe("final exam (L21)", () => {
+  const passAllNodes = () => database.query("UPDATE nodes SET mastery = 'exit_passed', exit_passed_at = ? WHERE topic_id = 'tp1'").run(T0.toISOString());
+  const final = (at: Date) => startFinal("tp1", { database, at, random: () => 0.5 });
+
+  /** Takes a final with every closed answer right or wrong; the short answer is graded as `right` too. */
+  async function takeFinal(at: Date, right: boolean) {
+    const view = final(at);
+    for (const q of view.questions) {
+      const answer = q.item.format === "short" ? { format: "short", text: "answer" } : right ? RIGHT[q.item.format as "single" | "number"] : WRONG[q.item.format as "single" | "number"];
+      saveAnswer(view.test.id, q.idx, { answer: answer as Answer }, { database, at });
+    }
+    submitTest(view.test.id, { database, at, runPrompt: fakeRunner(right ? [true, true] : [false, false]) });
+    await gradingOf(view.test.id);
+    return view.test.id;
+  }
+
+  test("stays locked until every node of the topic passed its exit check", () => {
+    finishedLesson();
+    expect(finalView("tp1", { database })).toMatchObject({ nodesPassed: 0, nodesTotal: 4, canStart: false });
+    expect(statusOf(() => final(later(DAY)))).toBe(409);
+    passAllNodes();
+    expect(finalView("tp1", { database })).toMatchObject({ nodesPassed: 4, questions: 3, canStart: true, passed: false });
+  });
+
+  test("a final is a test of its own kind that shares the one open slot with practice tests", () => {
+    finishedLesson();
+    passAllNodes();
+    const view = final(later(DAY));
+    expect(view.test).toMatchObject({ kind: "final", timeLimitMin: null, questions: 3 });
+    expect(finalView("tp1", { database }).open?.id).toBe(view.test.id);
+    expect(statusOf(() => start())).toBe(409);
+    expect(statusOf(() => final(later(DAY)))).toBe(409);
+  });
+
+  test("a failed final waits until each weak node is practised again after it", async () => {
+    const { checks } = finishedLesson();
+    passAllNodes();
+    await takeFinal(later(DAY), false);
+    const failed = finalView("tp1", { database });
+    expect(failed).toMatchObject({ passed: false, canStart: false, weakNodes: [{ nodeId: "a", lessonId: "ls1", practised: false }] });
+    expect(bestFinalShare("tp1", database)).toBe(0);
+
+    database
+      .query("INSERT INTO attempts (id, item_id, answer, correct, context, created_at) VALUES (?, ?, '{}', 1, 'review', ?)")
+      .run(crypto.randomUUID(), checks[0]!, later(DAY + 60_000).toISOString());
+    expect(finalView("tp1", { database })).toMatchObject({ canStart: true, weakNodes: [{ nodeId: "a", practised: true }] });
+  });
+
+  test("a passed final keeps its best score and can be taken again at once", async () => {
+    finishedLesson();
+    passAllNodes();
+    await takeFinal(later(DAY), true);
+    expect(finalView("tp1", { database })).toMatchObject({ passed: true, canStart: true, weakNodes: [] });
+    expect(bestFinalShare("tp1", database)).toBe(1);
+    await takeFinal(later(DAY + 60_000), false);
+    expect(finalView("tp1", { database })).toMatchObject({ passed: true, best: { correct: 3 } });
+    expect(bestFinalShare("tp1", database)).toBe(1);
   });
 });

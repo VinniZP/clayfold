@@ -25,6 +25,8 @@ export type TopicSummary = {
   goalId: string | null;
   /** Goals only: plan entries, and how many of them are opened as topics. */
   plan: { total: number; opened: number } | null;
+  /** Best graded final exam of the topic, in percent; null before one. */
+  final: { percent: number; passed: boolean } | null;
 };
 
 /** Onboarding stages, derived from stored state (workspace files, sources, graph, placement). */
@@ -226,6 +228,8 @@ export type CardView = ReviewCard & { status: "proposed" | "active" | "suspended
 // POST   /api/tests/:testId/submit -> PracticeTestView (short answers are graded in the background: status "grading")
 // POST   /api/tests/:testId/regrade -> PracticeTestView (grades the answers whose grading failed again)
 // DELETE /api/tests/:testId -> 204 (open tests only)
+// GET    /api/topics/:topicId/final -> FinalExamView
+// POST   /api/topics/:topicId/final -> PracticeTestView (201; 409 unless FinalExamView.canStart)
 // Test answers stay out of `attempts`: first-try results, exit checks and learner signals do not see them.
 
 export const PRACTICE_LENGTHS = [10, 20, 30] as const;
@@ -245,6 +249,7 @@ export type PracticeAnswerUpdate = { answer?: Answer | null; flagged?: boolean; 
 export type PracticeTestSummary = {
   id: string;
   topicId: string;
+  kind: "practice" | "final";
   status: "open" | "grading" | "done";
   questions: number;
   answered: number;
@@ -264,6 +269,29 @@ export type PracticeTestOverview = {
   open: PracticeTestSummary | null;
   /** Submitted tests, newest first. */
   history: PracticeTestSummary[];
+};
+
+/** A final exam holds at least this many questions, or one per node of a larger course. */
+export const FINAL_MIN_QUESTIONS = 30;
+/** Share of a final answered right to pass it, and the share under which a node is weak: the L12 threshold. */
+export const FINAL_PASS_SHARE = 0.8;
+
+/** The closing test of a topic (L21): it opens once every node has passed its exit check. */
+export type FinalExamView = {
+  nodesPassed: number;
+  nodesTotal: number;
+  /** Questions a final started now would hold. */
+  questions: number;
+  /** The topic's open test of either kind: one test runs at a time. */
+  open: PracticeTestSummary | null;
+  /** Best graded final. */
+  best: PracticeTestSummary | null;
+  /** Latest final, while it is being graded or after. */
+  latest: PracticeTestSummary | null;
+  passed: boolean;
+  /** Nodes under the pass share in the latest final; a retake waits until each is practised again after it. */
+  weakNodes: { nodeId: string; title: string; lessonId: string | null; practised: boolean }[];
+  canStart: boolean;
 };
 
 /** Present once the test is submitted (L9, L11). */

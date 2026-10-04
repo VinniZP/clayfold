@@ -1059,6 +1059,34 @@ export const en = {
   "practice.timeUp": "The time for this test is up.",
   "practice.submitted": "This test is already submitted.",
   "practice.notGraded": "No answers wait for grading.",
+
+  // Final exam (L21)
+  "final.title": "Final exam",
+  "final.about": {
+    one: "The closing test of the course: {count} question across every topic, with no hints, tutor or timer. {pass}% right passes.",
+    other: "The closing test of the course: {count} questions across every topic, with no hints, tutor or timer. {pass}% right passes.",
+  },
+  "final.lockedTitle": "Opens when the course is done",
+  "final.lockedBody": "Pass the final check of every topic first: {passed} of {total} done.",
+  "final.start": "Take the final",
+  "final.retake": "Retake the final",
+  "final.improve": "Take it again",
+  "final.practiceOpen": "A practice test of this course is in progress. Finish or discard it first.",
+  "final.passedOn": "Passed with {percent}% on {date}",
+  "final.best": "Best result so far: {percent}%. {pass}% passes.",
+  "final.gradingNow": "The last final is being graded.",
+  "final.retakeTitle": "Before a retake, practise these topics again",
+  "final.retakeBody": "A right answer in a lesson, a practice test or Review counts, and so does a card of the topic you recall.",
+  "final.practised": "Practised again",
+  "final.notPractised": "Not practised yet",
+  "final.toLesson": "Open the lesson",
+  "final.chip": "Final passed · {percent}%",
+  "final.historyChip": "Final",
+  "final.resultPassed": "Passed: the course is complete.",
+  "final.resultFailed": "Not passed yet: {pass}% is needed. Practise the weak topics, then retake the final from the course page.",
+  "final.readyTitle": "The course is complete",
+  "final.readyBody": "Every topic passed its final check. The final exam closes the course.",
+  "final.notReady": "The final opens once every topic of the course passed its final check and the weak topics of the last final are practised again.",
 } as const satisfies Record<string, string | { one: string; other: string }>;
 
 export type MessageKey = keyof typeof en;

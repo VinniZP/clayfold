@@ -129,3 +129,46 @@ export function assembleTest(scopeId: string, length: number, database: Database
   }
   return interleaveByNode(picked, random).map(({ last_seen: _, ...row }) => row);
 }
+
+/** Nodes of a topic, and how many of them passed the exit check (L12): the topic is complete when all did. */
+export function topicNodes(topicId: string, database: Database = db()): { passed: number; total: number } {
+  return database
+    .query<{ passed: number; total: number }, [string]>(
+      "SELECT count(*) FILTER (WHERE mastery IN ('exit_passed','mastered')) AS passed, count(*) AS total FROM nodes WHERE topic_id = ?",
+    )
+    .get(topicId)!;
+}
+
+/** Best share answered right across the topic's graded finals (L21); null before one. */
+export function bestFinalShare(topicId: string, database: Database = db()): number | null {
+  return database
+    .query<{ best: number | null }, [string]>(
+      `SELECT max(1.0 * (SELECT count(*) FROM practice_test_items q WHERE q.test_id = p.id AND q.correct = 1)
+                      / (SELECT count(*) FROM practice_test_items q WHERE q.test_id = p.id)) AS best
+       FROM practice_tests p WHERE p.topic_id = ? AND p.kind = 'final' AND p.status = 'done'`,
+    )
+    .get(topicId)!.best;
+}
+
+/**
+ * True once the node was practised again after `since`: a correct graded lesson or review answer, a correct
+ * practice-test answer, or one of its cards rated Good or Easy. Unlocks a final's retake (L21).
+ */
+export function practisedSince(topicId: string, nodeId: string, since: string, database: Database = db()): boolean {
+  return (
+    database
+      .query<{ done: number }, [string, string, string]>(
+        `SELECT EXISTS (
+           SELECT 1 FROM attempts a JOIN items i ON i.id = a.item_id
+            WHERE i.topic_id = ?1 AND i.node_id = ?2 AND i.role != 'activate' AND a.correct = 1 AND a.created_at > ?3
+           UNION ALL
+           SELECT 1 FROM practice_test_items q JOIN practice_tests p ON p.id = q.test_id
+            WHERE p.kind = 'practice' AND q.topic_id = ?1 AND q.node_id = ?2 AND q.correct = 1 AND q.answered_at > ?3
+           UNION ALL
+           SELECT 1 FROM reviews r JOIN cards c ON c.id = r.card_id
+            WHERE c.topic_id = ?1 AND c.node_id = ?2 AND r.rating >= 3 AND r.reviewed_at > ?3
+         ) AS done`,
+      )
+      .get(topicId, nodeId, since)!.done === 1
+  );
+}

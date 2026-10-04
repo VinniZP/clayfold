@@ -1,8 +1,8 @@
 import * as stylex from "@stylexjs/stylex";
-import { ArrowLeft, ArrowRight, BookOpen, Check, CircleCheck, Clock, Flag, RefreshCw, Repeat, ShieldCheck, TriangleAlert, X } from "lucide-react";
+import { ArrowLeft, ArrowRight, BookOpen, Check, CircleCheck, Clock, Flag, GraduationCap, RefreshCw, Repeat, ShieldCheck, TriangleAlert, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useParams } from "react-router";
-import type { PracticeAnswerUpdate, PracticeQuestion, PracticeTestView } from "@shared/api";
+import { FINAL_PASS_SHARE, type PracticeAnswerUpdate, type PracticeQuestion, type PracticeTestView } from "@shared/api";
 import type { Answer, PublicItem } from "@shared/schemas";
 import { useHeader } from "../components/header";
 import { AnswerInput, draftFromAnswer, toAnswer, type Draft } from "../components/ItemView";
@@ -22,6 +22,7 @@ const POLL_MS = 2000;
 const WEAK_SHARE = 0.8;
 
 const s = stylex.create({
+  passed: { backgroundColor: color.successSoft, fontWeight: 650 },
   page: { display: "grid", gridTemplateColumns: "repeat(12, minmax(0, 1fr))", gap: 24, alignItems: "start" },
   main: { gridColumn: { default: "span 8", [bp.tablet]: "1 / -1" }, display: "grid", gap: 20, alignContent: "start", minWidth: 0 },
   side: {
@@ -137,7 +138,7 @@ export function PracticeTestPage() {
   const [timedOut, setTimedOut] = useState(false);
   const v = res.data;
   useHeader({
-    title: t("practice.title"),
+    title: t(v?.test.kind === "final" ? "final.title" : "practice.title"),
     back: v ? { to: `/topics/${v.scope.id}`, label: v.scope.title } : undefined,
     art: "cards-stack",
   });
@@ -618,6 +619,17 @@ function Results({ view, timedOut, onChange }: { view: PracticeTestView; timedOu
           </p>
           <p {...stylex.props(text.h3, text.muted)}>{total ? Math.round((correct / total) * 100) : 0}%</p>
         </div>
+        {view.test.kind === "final" && view.test.status === "done" && (
+          <p role="status" {...stylex.props(banner.base, correct / total >= FINAL_PASS_SHARE ? s.passed : banner.butter)}>
+            {correct / total >= FINAL_PASS_SHARE ? (
+              <>
+                <GraduationCap size={18} aria-hidden="true" /> {t("final.resultPassed")}
+              </>
+            ) : (
+              t("final.resultFailed", { pass: Math.round(FINAL_PASS_SHARE * 100) })
+            )}
+          </p>
+        )}
         {pending > 0 && (
           <p role="status" {...stylex.props(banner.base, banner.lilac)}>
             <Spinner /> {t("practice.gradingPending", { count: pending })}

@@ -107,6 +107,7 @@ Optional gamification, off by default (`settings.gamification`). Catalogs and co
 - Answers are saved one question at a time and the test resumes from them. A timed test ends at `created_at` plus the limit; a later save is refused, and the next read of the test submits it.
 - Submission grades closed answers at once with `gradeClosedItem`; short answers go to `gradeShort`, three at a time, in the background, and the test stays `grading` until each one is graded or failed. A failed one is graded again on request; a `grading` test with no grading running in this process restarts it when read.
 - Test answers are not written to `attempts`, so first-try results, exit checks, lesson progress and learner signals do not see them. A correct answer at least a day after the node's exit check masters the node (L12). Answers of submitted tests count as activity for the day and the streak. An item whose latest test answer was wrong joins the Review session a day after that test, until a review attempt answers it.
+- A final exam (L21) is a practice test with `kind = 'final'` on a topic whose nodes all passed the exit check. `GET /api/topics/:topicId/final` (`finalView`) reports the node progress, the best and latest finals and the weak nodes of the latest one; `POST` starts a final only when `canStart` holds. One test of either kind is open per topic at a time. `TopicSummary.final` carries the best result for the course cards and the goal page.
 
 ## Narration
 

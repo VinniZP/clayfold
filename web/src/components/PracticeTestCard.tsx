@@ -60,6 +60,7 @@ const s = stylex.create({
   },
   rowEmbedded: { backgroundColor: { default: color.surface, ":hover": color.surface3 } },
   rowLink: { color: color.text, fontWeight: 650, textDecoration: "none", outline: "none", "::after": { content: '""', position: "absolute", inset: 0, borderRadius: radius.field } },
+  kind: { marginRight: "auto" },
   score: { fontFamily: font.display, fontWeight: 800, fontVariantNumeric: "tabular-nums" },
   dialog: {
     width: "min(440px, calc(100vw - 32px))",
@@ -235,6 +236,7 @@ function History({ tests, embedded }: { tests: PracticeTestSummary[]; embedded: 
             <Link to={`/tests/${x.id}`} {...stylex.props(s.rowLink)}>
               {formatDate(x.submittedAt ?? x.createdAt)}
             </Link>
+            {x.kind === "final" && <span {...stylex.props(chip.base, chip.lilac, s.kind)}>{t("final.historyChip")}</span>}
             {x.status === "grading" ? (
               <span {...stylex.props(chip.base, chip.butter)}>{t("practice.grading")}</span>
             ) : (

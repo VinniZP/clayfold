@@ -8,6 +8,7 @@ import type {
   ConversationView,
   CreateTopicResponse,
   CrownsView,
+  FinalExamView,
   GameBackfillView,
   GameView,
   GiveUpResponse,
@@ -130,6 +131,8 @@ export const api = {
   submitPracticeTest: (testId: string) => post<PracticeTestView>(`/api/tests/${e(testId)}/submit`),
   regradePracticeTest: (testId: string) => post<PracticeTestView>(`/api/tests/${e(testId)}/regrade`),
   discardPracticeTest: (testId: string) => request<unknown>("DELETE", `/api/tests/${e(testId)}`),
+  finalExam: (topicId: string) => get<FinalExamView>(`/api/topics/${e(topicId)}/final`),
+  startFinal: (topicId: string) => post<PracticeTestView>(`/api/topics/${e(topicId)}/final`),
 
   notes: (topicId: string) => get<NoteView[]>(`/api/topics/${e(topicId)}/notes`),
   addNote: (body: NoteRequest) => post<unknown>("/api/notes", body),

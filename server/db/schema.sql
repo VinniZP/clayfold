@@ -308,6 +308,7 @@ CREATE TABLE IF NOT EXISTS focus_runs (        -- A
 CREATE TABLE IF NOT EXISTS practice_tests (    -- A
   id TEXT PRIMARY KEY,
   topic_id TEXT NOT NULL REFERENCES topics(id) ON DELETE CASCADE,  -- a topic, or a goal: the test then spans the goal's topics
+  kind TEXT NOT NULL DEFAULT 'practice' CHECK (kind IN ('practice','final')),  -- final: the closing test of a completed topic
   status TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open','grading','done')),
   time_limit_min INTEGER,                       -- NULL: untimed
   created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
