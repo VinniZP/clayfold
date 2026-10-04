@@ -5,6 +5,10 @@ import type { RuleId, Violation } from "./rules";
 // MCP tool contract between the plugin skills and the server.
 // Tool names as Claude sees them: mcp__plugin_clayfold_clayfold__<name>.
 
+/** Catalogues of source_discover; "web" (Exa) needs a key in Settings. */
+export const DISCOVER_IN = ["web", "wikipedia", "papers"] as const;
+export const DISCOVER_FREE = ["wikipedia", "papers"] as const;
+
 export const TOOL_INPUTS = {
   ask_learner: {
     question: z.string().min(3).max(500),
@@ -25,7 +29,18 @@ export const TOOL_INPUTS = {
     kind: z.enum(["docs", "article", "book", "paper", "course", "video", "reference"]),
     /** One line: what it covers and when to use it. */
     note: z.string().min(10).max(300),
+    nodeIds: z.array(Slug).max(25).optional().describe("Graph nodes this source explains; lessons on them learn of it. Adding the URL again adds to the list."),
   },
+  source_discover: {
+    query: z.string().min(2).max(400),
+    /** "web" exists only while an Exa key is set; the MCP server leaves it out of the schema otherwise. */
+    in: z.enum(DISCOVER_IN),
+    /** Wikipedia edition: the language code of its address (en, de, ja…). */
+    language: z.string().regex(/^[a-z]{2,3}(-[a-z]+)?$/).default("en").describe("Wikipedia edition (en, de, ja…); other catalogues ignore it."),
+    since: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().describe("web only: pages published on or after this date (YYYY-MM-DD)."),
+    limit: z.number().int().min(1).max(10).default(8),
+  },
+  source_remove: { sourceId: z.string().min(1), reason: z.string().min(5).max(300) },
   source_search: {
     sourceId: z.string().min(1),
     query: z.string().min(2).max(200),
@@ -105,10 +120,31 @@ export type SourceAddResult =
       title: string;
       chars: number;
       headings: string[];
+      /** Publication or update date the page or PDF states (YYYY-MM-DD), when it states one. */
+      published?: string;
       /** Ok sources of the topic per publisher (organisation behind the domain), this one included. */
       publishers: Record<string, number>;
     }
   | { ok: false; error: string };
+
+export type SourceRemoveResult = { ok: true; publishers: Record<string, number> };
+
+export type SourceDiscoverResult = {
+  candidates: {
+    title: string;
+    /** Addresses to try with source_add, best first. */
+    urls: string[];
+    snippet: string;
+    year?: number;
+    citations?: number;
+    venue?: string;
+    /** Web results: publication date (YYYY-MM-DD) and author, when known. */
+    published?: string;
+    author?: string;
+    /** One of the addresses is already a source of this topic. */
+    registered: boolean;
+  }[];
+};
 
 export type SourceSearchResult = {
   passages: { quote: string; offset: number }[];
@@ -174,8 +210,8 @@ export type LearnerState = {
     prereqs: string[];
     unmasteredPrereqs: string[];
   }[];
-  /** Sources registered with source_add, and the learner's materials (origin "learner"); cite them by id. */
-  sources: { id: string; title: string; url: string; kind: string; status: "ok" | "failed"; origin: "web" | "learner" }[];
+  /** Sources registered with source_add, and the learner's materials (origin "learner"); cite them by id. nodeIds: the nodes source_add tied the source to. */
+  sources: { id: string; title: string; url: string; kind: string; status: "ok" | "failed"; origin: "web" | "learner"; nodeIds: string[] }[];
   recentAttempts: {
     itemId: string;
     nodeId: string;

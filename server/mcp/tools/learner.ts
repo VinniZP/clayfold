@@ -37,10 +37,11 @@ export function learnerState(db: Database, topicId: string, nodeIds?: string[]):
     unmasteredPrereqs: (JSON.parse(n.prereqs) as string[]).filter((p) => !satisfied.has(p)),
   }));
   const sources = db
-    .query<LearnerState["sources"][number], [string]>(
-      "SELECT id, title, url, kind, status, origin FROM sources WHERE topic_id = ? ORDER BY fetched_at",
+    .query<Omit<LearnerState["sources"][number], "nodeIds"> & { node_ids: string | null }, [string]>(
+      "SELECT id, title, url, kind, status, origin, node_ids FROM sources WHERE topic_id = ? ORDER BY fetched_at",
     )
-    .all(topicId);
+    .all(topicId)
+    .map(({ node_ids, ...s }) => ({ ...s, nodeIds: node_ids ? (JSON.parse(node_ids) as string[]) : [] }));
 
   const attempts = db
     .query<

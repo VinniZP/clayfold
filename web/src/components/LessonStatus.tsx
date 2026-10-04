@@ -47,15 +47,19 @@ export function readyLine(l: Pick<LessonSummary, "stepsReady" | "stepsTotal">): 
   return t("lesson.stepsReady", { ready: l.stepsReady, total: l.stepsTotal });
 }
 
-/** Quiet notice for a lesson planned before newer sources arrived, with a confirmed rebuild. */
-export function StaleSources({ lesson, inline }: { lesson: Pick<LessonSummary, "id" | "topicId" | "sourcesStale">; inline?: boolean }) {
+/**
+ * Quiet notice for a lesson planned before newer sources arrived (it cites one publisher, or sources for its nodes
+ * were found after it), with a confirmed rebuild.
+ */
+export function StaleSources({ lesson, inline }: { lesson: Pick<LessonSummary, "id" | "topicId" | "sourcesStale" | "newSources">; inline?: boolean }) {
   useLang();
   const dialog = useRef<HTMLDialogElement>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const navigate = useNavigate();
-  useOverlayScroll(dialog, lesson.sourcesStale);
-  if (!lesson.sourcesStale) return null;
+  const shown = lesson.sourcesStale || lesson.newSources > 0;
+  useOverlayScroll(dialog, shown);
+  if (!shown) return null;
 
   const rebuild = async () => {
     setBusy(true);
@@ -73,7 +77,7 @@ export function StaleSources({ lesson, inline }: { lesson: Pick<LessonSummary, "
 
   return (
     <div {...stylex.props(s.notice, inline && s.noticeInline)}>
-      <span {...stylex.props(s.noticeText)}>{t("lesson.stale")}</span>
+      <span {...stylex.props(s.noticeText)}>{lesson.newSources > 0 ? t("lesson.newSources", { count: lesson.newSources }) : t("lesson.stale")}</span>
       <button type="button" onClick={() => dialog.current?.showModal()} {...stylex.props(btn.base, btn.ghost, btn.sm)}>
         <RefreshCw size={14} aria-hidden="true" /> {t("lesson.rebuild")}
       </button>

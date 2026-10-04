@@ -14,7 +14,7 @@ const PAGE = `<!doctype html><html><head><title>Git</title></head><body><article
 
 const fakeFetch = (async (url: string | URL | Request) =>
   String(url).endsWith(".pdf")
-    ? new Response("%PDF", { headers: { "content-type": "application/pdf" } })
+    ? new Response("%PDF-1.7 broken", { headers: { "content-type": "application/pdf" } })
     : new Response(PAGE, { headers: { "content-type": "text/html" } })) as typeof fetch;
 
 let db: Database;
@@ -186,9 +186,9 @@ describe("tools", () => {
     const added = await call("source_add", { url: "https://example.org/git-book", kind: "docs", note: "Git book chapter on the index" });
     expect(added.body).toEqual(expect.objectContaining({ ok: true, title: "Git", headings: expect.arrayContaining(["More"]) }));
     expect(added.body.publishers).toEqual({ example: 2 }); // the seeded example.org/git and this page
-    const pdf = await call("source_add", { url: "https://example.org/paper.pdf", kind: "paper", note: "A paper that is a PDF file" });
+    const pdf = await call("source_add", { url: "https://example.org/paper.pdf", kind: "paper", note: "A paper that is a broken PDF file" });
     expect(pdf.body.ok).toBe(false);
-    expect(pdf.body.error).toContain("pick an HTML page");
+    expect(pdf.body.error).toContain("cannot be read");
     expect(events.filter((e) => e.type === "sources.updated").length).toBe(2);
 
     const found = await call("source_search", { sourceId: added.body.sourceId, query: "index commit" });
@@ -196,6 +196,69 @@ describe("tools", () => {
     expect(found.body.passages[0].quote).toContain("index");
     const failedId = (db.query("SELECT id FROM sources WHERE url LIKE '%.pdf'").get() as { id: string }).id;
     expect((await call("source_search", { sourceId: failedId, query: "anything" })).isError).toBe(true);
+  });
+
+  test("source_discover returns candidates, marks the registered ones and reports a failed catalogue", async () => {
+    const wiki = { pages: [{ key: "Git", title: "Git", excerpt: "Git is a version control system" }, { key: "Index", title: "Index", excerpt: "An index" }] };
+    db.query("UPDATE sources SET url = 'https://en.wikipedia.org/wiki/Git' WHERE id = ?").run(sourceId);
+    const serve = (status: number) => (async () => new Response(JSON.stringify(wiki), { status, headers: { "content-type": "application/json" } })) as unknown as typeof fetch;
+    handler = createMcpHandler({ db: () => db, fetch: serve(200) });
+    const r = await call("source_discover", { query: "git", in: "wikipedia" });
+    expect(r.body.candidates.map((c: { title: string; registered: boolean }) => [c.title, c.registered])).toEqual([["Git", true], ["Index", false]]);
+
+    handler = createMcpHandler({ db: () => db, fetch: serve(503) });
+    const failed = await call("source_discover", { query: "git", in: "papers" });
+    expect(failed.isError).toBe(true);
+    expect(failed.body.error).toContain("use WebSearch instead");
+  });
+
+  test("source_discover offers web search only with an Exa key, which never reaches the result", async () => {
+    const shapeOf = async () => (await rpc("tools/list", {})).result.tools.find((t: { name: string }) => t.name === "source_discover");
+    const free = await shapeOf();
+    expect(free.inputSchema.properties.in.enum).toEqual(["wikipedia", "papers"]);
+    expect(free.inputSchema.properties.since).toBeUndefined();
+    expect(free.description).not.toContain('in: "web"');
+    expect((await call("source_discover", { query: "edge loops", in: "web" })).isError).toBe(true);
+
+    const exa = { search: async (key: string) => [{ title: `Edge loops (${key.length})`, url: "https://example.org/loops", publishedDate: "2025-01-01", author: null, highlights: ["An edge loop"] }] };
+    handler = createMcpHandler({ db: () => db, fetch: fakeFetch, exa, exaKey: { get: async () => "secret-exa-key", set: async () => {}, delete: async () => {} } });
+    const withKey = await shapeOf();
+    expect(withKey.inputSchema.properties.in.enum).toEqual(["web", "wikipedia", "papers"]);
+    expect(withKey.description).toContain('in: "web"');
+    const r = await call("source_discover", { query: "a beginner's explanation of edge loops", in: "web", since: "2024-01-01" });
+    expect(r.body.candidates).toEqual([{ title: "Edge loops (14)", urls: ["https://example.org/loops"], snippet: "An edge loop", published: "2025-01-01", registered: false }]);
+    expect(JSON.stringify(r)).not.toContain("secret-exa-key");
+  });
+
+  test("source_add ties a source to graph nodes, adds to them on a second add and rejects unknown nodes", async () => {
+    await call("graph_set", { nodes: [node("git-index"), node("git-commit", ["git-index"])] });
+    const url = "https://other.example.com/index";
+    expect((await call("source_add", { url, kind: "article", note: "A page about the git index", nodeIds: ["nope"] })).body.error).toContain("nope");
+    const first = await call("source_add", { url, kind: "article", note: "A page about the git index", nodeIds: ["git-index"] });
+    await call("source_add", { url, kind: "article", note: "A page about the git index", nodeIds: ["git-commit", "git-index"] });
+    const state = (await call("get_learner_state", {})).body;
+    expect(state.sources.find((s: { id: string }) => s.id === first.body.sourceId).nodeIds).toEqual(["git-index", "git-commit"]);
+    expect(state.sources.find((s: { id: string }) => s.id === sourceId).nodeIds).toEqual([]);
+  });
+
+  test("source_remove keeps cited, planned and learner sources and removes the rest", async () => {
+    const add = async (url: string) => (await call("source_add", { url, kind: "article", note: "A page about the git index" })).body.sourceId as string;
+    const spare = await add("https://other.example.com/spare");
+    const planned = await add("https://third.example.net/planned");
+    db.query("INSERT INTO lessons (id, topic_id, title, objective, level, node_ids, outline, planned_sources) VALUES ('ls_p', ?, 'Plan', 'Objective here', 'novice', '[]', '[]', ?)").run(topicId, JSON.stringify([planned]));
+    db.query("INSERT INTO lessons (id, topic_id, title, objective, level, node_ids, outline) VALUES ('ls_c', ?, 'Cited', 'Objective here', 'novice', '[]', '[]')").run(topicId);
+    db.query("INSERT INTO steps (id, lesson_id, idx, kind, content, status) VALUES ('st_c', 'ls_c', 0, 'explain', ?, 'published')").run(JSON.stringify(explainStep(sourceId)));
+    const [material] = storeMaterials(db, topicId, [{ kind: "text", title: "Notes", url: null, bytes: 10, text: SOURCE_TEXT, headings: [] }]);
+
+    expect((await call("source_remove", { sourceId, reason: "testing a cited one" })).body.error).toContain("cited");
+    expect((await call("source_remove", { sourceId: planned, reason: "testing a planned one" })).body.error).toContain('lesson "Plan"');
+    expect((await call("source_remove", { sourceId: material!, reason: "testing a material" })).body.error).toContain("learner's materials");
+    expect((await call("source_remove", { sourceId: "src_none", reason: "testing a missing one" })).isError).toBe(true);
+    events.length = 0;
+    const removed = await call("source_remove", { sourceId: spare, reason: "covers no node of the graph" });
+    expect(removed.body).toEqual({ ok: true, publishers: { example: 2, "learner materials": 1 } });
+    expect(db.query("SELECT 1 FROM sources WHERE id = ?").get(spare)).toBeNull();
+    expect(events).toEqual([{ type: "sources.updated" }]);
   });
 
   test("material_list and material_read expose only the learner's materials; source_add keeps a learner link as added", async () => {

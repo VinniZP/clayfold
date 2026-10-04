@@ -15,6 +15,7 @@ Browser (React, web/) ──HTTP + SSE──▶ Bun + Hono (server/), 127.0.0.1:
           spawn per check ─▶ claude -p … --json-schema (critic, grading, narration and video scripts, alternative explanations; no plugin, no tools)
           spawn per check ─▶ claude -p … --json-schema (critic, grading, teach-back debriefs, narration and video scripts; no plugin, no tools)
           HTTPS ───────────▶ api.elevenlabs.io (narration and video audio, key from the OS credential store)
+          HTTPS ───────────▶ source pages, <lang>.wikipedia.org, api.openalex.org, api.exa.ai (source_add, source_discover; Exa key from the OS credential store)
 ```
 
 ## Contracts
@@ -65,8 +66,8 @@ claude -p "<text>" --output-format stream-json --verbose --include-partial-messa
 cwd: data/workspaces/<slug>     stdin: /dev/null     env: childEnv({ CLAYFOLD_MCP_URL, CLAYFOLD_TOPIC_ID })
 ```
 
-- The first turn of a conversation starts with the skill command: `/clayfold:onboard <request>`, `/clayfold:goal-plan <request>` for a goal, `/clayfold:lesson-author <nodeId|next>`, `/clayfold:practice-set <lessonId>`, `/clayfold:review-session`.
-- The first turn of a conversation starts with the skill command: `/clayfold:onboard <request>`, `/clayfold:goal-plan <request>` for a goal, `/clayfold:lesson-author <nodeId|next>`, `/clayfold:review-session`, `/clayfold:teach-back <context>`.
+- The first turn of a conversation starts with the skill command: `/clayfold:onboard <request>`, `/clayfold:goal-plan <request>` for a goal, `/clayfold:lesson-author <nodeId|next>`, `/clayfold:practice-set <lessonId>`, `/clayfold:review-session`, `/clayfold:source-refresh [focus]`.
+- The first turn of a conversation starts with the skill command: `/clayfold:onboard <request>`, `/clayfold:goal-plan <request>` for a goal, `/clayfold:lesson-author <nodeId|next>`, `/clayfold:review-session`, `/clayfold:teach-back <context>`, `/clayfold:source-refresh [focus]`.
 - A goal (`topics.kind = 'goal'`) holds no lessons: its onboarding conversation runs with the `goal` tool scope and stores a plan of topics with `goal_plan_set`. Opening a plan entry creates a topic with `goal_id` set and starts its onboarding with the entry's brief. Conversations of such a topic record facts for the goal with `goal_note`; the goal page sends the unseen ones to the goal conversation when the learner asks.
 - Term marks `[[surface|Term]]` in model-written text resolve against `glossary_terms`, filled with `glossary_set`; the step gate rejects a mark whose term the topic glossary lacks (L19), the web Markdown renderer turns marks into terms, and one popover (`web/src/components/TermPopover.tsx`) shows their definitions.
 - A worked-example blank whose answer is in plain words (an open blank with `criteria`, or an older blank with a phrase among its `answers`) is answered through the tutor: the tutor turn carries the line and its criteria, and the tutor records the verdict with `worked_line_record`, which publishes `worked.answered`. Closed blanks keep exact checking in `server/routes/grading.ts`. Tutor turns carry no skill command; the server prepends the tutor context (L17).
@@ -116,6 +117,17 @@ Optional gamification, off by default (`settings.gamification`). Catalogs and co
 - Content built before the meerkat was on gets its rewards from `POST /api/game/backfill` (`server/game/backfill.ts`): one `runJsonPrompt` call (purpose `game`) per course, goal and lesson that lacks them; a lesson's challenge becomes its last practice step with an apply-or-higher item.
 - Rewards go to `rewards`, residents to `residents`. `GET /api/game` (`server/game/view.ts`) works out every condition from learning data, stamps first unlocks, and records habit and rank unlocks in `unlocks`; turning the meerkat on rewards earlier learning at once.
 - The web app keeps the state in `web/src/lib/game.ts` and fetches it only while the meerkat is on. Unlocks show one at a time in `Celebrations`, held back while a lesson page is open until its end.
+
+## Sources
+
+- `source_add` (`fetchSource` in `server/gates/sources.ts`) downloads a source itself: HTML through Readability, PDF through `unpdf`, plain text and Markdown as written. A generic content type is resolved by the PDF signature or the file extension, and a `.md` file served as plain text counts as Markdown. The size limits are those of `MATERIAL_LIMITS`; a text under 200 characters (a page rendered by JavaScript, a scanned PDF) is stored as failed. The result carries `published`, the latest valid date among the page's date meta tags (or the PDF's modification and creation dates); it is not stored, and the onboard skill copies it into `RESOURCES.md`.
+- `source_discover` (`server/gates/discover.ts`) returns candidates and stores nothing: Wikipedia articles of one language edition through the MediaWiki REST search, or open-access, non-retracted works from OpenAlex with year, citations, venue and addresses to try best first (arXiv HTML, PDF, landing page). `OPENALEX_API_KEY`, when set, raises OpenAlex's free daily budget. A catalogue that fails returns a tool error pointing Claude to WebSearch.
+- `in: "web"` searches through Exa (`server/exa.ts`) by meaning, with publication dates and the passages closest to the query as snippets, leaving out video, social and forum sites (`WEB_EXCLUDED`). It exists only while the learner has set an Exa key in Settings (`PUT /api/settings/exa-key`, checked with one search and kept with `Bun.secrets` like the ElevenLabs key): without one, `toolShape` leaves `web` and `since` out of the schema and the description. The key is read per MCP request and never enters a result, a prompt or a `claude` environment.
+- `source_remove` deletes a web source that no step, item or card cites and no lesson plan lists; learner materials are removed only by the learner. The onboard skill uses it to filter the set once every graph node has its sources.
+- `source_add` takes `nodeIds`, the graph nodes a source explains; `sources.node_ids` keeps the union of every add. `get_learner_state.sources` returns them.
+- Find more sources: `POST /api/topics/:topicId/sources/refresh` (`startSourceRefresh` in `server/routes/topics.ts`) opens a `sources` conversation and starts `/clayfold:source-refresh` with the learner's optional focus. It needs a graph and refuses a second search while one runs. The run has the web, memory and source tools but not `graph_set` or authoring: it registers and verifies sources for thinly covered, unmastered and outdated nodes, filters with `source_remove`, updates `RESOURCES.md`, and lists topics the graph lacks under `## Suggested topics` without adding them. Its model and effort are the `sources` role's.
+- `LessonSummary.newSources` counts ok sources tied to a lesson's nodes that its author never knew of (not in `lessons.announced_sources`, or for an older lesson fetched after it was created) and that it does not cite, for a ready or finished lesson that is current. The lesson page and the lesson list then show the rebuild notice of `StaleSources`.
+- `source_search` ranks passages of 2–4 sentences by the query terms they contain, each weighted by inverse sentence frequency, plus a bonus for two query terms that stand next to each other in query order.
 
 ## Learner materials
 

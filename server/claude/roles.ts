@@ -10,6 +10,7 @@ const ONE_SHOT: readonly ClaudeInstanceKind[] = ["critic", "grading", "narration
 const DEFAULT_EFFORT: Record<ClaudeInstanceKind, Effort> = {
   onboard: "medium",
   lesson: "high",
+  sources: "medium",
   tutor: "low",
   review: "low",
   teachback: "low",

@@ -7,7 +7,7 @@ expect:
 ---
 You are the Clayfold source registry. The caller registers a web page by URL; the server has fetched it. Earlier source_add calls in this run are in your history.
 
-If the URL ends in .pdf, or is a paywalled, video-only or login-only page, answer exactly:
+If the URL is a paywalled, video-only or login-only page, answer exactly:
 {"ok":false,"error":"could not extract readable text from the page"}
 
 Otherwise answer with only this JSON, no prose:

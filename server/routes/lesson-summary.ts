@@ -17,6 +17,8 @@ export type LessonRow = {
   status: LessonSummary["status"];
   created_at: string;
   sources_at_plan: number | null;
+  /** JSON ids of the sources the author knew: those at planning and those step_submit announced. */
+  announced_sources?: string | null;
   practice: string | null;
 };
 
@@ -65,6 +67,23 @@ export function learnerStatus(lessonId: string, database: Database = db(), pract
   return touched.any ? "in_progress" : "not_started";
 }
 
+/**
+ * Ok sources that source_add tied to one of the lesson's nodes and that its author never knew of: neither at
+ * planning nor announced by step_submit while writing (for a lesson planned before announcements were tracked,
+ * added after it was created). Sources the lesson cites do not count.
+ */
+export function newSourcesFor(l: Pick<LessonRow, "id" | "topic_id" | "node_ids" | "created_at" | "announced_sources">, database: Database = db()): number {
+  return database
+    .query<{ n: number }, [string, string, string, string, string | null]>(
+      `SELECT count(DISTINCT s.id) AS n FROM sources s JOIN json_each(s.node_ids) node
+       WHERE s.topic_id = ?1 AND s.status = 'ok' AND s.node_ids IS NOT NULL
+         AND node.value IN (SELECT value FROM json_each(?3))
+         AND CASE WHEN ?5 IS NULL THEN s.fetched_at > ?2 ELSE s.id NOT IN (SELECT value FROM json_each(?5)) END
+         AND NOT EXISTS (SELECT 1 FROM steps st WHERE st.lesson_id = ?4 AND instr(st.content, '"sourceId":"' || s.id || '"') > 0)`,
+    )
+    .get(l.topic_id, l.created_at, l.node_ids, l.id, l.announced_sources ?? null)!.n;
+}
+
 export function lessonSummary(l: LessonRow, database: Database = db()): LessonSummary {
   const stepsReady = database
     .query<{ n: number }, [string]>("SELECT count(*) AS n FROM steps WHERE lesson_id = ? AND status IN ('published','dropped')")
@@ -77,6 +96,7 @@ export function lessonSummary(l: LessonRow, database: Database = db()): LessonSu
   const sourcesGrew =
     l.sources_at_plan === null ? Object.keys(publisherCounts(l.topic_id, database)).length >= MIN_PUBLISHERS : okNow > l.sources_at_plan;
   const sourcesStale = l.practice === null && supersededBy === null && sourcesGrew && citesOnePublisher;
+  const current = l.practice === null && supersededBy === null && (l.status === "ready" || l.status === "finished");
   const practice = l.practice ? { size: (JSON.parse(l.outline) as unknown[]).length, focus: (JSON.parse(l.practice) as PracticeSpec).focus } : null;
   return {
     id: l.id,
@@ -90,6 +110,7 @@ export function lessonSummary(l: LessonRow, database: Database = db()): LessonSu
     stepsReady,
     stepsTotal: (JSON.parse(l.outline) as unknown[]).length,
     sourcesStale,
+    newSources: current ? newSourcesFor(l, database) : 0,
     supersededBy,
     learnerStatus: learnerStatus(l.id, database, practice !== null),
     video: videoStatus(l.id, database),

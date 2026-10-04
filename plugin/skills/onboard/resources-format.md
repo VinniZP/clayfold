@@ -12,9 +12,9 @@
 
 ## Knowledge
 
-- [Pro Git, chapter 2 "Git Basics"](https://git-scm.com/book/en/v2/...) — `sourceId: src_abc123`, docs · vendor-official · git-scm.com
+- [Pro Git, chapter 2 "Git Basics"](https://git-scm.com/book/en/v2/...) — `sourceId: src_abc123`, docs · vendor-official · git-scm.com · 2024-03-11
   Core commands: init, add, commit, log. For nodes: git-init, staging, commit.
-- [Julia Evans, "Inside .git"](https://jvns.ca/...) — `sourceId: src_def456`, article · independent-practitioner · Julia Evans
+- [Julia Evans, "Inside .git"](https://jvns.ca/...) — `sourceId: src_def456`, article · independent-practitioner · Julia Evans · 2023-10-02
   How objects and the index work inside. For nodes: staging, commit.
 
 ## Coverage
@@ -30,12 +30,17 @@
 ## Gaps
 
 - {A success criterion with fewer than 2 sources from different publishers, or an area no registered source covers yet}
+
+## Suggested topics
+
+- {A subject the sources treat as central to a success criterion that no graph node covers} — `src_…`, `src_…`. {Why the goal needs it.}
 ```
 
-- Every entry: link, `sourceId`, kind, perspective, publisher, and one annotation line (what it covers, which graph nodes it serves).
+- Every entry: link, `sourceId`, kind, perspective, publisher, date (`published` from `source_add`, or the date the page shows; `undated` when it shows none), and one annotation line (what it covers, which graph nodes it serves).
 - `## Learner materials` lists what `material_list` returns, first and only when there is any: title, kind, `sourceId` and the annotation line; a link keeps its address. In `## Coverage` a material counts as one source, from the publisher `learner materials`.
 - Perspective is one of `vendor-official` (the maker of the product described), `independent-practitioner`, `academic`, `course`, `community`. Publisher is the organisation or the person behind the page.
 - `## Coverage` maps each success criterion in `MISSION.md` to at least 2 sources from different publishers; a criterion short of that goes under `## Gaps`.
 - High-trust only: primary sources, recognised practitioners and researchers, institutions. Marketing dressed as education stays out.
+- `## Suggested topics` is written by a source search (`/clayfold:source-refresh`) and only when it finds such subjects; it does not change the graph.
 - Communities are optional suggestions for real-world practice; they are not registered with `source_add`.
-- When a source proves wrong or shallow, remove it rather than burying it.
+- When a source proves wrong, shallow or outdated, remove it with `source_remove` and delete its entry rather than burying it.

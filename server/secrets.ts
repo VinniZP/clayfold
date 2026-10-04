@@ -7,21 +7,26 @@ export type SecretStore = {
   delete(): Promise<void>;
 };
 
-const ELEVENLABS = { service: "clayfold", name: "elevenlabs-api-key" };
+function secretStore(name: string): SecretStore {
+  const id = { service: "clayfold", name };
+  let cached: string | null | undefined;
+  return {
+    async get() {
+      cached ??= await Bun.secrets.get(id);
+      return cached;
+    },
+    async set(value) {
+      await Bun.secrets.set({ ...id, value });
+      cached = value;
+    },
+    async delete() {
+      await Bun.secrets.delete(id);
+      cached = null;
+    },
+  };
+}
 
-let cached: string | null | undefined;
+export const elevenLabsKey = secretStore("elevenlabs-api-key");
 
-export const elevenLabsKey: SecretStore = {
-  async get() {
-    cached ??= await Bun.secrets.get(ELEVENLABS);
-    return cached;
-  },
-  async set(value) {
-    await Bun.secrets.set({ ...ELEVENLABS, value });
-    cached = value;
-  },
-  async delete() {
-    await Bun.secrets.delete(ELEVENLABS);
-    cached = null;
-  },
-};
+/** Optional: with it, source_discover also searches the web through Exa. */
+export const exaKey = secretStore("exa-api-key");

@@ -622,12 +622,13 @@ let settings: Settings = {
   narration: { keySet: false, voiceId: null, model: "eleven_v4", prefetch: false },
   // On in the mock so the Video tab can be looked at; the server default is off.
   video: { enabled: true },
+  sources: { exaKeySet: false },
   confidence: { enabled: true },
   shortcuts: { hints: true },
   // On in the mock as well, so teach-back can be looked at; the server default is off.
   teachback: { enabled: true },
   claude: Object.fromEntries(
-    CLAUDE_ROLES.map((role) => [role, { model: null, effort: null, defaultModel: ["critic", "grading", "narration", "video", "game"].includes(role) ? "sonnet" : "opus", defaultEffort: ({ onboard: "medium", lesson: "high", critic: "high", video: "medium", game: "medium" } as Record<string, Effort>)[role] ?? "low" }]),
+    CLAUDE_ROLES.map((role) => [role, { model: null, effort: null, defaultModel: ["critic", "grading", "narration", "video", "game"].includes(role) ? "sonnet" : "opus", defaultEffort: ({ onboard: "medium", lesson: "high", sources: "medium", critic: "high", video: "medium", game: "medium" } as Record<string, Effort>)[role] ?? "low" }]),
   ) as Settings["claude"],
 };
 
@@ -906,6 +907,26 @@ async function route(method: string, path: string, body: Record<string, unknown>
     setTimeout(() => emit(topicId, { type: "lesson.planned", lessonId: "l-bayes", title: "Bayes' theorem", outline: fx.bayesOutline }), 3500);
     return json({ lessonId: null, conversationId });
   }
+  if ((m = p.match(/^\/api\/topics\/([^/]+)\/sources\/refresh$/))) {
+    const topicId = m[1]!;
+    const detail = fx.topicDetails[topicId];
+    if (!detail?.nodes.length) return json({ error: t("sources.refresh.noGraph") }, 409);
+    const conversationId = `c-sources-${++seq}`;
+    const focus = typeof body.focus === "string" ? body.focus : "";
+    fx.conversations[conversationId] = { topicId, kind: "sources", messages: [] };
+    detail.conversations.push({ id: conversationId, kind: "sources", lessonId: null, createdAt: new Date().toISOString() });
+    sim.reply(
+      topicId,
+      conversationId,
+      "I added 2 sources for the topics that had one publisher and removed one that covered none. The finished lesson on conditional probability now offers a rebuild.",
+      ["Checking coverage", "Looking for candidate sources", "Adding a source", "Removing a source"],
+    );
+    setTimeout(() => {
+      detail.sources.push({ id: `src-mock-${seq}`, url: "https://seeing-theory.brown.edu/bayesian-inference/", title: "Seeing Theory: Bayesian inference", kind: "course", note: focus || "Interactive visual introduction to Bayes' rule", status: "ok" });
+      emit(topicId, { type: "sources.updated" });
+    }, 3000);
+    return json({ conversationId }, 202);
+  }
   if ((m = p.match(/^\/api\/lessons\/([^/]+)$/))) {
     const v = lessonView(m[1]!);
     return v ? json(v) : json({ error: "Lesson not found" }, 404);
@@ -1103,6 +1124,7 @@ async function route(method: string, path: string, body: Record<string, unknown>
           prefetch: narrationPrefetch ?? settings.narration.prefetch,
         },
         video: { enabled: videoEnabled ?? settings.video.enabled },
+        sources: settings.sources,
         confidence: { enabled: confidenceEnabled ?? settings.confidence.enabled },
         shortcuts: { hints: shortcutHints ?? settings.shortcuts.hints },
         teachback: { enabled: teachbackEnabled ?? settings.teachback.enabled },
@@ -1116,6 +1138,11 @@ async function route(method: string, path: string, body: Record<string, unknown>
   if (p === "/api/settings/elevenlabs-key") {
     const keySet = method === "PUT";
     settings = { ...settings, narration: { ...settings.narration, keySet, voiceId: settings.narration.voiceId ?? voices[0]!.id } };
+    return json(settings);
+  }
+  if (p === "/api/settings/exa-key") {
+    await wait(600);
+    settings = { ...settings, sources: { exaKeySet: method === "PUT" } };
     return json(settings);
   }
   if (p === "/api/settings/voices") return settings.narration.keySet ? json(voices) : json({ error: t("narration.noKey") }, 409);

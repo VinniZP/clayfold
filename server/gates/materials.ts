@@ -1,11 +1,10 @@
 import type { Database } from "bun:sqlite";
 import { extname } from "node:path";
-import { extractText, getDocumentProxy } from "unpdf";
 import { MATERIAL_EXTENSIONS, MATERIAL_LIMITS, type MaterialKind, type MaterialView } from "../../shared/api";
 import type { MessageKey, Params } from "../../shared/i18n";
 import { newId } from "../db";
 import { language, t } from "../i18n";
-import { extractReadable, FETCH_TIMEOUT_MS, normalizeWhitespace, USER_AGENT } from "./sources";
+import { extractReadable, FETCH_TIMEOUT_MS, markdownHeadings, normalizeWhitespace, PdfError, readCapped, readPdf as pdfDocument, USER_AGENT } from "./sources";
 
 /**
  * Learner materials: the readable text of a file, a pasted text or a link, stored as a source of the topic with
@@ -43,37 +42,12 @@ function decodeText(bytes: Uint8Array, name: string): string {
   return new TextDecoder("utf-8").decode(bytes);
 }
 
-/** ATX headings of levels 1-3, the ones a reader navigates by. */
-function markdownHeadings(text: string): string[] {
-  return [...text.matchAll(/^#{1,3}[ \t]+(.+?)[ \t#]*$/gm)].map((m) => m[1]!.trim()).filter(Boolean);
-}
-
-function pdfOutline(items: { title: string; items: unknown[] }[] | null, depth = 0): string[] {
-  if (!items || depth > 1) return [];
-  return items.flatMap((i) => [i.title.trim(), ...pdfOutline(i.items as typeof items, depth + 1)]).filter(Boolean);
-}
-
 async function readPdf(bytes: Uint8Array, name: string): Promise<Document> {
-  if (!new TextDecoder("latin1").decode(bytes.subarray(0, 1024)).includes("%PDF-")) fail("material.error.pdfUnreadable", { name });
-  let pdf: Awaited<ReturnType<typeof getDocumentProxy>>;
   try {
-    pdf = await getDocumentProxy(new Uint8Array(bytes), { verbosity: 0 });
+    const pdf = await pdfDocument(bytes);
+    return { text: pdf.text, title: pdf.title || null, headings: pdf.headings };
   } catch (e) {
-    fail(e instanceof Error && e.name === "PasswordException" ? "material.error.pdfLocked" : "material.error.pdfUnreadable", { name });
-  }
-  try {
-    const { text: pages } = await extractText(pdf, { mergePages: false });
-    const outline = await pdf.getOutline().catch(() => null);
-    const { info } = await pdf.getMetadata().catch(() => ({ info: {} as Record<string, unknown> }));
-    const metaTitle: unknown = (info as Record<string, unknown>).Title;
-    const title = typeof metaTitle === "string" ? metaTitle.trim() : "";
-    // pdf.js ends every visual line with a break; joining them lets sentences, not lines, become search passages.
-    const text = pages.map((p) => p.replace(/\s*\n\s*/g, " ")).join("\n\n");
-    return { text, title: title || null, headings: pdfOutline(outline) };
-  } catch {
-    fail("material.error.pdfUnreadable", { name });
-  } finally {
-    await pdf.loadingTask.destroy();
+    fail(e instanceof PdfError && e.reason === "locked" ? "material.error.pdfLocked" : "material.error.pdfUnreadable", { name });
   }
 }
 
@@ -136,33 +110,6 @@ const LINK_TYPES: Record<string, Exclude<MaterialKind, "link">> = {
   "application/pdf": "pdf",
 };
 
-/** The body, or null once it grows past `limit` bytes. */
-async function readCapped(res: Response, limit: number): Promise<Uint8Array | null> {
-  if (Number(res.headers.get("content-length") ?? 0) > limit) {
-    await res.body?.cancel();
-    return null;
-  }
-  if (!res.body) return new Uint8Array();
-  const reader = res.body.getReader();
-  const chunks: Uint8Array[] = [];
-  let size = 0;
-  for (let part = await reader.read(); !part.done; part = await reader.read()) {
-    size += part.value.byteLength;
-    if (size > limit) {
-      await reader.cancel();
-      return null;
-    }
-    chunks.push(part.value);
-  }
-  const out = new Uint8Array(size);
-  let at = 0;
-  for (const c of chunks) {
-    out.set(c, at);
-    at += c.byteLength;
-  }
-  return out;
-}
-
 export async function fetchMaterial(url: string, fetchImpl: typeof fetch = fetch): Promise<Material> {
   const name = url.trim().slice(0, 200);
   let parsed: URL;
@@ -223,8 +170,8 @@ export function storeMaterials(database: Database, topicId: string, materials: M
 
 type MaterialRow = { id: string; title: string; kind: MaterialKind; url: string; bytes: number | null; chars: number; fetched_at: string; cited: number };
 
-/** Steps, items and cards store cites as JSON, so a cite of a source contains this exact fragment. */
-const CITED = `EXISTS (SELECT 1 FROM steps st JOIN lessons l ON l.id = st.lesson_id WHERE l.topic_id = s.topic_id AND instr(st.content, '"sourceId":"' || s.id || '"') > 0)
+/** SQL over a source row `s`: steps, items and cards store cites as JSON, so a cite of a source contains this exact fragment. */
+export const CITED = `EXISTS (SELECT 1 FROM steps st JOIN lessons l ON l.id = st.lesson_id WHERE l.topic_id = s.topic_id AND instr(st.content, '"sourceId":"' || s.id || '"') > 0)
   OR EXISTS (SELECT 1 FROM items i WHERE i.topic_id = s.topic_id AND instr(i.content, '"sourceId":"' || s.id || '"') > 0)
   OR EXISTS (SELECT 1 FROM cards c WHERE c.topic_id = s.topic_id AND instr(c.content, '"sourceId":"' || s.id || '"') > 0)`;
 

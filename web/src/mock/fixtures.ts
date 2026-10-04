@@ -671,9 +671,9 @@ const gitNodes: NodeView[] = [
 ];
 
 const bayesLessons: LessonSummary[] = [
-  { id: "l-cond", topicId: "t-bayes", title: "Conditional probability", objective: "Tell P(A | B) apart from P(A and B) and compute conditional probability from a table.", level: "novice", nodeIds: ["cond-prob"], status: "finished", createdAt: iso(9), stepsReady: 4, stepsTotal: 4, sourcesStale: true, supersededBy: null, learnerStatus: "completed", video: "ready", practice: null },
-  { id: "l-bayes", topicId: "t-bayes", title: "Bayes' theorem through a medical test", objective: "Compute the probability of disease after a positive test using natural frequencies.", level: "novice", nodeIds: ["bayes-theorem"], status: "generating", createdAt: iso(0, 9), stepsReady: 3, stepsTotal: 10, sourcesStale: false, supersededBy: null, learnerStatus: "in_progress", video: null, practice: null },
-  { id: "l-bayes-v1", topicId: "t-bayes", title: "Bayes' theorem through a medical test", objective: "Compute the probability of disease after a positive test using natural frequencies.", level: "novice", nodeIds: ["bayes-theorem"], status: "finished", createdAt: iso(5), stepsReady: 8, stepsTotal: 8, sourcesStale: false, supersededBy: "l-bayes", learnerStatus: "completed", video: null, practice: null },
+  { id: "l-cond", topicId: "t-bayes", title: "Conditional probability", objective: "Tell P(A | B) apart from P(A and B) and compute conditional probability from a table.", level: "novice", nodeIds: ["cond-prob"], status: "finished", createdAt: iso(9), stepsReady: 4, stepsTotal: 4, sourcesStale: true, newSources: 0, supersededBy: null, learnerStatus: "completed", video: "ready", practice: null },
+  { id: "l-bayes", topicId: "t-bayes", title: "Bayes' theorem through a medical test", objective: "Compute the probability of disease after a positive test using natural frequencies.", level: "novice", nodeIds: ["bayes-theorem"], status: "generating", createdAt: iso(0, 9), stepsReady: 3, stepsTotal: 10, sourcesStale: false, newSources: 0, supersededBy: null, learnerStatus: "in_progress", video: null, practice: null },
+  { id: "l-bayes-v1", topicId: "t-bayes", title: "Bayes' theorem through a medical test", objective: "Compute the probability of disease after a positive test using natural frequencies.", level: "novice", nodeIds: ["bayes-theorem"], status: "finished", createdAt: iso(5), stepsReady: 8, stepsTotal: 8, sourcesStale: false, newSources: 0, supersededBy: "l-bayes", learnerStatus: "completed", video: null, practice: null },
 ];
 
 const bayesSources: SourceView[] = [
@@ -723,8 +723,8 @@ export const topicDetails: Record<string, TopicDetail> = {
     goal: { id: "t-goal", title: "Workout tracking app", why: "Keep every version of the app and roll back a change that broke it." },
     goalNotes: [],
     teachbacks: [],
-    lessons: [{ id: "l-git", topicId: "t-git", title: "Branching and merging", objective: "Create branches, merge them and resolve a simple conflict.", level: "intermediate", nodeIds: ["merge"], status: "ready", createdAt: iso(3), stepsReady: 1, stepsTotal: 1, sourcesStale: false, supersededBy: null, learnerStatus: "not_started", video: null, practice: null },
-      { id: "l-git-rebase", topicId: "t-git", title: "Rebase", objective: "Move a branch onto a new base and resolve conflicts along the way.", level: "intermediate", nodeIds: ["rebase"], status: "failed", createdAt: iso(1), stepsReady: 1, stepsTotal: 4, sourcesStale: false, supersededBy: null, learnerStatus: "not_started", video: null, practice: null },
+    lessons: [{ id: "l-git", topicId: "t-git", title: "Branching and merging", objective: "Create branches, merge them and resolve a simple conflict.", level: "intermediate", nodeIds: ["merge"], status: "ready", createdAt: iso(3), stepsReady: 1, stepsTotal: 1, sourcesStale: false, newSources: 2, supersededBy: null, learnerStatus: "not_started", video: null, practice: null },
+      { id: "l-git-rebase", topicId: "t-git", title: "Rebase", objective: "Move a branch onto a new base and resolve conflicts along the way.", level: "intermediate", nodeIds: ["rebase"], status: "failed", createdAt: iso(1), stepsReady: 1, stepsTotal: 4, sourcesStale: false, newSources: 0, supersededBy: null, learnerStatus: "not_started", video: null, practice: null },
     ],
     sources: [{ id: "g1", url: "https://git-scm.com/book/en/v2", title: "Pro Git", kind: "book", note: "chapters 2–3", status: "ok" }],
     materials: [],

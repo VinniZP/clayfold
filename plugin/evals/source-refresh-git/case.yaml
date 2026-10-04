@@ -1,0 +1,4 @@
+schema_version: "1.1"
+name: source-refresh-git
+context:
+  scaffold_script: workspace.sh
