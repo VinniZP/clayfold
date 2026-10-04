@@ -6,6 +6,7 @@ import { game } from "./game";
 import { glossary } from "./glossary";
 import { items } from "./items";
 import { lessons } from "./lessons";
+import { materials } from "./materials";
 import { narration } from "./narration";
 import { video } from "./video";
 import { notes } from "./notes";
@@ -20,6 +21,7 @@ import { update } from "./update";
 export const api = new Hono();
 
 api.route("/topics", topics);
+api.route("/topics", materials);
 api.route("/conversations", conversations);
 api.route("/lessons", lessons);
 api.route("/", items);

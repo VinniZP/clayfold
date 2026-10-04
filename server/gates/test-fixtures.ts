@@ -112,3 +112,35 @@ export function card(sourceId = "src_top_1", overrides: Partial<Card> = {}): Car
     ...overrides,
   };
 }
+
+/** A one-page PDF with a Helvetica text line per entry and, optionally, an outline of top-level titles. */
+export function pdfFile(lines: string[], outline: string[] = []): Uint8Array<ArrayBuffer> {
+  const escape = (s: string) => s.replace(/[()\\]/g, "\\$&");
+  const content = `BT /F1 12 Tf 72 720 Td 14 TL ${lines.map((l) => `(${escape(l)}) '`).join(" ")} ET`;
+  const objects = [
+    `<< /Type /Catalog /Pages 2 0 R${outline.length ? " /Outlines 6 0 R" : ""} >>`,
+    "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+    "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>",
+    `<< /Length ${content.length} >>\nstream\n${content}\nendstream`,
+    "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+  ];
+  if (outline.length) {
+    const first = objects.length + 2;
+    objects.push(`<< /Type /Outlines /First ${first} 0 R /Last ${first + outline.length - 1} 0 R /Count ${outline.length} >>`);
+    outline.forEach((title, i) => {
+      const n = first + i;
+      const links = `${i > 0 ? ` /Prev ${n - 1} 0 R` : ""}${i < outline.length - 1 ? ` /Next ${n + 1} 0 R` : ""}`;
+      objects.push(`<< /Title (${escape(title)}) /Parent 6 0 R${links} /Dest [3 0 R /Fit] >>`);
+    });
+  }
+  let out = "%PDF-1.4\n";
+  const offsets = objects.map((o, i) => {
+    const at = out.length;
+    out += `${i + 1} 0 obj\n${o}\nendobj\n`;
+    return at;
+  });
+  const xref = out.length;
+  out += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n${offsets.map((o) => `${String(o).padStart(10, "0")} 00000 n \n`).join("")}`;
+  out += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF\n`;
+  return new TextEncoder().encode(out);
+}

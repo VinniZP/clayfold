@@ -60,17 +60,20 @@ CREATE TABLE IF NOT EXISTS nodes (             -- B writes graph; A writes maste
   PRIMARY KEY (topic_id, id)
 );
 
-CREATE TABLE IF NOT EXISTS sources (           -- B
+CREATE TABLE IF NOT EXISTS sources (           -- B (A adds and removes learner materials through gates/materials.ts)
   id TEXT PRIMARY KEY,
   topic_id TEXT NOT NULL REFERENCES topics(id) ON DELETE CASCADE,
-  url TEXT NOT NULL,
+  url TEXT NOT NULL,                            -- learner file or pasted text: material:<id>
   title TEXT NOT NULL,
-  kind TEXT NOT NULL,
+  kind TEXT NOT NULL,                           -- web: genre from source_add; learner: MaterialKind
   note TEXT NOT NULL,
   text TEXT,                                    -- extracted readable text; quotes are verified against it
   status TEXT NOT NULL CHECK (status IN ('ok','failed')),
   error TEXT,
   fetched_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+  origin TEXT NOT NULL DEFAULT 'web' CHECK (origin IN ('web','learner')),
+  bytes INTEGER,                                -- learner file or pasted text: its size
+  headings TEXT,                                -- learner: JSON [{text, offset}] into text
   UNIQUE (topic_id, url)
 );
 

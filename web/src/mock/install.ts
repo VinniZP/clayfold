@@ -1,5 +1,5 @@
-import { CLAUDE_ROLES, type Effort } from "@shared/api";
-import type { AttemptRequest, AttemptResponse, ChatMessage, ItemState, LessonView, NarrationView, NoteRequest, ReviewSession, Settings, SettingsUpdate, TodayView, TopicDetail, TopicSummary, VideoExportView, VideoView, VoiceView } from "@shared/api";
+import { CLAUDE_ROLES, MATERIAL_EXTENSIONS, type Effort } from "@shared/api";
+import type { AttemptRequest, AttemptResponse, ChatMessage, ItemState, LessonView, MaterialView, NarrationView, NoteRequest, PastedMaterial, ReviewSession, Settings, SettingsUpdate, TodayView, TopicDetail, TopicSummary, VideoExportView, VideoView, VoiceView } from "@shared/api";
 import type { TopicEvent } from "@shared/events";
 import type { OutfitRef, OutfitSlot } from "@shared/game";
 import type { PublicStep } from "@shared/schemas";
@@ -123,6 +123,7 @@ function createTopic(request: string, kind: TopicSummary["kind"], goal: TopicDet
     nodes: [],
     lessons: [],
     sources: [],
+    materials: [],
     conversations: [{ id: conversationId, kind: "onboard", lessonId: null, createdAt }],
     onboarding: kind === "goal" ? sim.goalPhases() : sim.phases(),
     plan: [],
@@ -135,6 +136,31 @@ function createTopic(request: string, kind: TopicSummary["kind"], goal: TopicDet
 }
 
 const json = (data: unknown, status = 200) => new Response(data === undefined ? null : JSON.stringify(data), { status, headers: { "content-type": "application/json" } });
+
+// ---------- Learner materials ----------
+
+/** Reads the parts of a materials form the way the server does, with the text measured in the browser. */
+async function mockMaterials(form: FormData): Promise<MaterialView[]> {
+  await wait(1400);
+  const addedAt = new Date().toISOString();
+  const out: MaterialView[] = [];
+  for (const part of form.getAll("file")) {
+    if (typeof part === "string") continue;
+    const kind = MATERIAL_EXTENSIONS[(part.name.match(/\.[^.]+$/)?.[0] ?? "").toLowerCase()] ?? "text";
+    const raw = kind === "pdf" ? "" : await part.text();
+    const chars = kind === "pdf" ? Math.round(part.size / 40) : kind === "html" ? (new DOMParser().parseFromString(raw, "text/html").body.textContent ?? "").trim().length : raw.length;
+    out.push({ id: `m-${++seq}`, title: part.name.replace(/\.[^.]+$/, ""), kind, url: null, bytes: part.size, chars, addedAt, cited: false });
+  }
+  for (const part of form.getAll("text")) {
+    const { title, text } = JSON.parse(String(part)) as PastedMaterial;
+    out.push({ id: `m-${++seq}`, title, kind: "text", url: null, bytes: new Blob([text]).size, chars: text.length, addedAt, cited: false });
+  }
+  for (const part of form.getAll("link")) {
+    const url = new URL(String(part));
+    out.push({ id: `m-${++seq}`, title: url.pathname.split("/").filter(Boolean).pop() ?? url.hostname, kind: "link", url: url.href, bytes: null, chars: 12_400, addedAt, cited: false });
+  }
+  return out;
+}
 
 function summaries(): TopicSummary[] {
   return Object.values(fx.topicDetails).map((d) => d.topic);
@@ -285,7 +311,7 @@ function narration(stepId: string): NarrationView | null {
   };
 }
 
-async function route(method: string, path: string, body: Record<string, unknown>): Promise<Response> {
+async function route(method: string, path: string, body: Record<string, unknown>, form: FormData | null): Promise<Response> {
   const url = new URL(path, location.origin);
   const p = url.pathname;
   let m: RegExpMatchArray | null;
@@ -307,10 +333,30 @@ async function route(method: string, path: string, body: Record<string, unknown>
   }
   if (p === "/api/topics" && method === "GET") return json(summaries());
   if (p === "/api/topics" && method === "POST") {
-    const kind = body.kind === "goal" ? "goal" : "topic";
-    const { id, conversationId } = createTopic(String(body.request ?? "New topic"), kind);
+    const fields = form ? { request: form.get("request"), kind: form.get("kind") } : body;
+    const kind = fields.kind === "goal" ? "goal" : "topic";
+    const materials = form ? await mockMaterials(form) : [];
+    const { id, conversationId } = createTopic(String(fields.request ?? "New topic"), kind);
+    fx.topicDetails[id]!.materials = materials;
     setTimeout(() => (kind === "goal" ? sim.planGoal(id, conversationId) : sim.interview(id, conversationId)), 600);
     return json({ topicId: id, conversationId });
+  }
+  if ((m = p.match(/^\/api\/topics\/([^/]+)\/materials$/)) && method === "POST" && form) {
+    const d = fx.topicDetails[m[1]!];
+    if (!d) return json({ error: "topic not found" }, 404);
+    const added = await mockMaterials(form);
+    d.materials.push(...added);
+    emit(d.topic.id, { type: "sources.updated" });
+    return json(added, 201);
+  }
+  if ((m = p.match(/^\/api\/topics\/([^/]+)\/materials\/([^/]+)$/)) && method === "DELETE") {
+    const d = fx.topicDetails[m[1]!];
+    const material = d?.materials.find((x) => x.id === m![2]);
+    if (!d || !material) return json({ error: t("material.error.notFound") }, 404);
+    if (material.cited) return json({ error: t("material.error.cited") }, 409);
+    d.materials = d.materials.filter((x) => x !== material);
+    emit(d.topic.id, { type: "sources.updated" });
+    return json(undefined, 204);
   }
   if ((m = p.match(/^\/api\/topics\/([^/]+)\/notes\/discuss$/))) {
     const goal = fx.topicDetails[m[1]!];
@@ -586,7 +632,7 @@ export function installMock() {
       }
     }
     await wait(120 + Math.random() * 220);
-    return route(method, path, body);
+    return route(method, path, body, init?.body instanceof FormData ? init.body : null);
   };
   window.fetch = mockFetch as typeof fetch;
   (window as unknown as { EventSource: unknown }).EventSource = MockEventSource;

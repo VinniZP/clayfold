@@ -36,8 +36,8 @@ export function learnerState(db: Database, topicId: string, nodeIds?: string[]):
     unmasteredPrereqs: (JSON.parse(n.prereqs) as string[]).filter((p) => !satisfied.has(p)),
   }));
   const sources = db
-    .query<{ id: string; title: string; url: string; kind: string; status: "ok" | "failed" }, [string]>(
-      "SELECT id, title, url, kind, status FROM sources WHERE topic_id = ? ORDER BY fetched_at",
+    .query<LearnerState["sources"][number], [string]>(
+      "SELECT id, title, url, kind, status, origin FROM sources WHERE topic_id = ? ORDER BY fetched_at",
     )
     .all(topicId);
 
@@ -129,7 +129,7 @@ export function prerequisiteOrder<T extends { id: string; prereqs: string }>(row
 
 export const getLearnerState = defineTool({
   name: "get_learner_state",
-  description: `Read what the platform knows about the learner in this topic: graph nodes in prerequisite order (every node after its prerequisites) with placement, mastery, prerequisites and unmastered prerequisites; the topic's sources with their sourceIds; the last 30 graded attempts (item prompt, correct, misconception picked, hints used); misconceptions seen with counts; the learner's notes; open regeneration-queue entries with their current content (fix them with item_replace); finished lessons.
+  description: `Read what the platform knows about the learner in this topic: graph nodes in prerequisite order (every node after its prerequisites) with placement, mastery, prerequisites and unmastered prerequisites; the topic's sources with their sourceIds, origin "learner" marking the learner's own materials; the last 30 graded attempts (item prompt, correct, misconception picked, hints used); misconceptions seen with counts; the learner's notes; open regeneration-queue entries with their current content (fix them with item_replace); finished lessons.
 Call it before planning a lesson or a review session, and when tutoring. Pass nodeIds to narrow nodes, attempts, misconceptions and lessons to those nodes. Returns LearnerState JSON.`,
   handler(ctx, { nodeIds }) {
     return { result: learnerState(ctx.db, ctx.topicId, nodeIds) };

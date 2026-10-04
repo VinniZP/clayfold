@@ -1,7 +1,7 @@
 import type { Database } from "bun:sqlite";
 import type { Violation } from "../../shared/rules";
 import type { Step } from "../../shared/schemas";
-import { publisherOf } from "../publishers";
+import { sourcePublisher, type SourceOrigin } from "../publishers";
 import { stepCites } from "./content";
 import type { Report } from "./deterministic";
 
@@ -9,19 +9,19 @@ import type { Report } from "./deterministic";
 
 export const MIN_PUBLISHERS = 2;
 
-export type OkSource = { id: string; url: string; title: string };
+export type OkSource = SourceOrigin & { id: string; title: string };
 
 export function okSources(db: Database, topicId: string): OkSource[] {
-  return db.query<OkSource, [string]>("SELECT id, url, title FROM sources WHERE topic_id = ? AND status = 'ok' ORDER BY rowid").all(topicId);
+  return db.query<OkSource, [string]>("SELECT id, url, title, origin FROM sources WHERE topic_id = ? AND status = 'ok' ORDER BY rowid").all(topicId);
 }
 
-const publishersOf = (sources: OkSource[]) => new Set(sources.map((s) => publisherOf(s.url)));
+const publishersOf = (sources: OkSource[]) => new Set(sources.map(sourcePublisher));
 
 /** "Publisher: id, id; Publisher: id" for messages that point Claude at sources to use. */
 export function describePublishers(sources: OkSource[], exclude: Set<string> = new Set()): string {
   const byPublisher = new Map<string, string[]>();
   for (const s of sources) {
-    const p = publisherOf(s.url);
+    const p = sourcePublisher(s);
     if (!exclude.has(p)) byPublisher.set(p, [...(byPublisher.get(p) ?? []), s.id]);
   }
   return [...byPublisher].map(([p, ids]) => `${p}: ${ids.join(", ")}`).join("; ");
@@ -52,12 +52,12 @@ export function lessonCitedPublishers(db: Database, lessonId: string, extra: Ste
     .query<{ content: string }, [string]>("SELECT content FROM steps WHERE lesson_id = ? AND status = 'published'")
     .all(lessonId)
     .map((r) => JSON.parse(r.content) as Step);
-  const urls = new Map(db.query<{ id: string; url: string }, []>("SELECT id, url FROM sources").all().map((s) => [s.id, s.url]));
+  const sources = new Map(db.query<SourceOrigin & { id: string }, []>("SELECT id, url, origin FROM sources").all().map((s) => [s.id, s]));
   const out = new Set<string>();
   for (const step of [...published, ...extra]) {
     for (const { cite } of stepCites(step)) {
-      const url = urls.get(cite.sourceId);
-      if (url) out.add(publisherOf(url));
+      const source = sources.get(cite.sourceId);
+      if (source) out.add(sourcePublisher(source));
     }
   }
   return out;

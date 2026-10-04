@@ -31,6 +31,13 @@ export const TOOL_INPUTS = {
     query: z.string().min(2).max(200),
     maxPassages: z.number().int().min(1).max(8).default(4),
   },
+  material_list: {},
+  material_read: {
+    sourceId: z.string().min(1),
+    /** Character offset to start at: 0, the previous call's nextOffset, or a heading's offset. */
+    offset: z.number().int().min(0).default(0),
+    maxChars: z.number().int().min(1000).max(40_000).default(12_000),
+  },
   graph_set: {
     nodes: z.array(GraphNode).min(1).max(60),
     rewards: z.array(CourseReward).max(6).optional().describe("Meerkat milestones of the course, by key; a stored milestone stays when omitted."),
@@ -105,6 +112,32 @@ export type SourceSearchResult = {
   passages: { quote: string; offset: number }[];
 };
 
+export type MaterialListResult = {
+  materials: {
+    sourceId: string;
+    title: string;
+    /** How the learner provided it: text, markdown, html, pdf or link. */
+    kind: string;
+    /** The address of a link; null for a file or pasted text. */
+    url: string | null;
+    chars: number;
+    /** Headings with their character offsets, for material_read. */
+    headings: { text: string; offset: number }[];
+    addedAt: string;
+  }[];
+};
+
+export type MaterialReadResult = {
+  sourceId: string;
+  title: string;
+  offset: number;
+  text: string;
+  /** Characters of the whole material. */
+  total: number;
+  /** Where the next call continues; null at the end. */
+  nextOffset: number | null;
+};
+
 export type GateOutcome = {
   status: "published" | "rejected" | "dropped";
   /** Attempt number for this step index, starting at 1. A step is dropped after 3 rejected attempts. */
@@ -138,8 +171,8 @@ export type LearnerState = {
     prereqs: string[];
     unmasteredPrereqs: string[];
   }[];
-  /** Sources registered with source_add; cite them by id. */
-  sources: { id: string; title: string; url: string; kind: string; status: "ok" | "failed" }[];
+  /** Sources registered with source_add, and the learner's materials (origin "learner"); cite them by id. */
+  sources: { id: string; title: string; url: string; kind: string; status: "ok" | "failed"; origin: "web" | "learner" }[];
   recentAttempts: {
     itemId: string;
     nodeId: string;

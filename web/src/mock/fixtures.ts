@@ -1,4 +1,4 @@
-import type { ActivityDay, AuditEntry, CardView, ChatMessage, GlossaryEntry, ItemState, LessonSummary, MemoryFile, NodeView, NoteView, SourceView, SystemView, TodayView, TopicDetail, UpdateView, VideoTimeline, WeakSpot } from "@shared/api";
+import type { ActivityDay, AuditEntry, CardView, ChatMessage, GlossaryEntry, ItemState, LessonSummary, MaterialView, MemoryFile, NodeView, NoteView, SourceView, SystemView, TodayView, TopicDetail, UpdateView, VideoTimeline, WeakSpot } from "@shared/api";
 import type { PublicCite, PublicFigure, PublicItem, PublicStep } from "@shared/schemas";
 
 // Development fixtures for VITE_MOCK=1. Content is illustrative.
@@ -515,6 +515,12 @@ const bayesSources: SourceView[] = [
   { id: "s3", url: "https://example.org/stats-course", title: "Statistics course (page unavailable)", kind: "course", note: "", status: "failed" },
 ];
 
+const bayesMaterials: MaterialView[] = [
+  { id: "m1", title: "Lecture 4: Conditional probability and Bayes", kind: "pdf", url: null, bytes: 2_412_000, chars: 41_260, addedAt: iso(20), cited: true },
+  { id: "m2", title: "Course syllabus, spring term", kind: "text", url: null, bytes: 3_180, chars: 3_102, addedAt: iso(20), cited: false },
+  { id: "m3", title: "Seeing Theory: Bayesian inference", kind: "link", url: "https://seeing-theory.brown.edu/bayesian-inference/", bytes: null, chars: 9_870, addedAt: iso(3), cited: false },
+];
+
 const convs = (prefix: string, days: number[]) =>
   days.map((d, i) => ({
     id: `${prefix}-${i}`,
@@ -532,6 +538,7 @@ export const topicDetails: Record<string, TopicDetail> = {
     goalNotes: [],
     lessons: bayesLessons,
     sources: bayesSources,
+    materials: bayesMaterials,
     conversations: [{ id: "c-onb-bayes", kind: "onboard", lessonId: null, createdAt: iso(20) }, ...convs("cb", [1, 2, 2, 4, 6, 8, 9, 11, 13, 15, 16, 22, 27, 30]).slice(1)],
     onboarding: [
       { key: "interview", label: "Interview", status: "done", detail: "goal: A/B tests at work" },
@@ -551,6 +558,7 @@ export const topicDetails: Record<string, TopicDetail> = {
       { id: "l-git-rebase", topicId: "t-git", title: "Rebase", objective: "Move a branch onto a new base and resolve conflicts along the way.", level: "intermediate", nodeIds: ["rebase"], status: "failed", createdAt: iso(1), stepsReady: 1, stepsTotal: 4, sourcesStale: false, supersededBy: null, learnerStatus: "not_started", video: null },
     ],
     sources: [{ id: "g1", url: "https://git-scm.com/book/en/v2", title: "Pro Git", kind: "book", note: "chapters 2–3", status: "ok" }],
+    materials: [],
     conversations: convs("cg", [0, 3, 5, 10, 17, 24, 33, 38]),
     onboarding: [
       { key: "interview", label: "Interview", status: "done", detail: "goal: working in a team" },
@@ -568,6 +576,7 @@ export const topicDetails: Record<string, TopicDetail> = {
     goalNotes: [],
     lessons: [],
     sources: [],
+    materials: [],
     conversations: [{ id: "c-onb-stretch", kind: "onboard", lessonId: null, createdAt: iso(0, 8) }],
     onboarding: [
       { key: "interview", label: "Interview", status: "done", detail: "goal: relieve lower back pain" },
@@ -585,6 +594,7 @@ export const topicDetails: Record<string, TopicDetail> = {
     goalNotes: [],
     lessons: [],
     sources: [],
+    materials: [],
     conversations: [{ id: "c-goal", kind: "onboard", lessonId: null, createdAt: iso(41) }],
     onboarding: [
       { key: "interview", label: "Interview", status: "done", detail: "I log a workout in under a minute" },

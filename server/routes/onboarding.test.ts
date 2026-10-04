@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { deriveGoalPhases, derivePhases, firstSuccessCriterion, type OnboardingFacts } from "./onboarding";
 
 const MISSION = `# Mission: Git basics\n\n## Why\nKeep a version history.\n\n## Success means\n- in 5 minutes I create a repository, commit and roll a file back to an earlier version\n- second\n`;
-const fresh: OnboardingFacts = { mission: null, okSources: 0, publishers: 0, nodes: 0, placed: 0, planned: 0, running: true, stopped: false };
+const fresh: OnboardingFacts = { mission: null, okSources: 0, publishers: 0, materials: 0, nodes: 0, placed: 0, planned: 0, running: true, stopped: false };
 const statuses = (f: OnboardingFacts) => derivePhases(f).map((p) => `${p.key}:${p.status}`);
 
 describe("derivePhases", () => {
@@ -24,6 +24,12 @@ describe("derivePhases", () => {
     expect(sources(12, 3)).toBe("active");
     expect(sources(7, 5)).toBe("active");
     expect(sources(8, 4)).toBe("done");
+  });
+
+  test("with learner materials the knowledge map closes the sources phase", () => {
+    const withMaterials = { ...fresh, mission: MISSION, materials: 2, okSources: 3, publishers: 2 };
+    expect(derivePhases(withMaterials)[2]).toMatchObject({ status: "active", detail: "2 materials · 3 sources · 2 publishers" });
+    expect(derivePhases({ ...withMaterials, nodes: 6 })[2]!.status).toBe("done");
   });
 
   test("idle waiting for the learner keeps the phase active; a failed last turn leaves none active", () => {

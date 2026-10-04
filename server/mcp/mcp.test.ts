@@ -5,6 +5,7 @@ import type { Item, Step } from "../../shared/schemas";
 import { TOOL_INPUTS } from "../../shared/tools";
 import { openDb } from "../db";
 import type { CriticRunner } from "../gates/critic";
+import { storeMaterials } from "../gates/materials";
 import { activateStep, card, explainStep, practiceStep, QUOTE_ADD, seedTopic, singleItem, SOURCE_TEXT } from "../gates/test-fixtures";
 import { prerequisiteOrder } from "./tools/learner";
 import { createMcpHandler } from "./index";
@@ -181,6 +182,31 @@ describe("tools", () => {
     expect(found.body.passages[0].quote).toContain("index");
     const failedId = (db.query("SELECT id FROM sources WHERE url LIKE '%.pdf'").get() as { id: string }).id;
     expect((await call("source_search", { sourceId: failedId, query: "anything" })).isError).toBe(true);
+  });
+
+  test("material_list and material_read expose only the learner's materials; source_add keeps a learner link as added", async () => {
+    const text = `# Notes\n\n${SOURCE_TEXT}`;
+    const [id] = storeMaterials(db, topicId, [
+      { kind: "markdown", title: "Lecture notes", url: null, bytes: 10, text, headings: [{ text: "Notes", offset: 2 }] },
+      { kind: "link", title: "Course page", url: "https://course.example.org/git", bytes: null, text: SOURCE_TEXT, headings: [] },
+    ]);
+    const list = await call("material_list", {});
+    expect(list.body.materials).toEqual([
+      { sourceId: id, title: "Lecture notes", kind: "markdown", url: null, chars: text.length, headings: [{ text: "Notes", offset: 2 }], addedAt: expect.any(String) },
+      expect.objectContaining({ title: "Course page", kind: "link", url: "https://course.example.org/git" }),
+    ]);
+
+    const first = await call("material_read", { sourceId: id, maxChars: 1000 });
+    expect(first.body).toMatchObject({ offset: 0, total: text.length, nextOffset: null });
+    expect(first.body.text).toBe(text);
+    const tail = await call("material_read", { sourceId: id, offset: text.length - 20 });
+    expect(tail.body.text).toBe(text.slice(-20));
+    expect((await call("material_read", { sourceId: id, offset: text.length })).isError).toBe(true);
+    expect((await call("material_read", { sourceId })).isError).toBe(true);
+
+    const again = await call("source_add", { url: "https://course.example.org/git", kind: "course", note: "The course page the learner added" });
+    expect(again.body).toMatchObject({ ok: true, title: "Course page", publishers: { example: 1, "learner materials": 2 } });
+    expect(db.query("SELECT origin, kind FROM sources WHERE url = 'https://course.example.org/git'").get()).toEqual({ origin: "learner", kind: "link" });
   });
 
   test("lesson flow: plan, publish, reject to drop, finish", async () => {
