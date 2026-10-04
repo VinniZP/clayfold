@@ -35,6 +35,7 @@ beforeEach(() => {
   database = openDb(":memory:");
   seed(database);
   database.query("UPDATE lessons SET status = 'finished' WHERE id = 'ls1'").run();
+  database.query("INSERT INTO settings (key, value) VALUES ('teachback_enabled', 'true')").run();
   database
     .query("INSERT INTO glossary_terms (topic_id, key, term, definition) VALUES ('tp1', 'commit', 'Commit', 'A saved snapshot of the project.')")
     .run();
@@ -101,6 +102,11 @@ test("a teach-back starts only after a completed lesson on the node, with the le
   }
   for (const absent of ["Other node", "Unused", "[["]) expect(context).not.toContain(absent);
   expect(() => startTeachback("tp1", { nodeId: "a", lessonId: "ls_other" }, database, () => {})).toThrow("does not cover");
+});
+
+test("a teach-back does not start while it is off in Settings", () => {
+  database.query("DELETE FROM settings WHERE key = 'teachback_enabled'").run();
+  expect(start).toThrow("Explain it back is off");
 });
 
 test("checkDebrief rejects unknown, repeated and missing steps, invented evidence and a gap without its correction", () => {

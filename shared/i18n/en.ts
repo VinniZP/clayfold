@@ -762,6 +762,9 @@ export const en = {
   "settings.video": "Video lessons",
   "settings.videoIntro": "Clayfold can turn a written lesson into a full narrated video, one chapter per step, with every explanation, figure and worked example. Claude writes the script, and ElevenLabs voices it with the voice and model chosen for narration. Lessons then have a Video tab: watch, then answer the lesson's questions.",
   "settings.videoToggle": "Show video lessons",
+  "settings.teachback": "Explain it back",
+  "settings.teachbackIntro": "After a lesson, explain its topic in your own words to Sam, a curious novice who asks follow-up questions. A debrief then shows which key ideas you explained, which you left out or got wrong, and where the lesson covers them. Each conversation and debrief is a Claude run on your subscription.",
+  "settings.teachbackToggle": "Offer to explain it back",
   "settings.videoNeedsKey": "Video lessons need an ElevenLabs key: add it under Narration.",
 
   // Meerkat (gamification)
@@ -1019,6 +1022,7 @@ export const en = {
   "teachback.lessonEnd": "Explain the lesson's key ideas to {name}, a curious newcomer. Explaining shows what you understood and what you still need to revisit.",
   "teachback.notFound": "Teach-back not found.",
   "teachback.nodeNotFound": "This node is not in the course.",
+  "teachback.disabled": "Explain it back is off. Turn it on in Settings.",
   "teachback.lessonNotFound": "This lesson does not cover the node.",
   "teachback.lessonNotCompleted": "Complete a lesson on this node, including its final check, before explaining it back.",
   "teachback.noIdeas": "This lesson has no explanations to explain back.",

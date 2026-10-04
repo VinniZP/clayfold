@@ -343,6 +343,8 @@ export type Settings = {
   narration: { keySet: boolean; voiceId: string | null; model: TtsModel };
   /** Video lessons; they use the narration key, voice and model. */
   video: { enabled: boolean };
+  /** Teach-back (L20) is offered only while on; off by default. */
+  teachback: { enabled: boolean };
   claude: Record<ClaudeInstanceKind, ClaudeRoleSetting & { defaultModel: string; defaultEffort: Effort }>;
   /** The meerkat; off by default. While on, goal plans carry trophies and lessons a challenge step. */
   gamification: boolean;
@@ -366,6 +368,7 @@ export type SettingsUpdate = {
   voiceId?: string;
   ttsModel?: TtsModel;
   videoEnabled?: boolean;
+  teachbackEnabled?: boolean;
   claudeRole?: ClaudeRoleSetting & { role: ClaudeInstanceKind };
 };
 

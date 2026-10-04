@@ -233,6 +233,8 @@ let settings: Settings = {
   narration: { keySet: false, voiceId: null, model: "eleven_v4" },
   // On in the mock so the Video tab can be looked at; the server default is off.
   video: { enabled: true },
+  // On in the mock as well, so teach-back can be looked at; the server default is off.
+  teachback: { enabled: true },
   claude: Object.fromEntries(
     CLAUDE_ROLES.map((role) => [role, { model: null, effort: null, defaultModel: ["critic", "grading", "narration", "video", "game"].includes(role) ? "sonnet" : "opus", defaultEffort: ({ onboard: "medium", lesson: "high", critic: "high", video: "medium", game: "medium" } as Record<string, Effort>)[role] ?? "low" }]),
   ) as Settings["claude"],
@@ -343,6 +345,7 @@ async function route(method: string, path: string, body: Record<string, unknown>
     const d = fx.topicDetails[m[1]!];
     const node = d?.nodes.find((n) => n.id === body.nodeId);
     const lesson = d?.lessons.find((l) => (!body.lessonId || l.id === body.lessonId) && node && l.nodeIds.includes(node.id) && l.learnerStatus === "completed");
+    if (!settings.teachback.enabled) return json({ error: t("teachback.disabled") }, 409);
     if (!d || !node) return json({ error: t("teachback.nodeNotFound") }, 404);
     if (!lesson) return json({ error: t("teachback.lessonNotCompleted") }, 409);
     const id = `tb-new-${++seq}`;
@@ -527,7 +530,7 @@ async function route(method: string, path: string, body: Record<string, unknown>
   if (p === "/api/today") return json(fx.today);
   if (p === "/api/settings") {
     if (method === "PUT") {
-      const { language, voiceId, ttsModel, videoEnabled, claudeRole, gamification, introSeen } = body as SettingsUpdate;
+      const { language, voiceId, ttsModel, videoEnabled, claudeRole, gamification, introSeen, teachbackEnabled } = body as SettingsUpdate;
       if (gamification !== undefined) setMockGameOn(gamification);
       settings = {
         gamification: gamification ?? settings.gamification,
@@ -535,6 +538,7 @@ async function route(method: string, path: string, body: Record<string, unknown>
         language: language ?? settings.language,
         narration: { ...settings.narration, voiceId: voiceId ?? settings.narration.voiceId, model: ttsModel ?? settings.narration.model },
         video: { enabled: videoEnabled ?? settings.video.enabled },
+        teachback: { enabled: teachbackEnabled ?? settings.teachback.enabled },
         claude: claudeRole
           ? { ...settings.claude, [claudeRole.role]: { ...settings.claude[claudeRole.role], model: claudeRole.model, effort: claudeRole.effort } }
           : settings.claude,

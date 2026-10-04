@@ -181,6 +181,7 @@ export function TopicPage() {
   const [params, setParams] = useSearchParams();
   const navigate = useNavigate();
   const detail = useResource(() => api.topic(topicId), topicId);
+  const teachbackOn = useResource(() => api.settings(), "settings").data?.teachback.enabled ?? false;
   const [selected, setSelected] = useState<string | null>(null);
   const [starting, setStarting] = useState<{ nodeId?: string; waiting: boolean } | null>(null);
   const [startError, setStartError] = useState<string | null>(null);
@@ -301,9 +302,9 @@ export function TopicPage() {
                     <button type="button" disabled={busy} onClick={() => startLesson(node.id)} {...stylex.props(btn.base, btn.primary, btn.sm)}>
                       {starting?.nodeId === node.id ? <Spinner /> : <BookOpen size={14} aria-hidden="true" />} {t("topic.nodeLesson")}
                     </button>
-                    {explainable(d, node.id) && <TeachBackButton key={node.id} topicId={topicId} nodeId={node.id} />}
+                    {teachbackOn && explainable(d, node.id) && <TeachBackButton key={node.id} topicId={topicId} nodeId={node.id} />}
                   </div>
-                  <NodeTeachbacks teachbacks={d.teachbacks.filter((tb) => tb.nodeId === node.id)} />
+                  {teachbackOn && <NodeTeachbacks teachbacks={d.teachbacks.filter((tb) => tb.nodeId === node.id)} />}
                 </div>
               ) : (
                 <p {...stylex.props(text.small, text.muted)}>{t("topic.pickNode")}</p>

@@ -15,6 +15,7 @@ import { languageInstruction, t } from "../i18n";
 import type { JsonPromptRunner } from "./grading";
 import { fail, parseJson, readBody } from "./http";
 import { learnerStatus } from "./lesson-summary";
+import { teachbackEnabled } from "./settings";
 
 /** A key idea of a teach-back: one published explain or worked_example step of the lesson. */
 export type KeyIdea = { stepId: string; idx: number; title: string; text: string };
@@ -165,6 +166,7 @@ export function startTeachback(
   database: Database = db(),
   run: typeof runTurn = runTurn,
 ): TeachbackView {
+  if (!teachbackEnabled(database)) fail(409, t("teachback.disabled"));
   if (!database.query("SELECT 1 FROM nodes WHERE topic_id = ? AND id = ?").get(topicId, req.nodeId)) fail(404, t("teachback.nodeNotFound"));
   const lesson = lessonFor(topicId, req.nodeId, req.lessonId, database);
   if (keyIdeas(lesson.id, req.nodeId, database).length === 0) fail(409, t("teachback.noIdeas"));

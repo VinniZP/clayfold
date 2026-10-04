@@ -252,7 +252,8 @@ export function LessonPage() {
   const [checkResults, setCheckResults] = useState<{ item: PublicItem; result: ItemResult | undefined }[] | null>(null);
   const [tutorOpen, setTutorOpen] = useState(false);
   const [tab, setTab] = useState<"lesson" | "cards" | "notes" | "video">("lesson");
-  const videoOn = useResource(() => api.settings(), "settings").data?.video.enabled ?? false;
+  const settings = useResource(() => api.settings(), "settings").data;
+  const videoOn = settings?.video.enabled ?? false;
   const docked = useMediaQuery("(min-width: 1281px)");
   const outlineRef = useRef<HTMLElement>(null);
   useOverlayScroll(outlineRef);
@@ -654,6 +655,7 @@ export function LessonPage() {
                   topicId={topicId}
                   lessonId={lessonId}
                   teachBack={
+                    settings?.teachback.enabled &&
                     (v.lesson.status === "ready" || v.lesson.status === "finished") &&
                     v.lesson.nodeIds[0] &&
                     (v.lesson.learnerStatus === "completed" || (checkResults?.length && checkResults.every((r) => r.result)))
