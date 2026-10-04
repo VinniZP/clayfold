@@ -128,7 +128,9 @@ export function TermPopover() {
       } else if (!popRef.current?.contains(e.target as Node)) hide();
     };
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && current.current) hide();
+      if (e.key !== "Escape" || !current.current) return;
+      e.preventDefault();
+      hide();
     };
 
     document.addEventListener("pointerover", onOver);

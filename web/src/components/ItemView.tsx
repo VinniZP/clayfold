@@ -1,16 +1,19 @@
 import * as stylex from "@stylexjs/stylex";
 import { ArrowDown, ArrowRight, ArrowUp, CircleCheck, CircleX, Compass, Dumbbell, GripVertical, Info, Lightbulb, MessageCircle, X } from "lucide-react";
-import { useEffect, useId, useRef, useState, type ReactNode } from "react";
-import { CONFIDENCE_LEVELS, type AttemptRequest, type AttemptResponse, type Confidence, type GiveUpResponse, type ItemState } from "@shared/api";
+import { type KeyboardEvent, type ReactNode, useEffect, useId, useRef, useState } from "react";
+import { type AttemptRequest, type AttemptResponse, type Confidence, CONFIDENCE_LEVELS, type GiveUpResponse, type ItemState } from "@shared/api";
 import type { Answer, PublicItem } from "@shared/schemas";
 import { api, errorText } from "../lib/api";
 import { gameProgress } from "../lib/game";
 import { useConfidenceEnabled } from "../lib/confidence";
 import { t, useLang } from "../lib/i18n";
+import { isTypingTarget, type Action } from "../lib/keys";
+import { isCurrent, useShortcuts } from "../lib/shortcuts";
 import { bp, color, motion, radius, space } from "../theme/tokens.stylex";
 import { btn, field, layout, text } from "../theme/ui";
 import { ItemPrompt } from "./ItemPrompt";
 import { MatchInput, SortInput } from "./MatchSort";
+import { KeyHint } from "./Shortcuts";
 import { Markdown, Spinner } from "./ui";
 
 /**
@@ -77,6 +80,8 @@ export function draftFromAnswer(item: PublicItem, answer: Answer | null): Draft 
       return { format: "short", text: answer.text };
   }
 }
+
+const toggled = (choices: number[], i: number): number[] => (choices.includes(i) ? choices.filter((c) => c !== i) : [...choices, i]);
 
 function countBlanks(text: string): number {
   return new Set([...text.matchAll(/\{\{(\d+)\}\}/g)].map((m) => m[1])).size;
@@ -214,7 +219,7 @@ const s = stylex.create({
   hints: { display: "grid", gap: 8, maxWidth: "64ch", margin: 0, padding: 0, listStyle: "none" },
   hint: { paddingBlock: 11, paddingInline: 16, borderRadius: radius.field, backgroundColor: color.butter },
   hintLabel: { display: "block", marginBottom: 2, fontSize: 12, fontWeight: 750, color: color.warning },
-  feedbackRegion: { display: "grid", gap: 10 },
+  feedbackRegion: { display: "grid", gap: 10, borderRadius: radius.inner },
   more: { justifySelf: "start" },
   feedback: {
     display: "grid",
@@ -248,6 +253,8 @@ const s = stylex.create({
 });
 
 const IDLE_MS = 90_000;
+
+const ITEM_ACTIONS = new Set<Action["name"]>(["choose", "submit", "hint", "giveUp"]);
 
 /** The latest attempt as the server recorded it, for showing progress restored after a reload. */
 export function restoredResponse(state: ItemState | undefined, mode: ItemMode): AttemptResponse | null {
@@ -304,6 +311,10 @@ export function ItemView({ item, mode, context, active = true, onResult, onOffer
   /** The draft of the latest answer; a wrong choice and the placement marks show until it changes. */
   const [submitted, setSubmitted] = useState<Draft | null>(null);
   const promptId = useId();
+  const rootRef = useRef<HTMLDivElement>(null);
+  const feedbackRef = useRef<HTMLDivElement>(null);
+  /** Set by an answer or give-up in this view, so finishing the item moves focus to its feedback; a restored result does not. */
+  const answeredHere = useRef(false);
 
   const last = responses[responses.length - 1];
   const oneShot = mode === "activate" || mode === "check" || mode === "retry";
@@ -316,6 +327,7 @@ export function ItemView({ item, mode, context, active = true, onResult, onOffer
   // L20: only the first answer is rated; a retry comes after the learner has seen feedback.
   const askConfidence = confidenceOn && mode !== "activate" && mode !== "retry" && wrongCount === 0;
   const confidentError = responses.some((r) => r.correct === false && r.confidence === "sure");
+  const canGiveUp = (mode === "practice" || mode === "review") && wrongCount > 0;
 
   useEffect(() => {
     if (active && started.current === null) started.current = Date.now();
@@ -338,6 +350,11 @@ export function ItemView({ item, mode, context, active = true, onResult, onOffer
 
   const answer = toAnswer(draft);
   const locked = done || busy === "submit";
+  const wrongDraft = last?.correct === false && submitted === draft ? submitted : null;
+
+  useEffect(() => {
+    if (done && answeredHere.current) feedbackRef.current?.focus();
+  }, [done]);
 
   const submit = async (confidence?: Confidence) => {
     if (!answer) return;
@@ -347,6 +364,7 @@ export function ItemView({ item, mode, context, active = true, onResult, onOffer
     try {
       const durationMs = Date.now() - (started.current ?? Date.now());
       const res = send ? await send(answer, durationMs) : await api.attempt(item.id, { answer, hintsUsed: hints.length, durationMs, context, confidence });
+      answeredHere.current = true;
       setResponses((r) => [...r, res]);
       setSubmitted(draft);
       setTouch((n) => n + 1);
@@ -382,6 +400,7 @@ export function ItemView({ item, mode, context, active = true, onResult, onOffer
     setError(null);
     try {
       const res = await api.giveUp(item.id);
+      answeredHere.current = true;
       setGaveUp(res);
       if (last) onResult?.(item.id, { response: last, gaveUp: res });
     } catch (err) {
@@ -392,17 +411,69 @@ export function ItemView({ item, mode, context, active = true, onResult, onOffer
   };
 
   const showResult = mode !== "check" || revealed;
-  const wrongDraft = last?.correct === false && submitted === draft ? submitted : null;
   const marks = showResult && last?.marks && submitted === draft ? last.marks : null;
 
+  const confidenceRef = useRef<HTMLDivElement>(null);
+  /** Enter checks the answer; while a confidence rating is asked for, it moves to the rating buttons instead. */
+  const checkOrRate = () => {
+    if (askConfidence) confidenceRef.current?.querySelector<HTMLButtonElement>("button")?.focus();
+    else void submit();
+  };
+
+  const focusAnswer = () =>
+    rootRef.current?.querySelector<HTMLElement>("fieldset input:checked, fieldset input, fieldset textarea, fieldset li[tabindex]")?.focus();
+
+  const choose = (i: number): boolean => {
+    if (i >= (item.options?.length ?? 0)) return false;
+    if (draft.format === "single") update({ format: "single", choice: i });
+    else if (draft.format === "multi") update({ format: "multi", choices: toggled(draft.choices, i) });
+    else return false;
+    rootRef.current?.querySelectorAll<HTMLInputElement>("fieldset input")[i]?.focus();
+    return true;
+  };
+
+  useShortcuts(
+    "item",
+    (a) => {
+      if (!ITEM_ACTIONS.has(a.name) || !isCurrent(rootRef.current, "item")) return false;
+      if (busy !== null) return true;
+      switch (a.name) {
+        case "choose":
+          return choose(a.n - 1);
+        case "submit":
+          if (answer && !wrongDraft) checkOrRate();
+          else focusAnswer();
+          return true;
+        case "hint":
+          if (!allowHints || hints.length >= item.hintCount) return false;
+          void hint();
+          return true;
+        case "giveUp":
+          if (!canGiveUp) return false;
+          void giveUp();
+          return true;
+        default:
+          return false;
+      }
+    },
+    active && !done,
+  );
+
+  const onFieldKey = (e: KeyboardEvent) => {
+    if (e.key !== "Enter" || e.nativeEvent.isComposing || !isTypingTarget(e.target)) return;
+    if ((e.target as HTMLElement).tagName === "TEXTAREA" && !(e.ctrlKey || e.metaKey)) return;
+    e.preventDefault();
+    if (answer && !wrongDraft && busy === null) checkOrRate();
+  };
+
   return (
-    <div onFocus={() => setTouch((n) => n + 1)} data-tutor-item={allowTutor ? item.id : undefined} {...stylex.props(s.item)}>
+    <div ref={rootRef} data-shortcut-scope={done ? undefined : "item"} onFocus={() => setTouch((n) => n + 1)} data-tutor-item={allowTutor ? item.id : undefined} {...stylex.props(s.item)}>
       <div id={promptId} {...stylex.props(s.prompt)}>
         {number !== undefined && <span {...stylex.props(s.num)}>{number}</span>}
         <ItemPrompt src={item.prompt} />
       </div>
 
-      <fieldset disabled={locked} aria-describedby={promptId} {...stylex.props(s.fieldset)}>
+      <fieldset disabled={locked} aria-describedby={promptId} onKeyDown={onFieldKey} {...stylex.props(s.fieldset)}>
         <legend {...stylex.props(layout.srOnly)}>{t("item.yourAnswer")}</legend>
         <AnswerInput item={item} draft={draft} wrong={wrongDraft} marks={marks} locked={locked} done={done} onChange={update} />
       </fieldset>
@@ -426,7 +497,7 @@ export function ItemView({ item, mode, context, active = true, onResult, onOffer
               {t("item.hint")} <span {...stylex.props(text.tnum)}>{t("common.xOfY", { x: Math.min(hints.length + 1, item.hintCount), y: item.hintCount })}</span>
             </button>
           )}
-          {(mode === "practice" || mode === "review") && wrongCount > 0 && (
+          {canGiveUp && (
             <button type="button" disabled={busy !== null} onClick={giveUp} {...stylex.props(btn.base, btn.plain)}>
               {busy === "giveup" && <Spinner />}
               {t("item.giveUp")}
@@ -438,7 +509,7 @@ export function ItemView({ item, mode, context, active = true, onResult, onOffer
             </button>
           )}
           {askConfidence ? (
-            <div role="group" aria-labelledby={`${promptId}-sure`} {...stylex.props(s.confidence)}>
+            <div ref={confidenceRef} role="group" aria-labelledby={`${promptId}-sure`} {...stylex.props(s.confidence)}>
               <span id={`${promptId}-sure`} {...stylex.props(s.confidenceLabel)}>
                 {t("confidence.question")}
               </span>
@@ -454,6 +525,7 @@ export function ItemView({ item, mode, context, active = true, onResult, onOffer
               {busy === "submit" && <Spinner />}
               {t(mode === "activate" ? "item.answer" : mode === "check" ? "item.acceptAnswer" : wrongCount > 0 ? "item.tryAgain" : "item.check")}
               {mode !== "check" && mode !== "activate" && <ArrowRight size={17} aria-hidden="true" />}
+              <KeyHint>↵</KeyHint>
             </button>
           )}
         </div>
@@ -470,7 +542,7 @@ export function ItemView({ item, mode, context, active = true, onResult, onOffer
         </ol>
       )}
 
-      <div aria-live="polite" {...stylex.props(s.feedbackRegion)}>
+      <div ref={feedbackRef} tabIndex={-1} aria-live="polite" {...stylex.props(s.feedbackRegion)}>
         {last && !showResult && (
           <FeedbackBox tone="neutral" icon={<Info size={18} aria-hidden="true" />} title={t("item.accepted")}>
             <p>{t("item.resultsAtEnd")}</p>
@@ -576,6 +648,7 @@ function Choice({
   checked,
   wrong,
   locked,
+  keyHint,
   onChange,
   children,
 }: {
@@ -584,11 +657,17 @@ function Choice({
   checked: boolean;
   wrong: boolean;
   locked: boolean;
+  /** The digit that picks this option; options past the ninth have none. */
+  keyHint?: number;
   onChange: () => void;
   children: ReactNode;
 }) {
   const [focus, setFocus] = useState(false);
   const isRadio = type === "radio";
+  // Disabling a focused input drops its focus without a blur event.
+  useEffect(() => {
+    if (locked) setFocus(false);
+  }, [locked]);
   return (
     <label {...stylex.props(s.choice, checked && s.choiceOn, wrong && s.choiceWrong, locked && s.choiceLocked, focus && s.choiceFocus)}>
       <input
@@ -612,6 +691,7 @@ function Choice({
       </span>
       <span {...stylex.props(s.choiceText)}>{children}</span>
       {wrong && <YourAnswer />}
+      {keyHint !== undefined && !locked && <KeyHint>{keyHint}</KeyHint>}
     </label>
   );
 }
@@ -657,6 +737,7 @@ export function AnswerInput({
               checked={draft.choice === i}
               wrong={wrong?.format === "single" && wrong.choice === i}
               locked={locked}
+              keyHint={i < 9 ? i + 1 : undefined}
               onChange={() => onChange({ format: "single", choice: i })}
             >
               <Markdown src={o.text} inline />
@@ -677,7 +758,8 @@ export function AnswerInput({
                 checked={on}
                 wrong={on && wrong?.format === "multi"}
                 locked={locked}
-                onChange={() => onChange({ format: "multi", choices: on ? draft.choices.filter((c) => c !== i) : [...draft.choices, i] })}
+                keyHint={i < 9 ? i + 1 : undefined}
+                onChange={() => onChange({ format: "multi", choices: toggled(draft.choices, i) })}
               >
                 <Markdown src={o.text} inline />
               </Choice>
@@ -765,9 +847,13 @@ function ClozeInput({ text: source, blanks, onChange }: { text: string; blanks: 
 function OrderInput({ sequence, onChange }: { sequence: string[]; onChange: (s: string[]) => void }) {
   useLang();
   const [dragging, setDragging] = useState<number | null>(null);
+  /** A line picked up from the keyboard, and the position it came from. */
+  const [grabbed, setGrabbed] = useState<{ entry: string; from: number } | null>(null);
   const [announce, setAnnounce] = useState("");
   const refs = useRef<(HTMLLIElement | null)[]>([]);
+  const listRef = useRef<HTMLOListElement>(null);
   const helpId = useId();
+  const total = sequence.length;
 
   const move = (from: number, to: number, focus = false) => {
     if (to < 0 || to >= sequence.length || from === to) return;
@@ -775,8 +861,28 @@ function OrderInput({ sequence, onChange }: { sequence: string[]; onChange: (s: 
     const [x] = next.splice(from, 1);
     next.splice(to, 0, x!);
     onChange(next);
-    setAnnounce(t("item.movedTo", { entry: x!, position: to + 1, total: sequence.length }));
+    setAnnounce(t("item.movedTo", { entry: x!, position: to + 1, total }));
     if (focus) requestAnimationFrame(() => refs.current[to]?.focus());
+  };
+
+  const onKey = (e: KeyboardEvent<HTMLLIElement>, i: number, entry: string) => {
+    const step = e.key === "ArrowUp" ? -1 : e.key === "ArrowDown" ? 1 : 0;
+    const holding = grabbed?.entry === entry;
+    if (e.ctrlKey || e.metaKey || e.shiftKey || (e.altKey && !step)) return;
+    if (step) {
+      e.preventDefault();
+      if (e.altKey || holding) move(i, i + step, true);
+      else refs.current[i + step]?.focus();
+    } else if (e.key === " " || (holding && e.key === "Enter")) {
+      e.preventDefault();
+      setGrabbed(holding ? null : { entry, from: i });
+      setAnnounce(t(holding ? "item.dropped" : "item.picked", { entry, position: i + 1, total }));
+    } else if (e.key === "Escape" && grabbed && holding) {
+      e.preventDefault();
+      move(i, grabbed.from, true);
+      setGrabbed(null);
+      setAnnounce(t("item.moveCancelled", { entry, position: grabbed.from + 1, total }));
+    }
   };
 
   return (
@@ -784,7 +890,15 @@ function OrderInput({ sequence, onChange }: { sequence: string[]; onChange: (s: 
       <p id={helpId} {...stylex.props(s.hintLine)}>
         {t("item.orderHelp")}
       </p>
-      <ol aria-describedby={helpId} {...stylex.props(s.orderList)}>
+      <ol
+        ref={listRef}
+        aria-describedby={helpId}
+        onBlur={() =>
+          // Reordering moves the focused line in the DOM, which blurs it until move() focuses it again.
+          requestAnimationFrame(() => !listRef.current?.contains(document.activeElement) && setGrabbed(null))
+        }
+        {...stylex.props(s.orderList)}
+      >
         {sequence.map((entry, i) => (
           <li
             key={entry}
@@ -806,16 +920,8 @@ function OrderInput({ sequence, onChange }: { sequence: string[]; onChange: (s: 
               }
             }}
             onDragEnd={() => setDragging(null)}
-            onKeyDown={(e) => {
-              if (e.altKey && e.key === "ArrowUp") {
-                e.preventDefault();
-                move(i, i - 1, true);
-              } else if (e.altKey && e.key === "ArrowDown") {
-                e.preventDefault();
-                move(i, i + 1, true);
-              }
-            }}
-            {...stylex.props(s.orderRow, dragging === i && s.orderDragging)}
+            onKeyDown={(e) => onKey(e, i, entry)}
+            {...stylex.props(s.orderRow, (dragging === i || grabbed?.entry === entry) && s.orderDragging)}
           >
             <GripVertical size={16} aria-hidden="true" {...stylex.props(s.grip)} />
             <span aria-hidden="true" {...stylex.props(s.orderIdx)}>

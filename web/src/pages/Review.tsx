@@ -8,10 +8,12 @@ import type { PublicItem } from "@shared/schemas";
 import { DayProgress } from "../components/DayProgress";
 import { useHeader } from "../components/header";
 import { ItemView, type ItemResult } from "../components/ItemView";
+import { KeyHint } from "../components/Shortcuts";
 import { CardHead, Empty, ErrorBox, Markdown, PageLoading, Progress, Spinner } from "../components/ui";
 import { api, errorText } from "../lib/api";
 import { gameProgress } from "../lib/game";
 import { t, useLang } from "../lib/i18n";
+import { useShortcutPage, useShortcuts } from "../lib/shortcuts";
 import { useResource } from "../lib/useResource";
 import { bp, color, font, radius } from "../theme/tokens.stylex";
 import { btn, card, chip, field, layout, text } from "../theme/ui";
@@ -30,10 +32,9 @@ const st = stylex.create({
   hard: { backgroundColor: color.warningSoft, color: color.warning },
   good: { backgroundColor: color.successSoft, color: color.success },
   easy: { backgroundColor: color.lilacSoft, color: color.accentText },
-  kbd: { display: "inline-grid", placeItems: "center", minWidth: 22, height: 22, paddingInline: 4, borderRadius: 7, backgroundColor: color.surface, color: color.text, fontSize: 12, fontFamily: font.mono },
   progress: { display: "flex", alignItems: "center", gap: 14 },
   grow: { flexGrow: 1 },
-  item: { display: "grid", gap: 16 },
+  item: { display: "grid", gap: 16, outline: "none" },
   nav: { display: "flex", justifyContent: "flex-end", paddingTop: 16, borderTopWidth: 1, borderTopStyle: "solid", borderTopColor: color.border },
   stats: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, margin: 0, padding: 0, listStyle: "none" },
   stat: { display: "grid", gap: 2, paddingBlock: 12, paddingInline: 14, borderRadius: 16, backgroundColor: color.surface2 },
@@ -46,11 +47,11 @@ const st = stylex.create({
 
 type Entry = { kind: "card"; card: ReviewCard } | { kind: "item"; item: PublicItem };
 
-const RATINGS: { rating: ReviewRating; label: MessageKey; key: string; tone: "again" | "hard" | "good" | "easy" }[] = [
-  { rating: 1, label: "review.again", key: "1", tone: "again" },
-  { rating: 2, label: "review.hard", key: "2", tone: "hard" },
-  { rating: 3, label: "review.good", key: "3", tone: "good" },
-  { rating: 4, label: "review.easy", key: "4", tone: "easy" },
+const RATINGS: { rating: ReviewRating; label: MessageKey; tone: "again" | "hard" | "good" | "easy" }[] = [
+  { rating: 1, label: "review.again", tone: "again" },
+  { rating: 2, label: "review.hard", tone: "hard" },
+  { rating: 3, label: "review.good", tone: "good" },
+  { rating: 4, label: "review.easy", tone: "easy" },
 ];
 
 function CardReview({ card, onRated }: { card: ReviewCard; onRated: (r: ReviewRating) => void }) {
@@ -79,20 +80,16 @@ function CardReview({ card, onRated }: { card: ReviewCard; onRated: (r: ReviewRa
     revealRef.current?.focus();
   }, [card.id]);
 
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      const t = e.target as HTMLElement;
-      if (t.closest("input, textarea, select")) return;
-      if (!shown && (e.key === " " || e.key === "Enter") && t.tagName !== "BUTTON") {
-        e.preventDefault();
-        setShown(true);
-      } else if (shown && busy === null) {
-        const r = RATINGS.find((x) => x.key === e.key);
-        if (r) void rate(r.rating);
-      }
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+  useShortcuts("item", (a) => {
+    if (!shown) {
+      if (a.name !== "reveal" && a.name !== "submit") return false;
+      setShown(true);
+      return true;
+    }
+    const r = a.name === "choose" ? RATINGS.find((x) => x.rating === a.n) : undefined;
+    if (!r || busy !== null) return false;
+    void rate(r.rating);
+    return true;
   });
 
   useEffect(() => {
@@ -108,7 +105,7 @@ function CardReview({ card, onRated }: { card: ReviewCard; onRated: (r: ReviewRa
       </p>
       {!shown ? (
         <button ref={revealRef} type="button" onClick={() => setShown(true)} {...stylex.props(btn.base, btn.primary, btn.lg)}>
-          <Eye size={18} aria-hidden="true" /> {t("review.showAnswer")}
+          <Eye size={18} aria-hidden="true" /> {t("review.showAnswer")} <KeyHint>↵</KeyHint>
         </button>
       ) : (
         <>
@@ -119,7 +116,7 @@ function CardReview({ card, onRated }: { card: ReviewCard; onRated: (r: ReviewRa
           <div role="group" aria-label={t("review.rating")} {...stylex.props(st.rates)}>
             {RATINGS.map((r) => (
               <button key={r.rating} type="button" disabled={busy !== null} onClick={() => rate(r.rating)} {...stylex.props(btn.base, st.rate, st[r.tone])}>
-                {busy === r.rating ? <Spinner /> : <kbd {...stylex.props(st.kbd)}>{r.key}</kbd>} {t(r.label)}
+                {busy === r.rating && <Spinner />} {t(r.label)} <KeyHint>{r.rating}</KeyHint>
               </button>
             ))}
           </div>
@@ -144,12 +141,34 @@ export function ReviewPage() {
   const [pos, setPos] = useState(0);
   const [ratings, setRatings] = useState<ReviewRating[]>([]);
   const [itemResults, setItemResults] = useState<Record<string, ItemResult>>({});
+  const itemRef = useRef<HTMLDivElement>(null);
+  const advanced = useRef(false);
 
   useEffect(() => {
     setPos(0);
     setRatings([]);
     setItemResults({});
   }, [session.data]);
+
+  // A card focuses its own Show answer button; a delayed exercise takes focus from the Next button that led to it.
+  useEffect(() => {
+    if (advanced.current) itemRef.current?.focus();
+  }, [pos]);
+
+  const s = session.data;
+  const queue: Entry[] = s ? [...s.cards.map((card) => ({ kind: "card" as const, card })), ...s.items.map((item) => ({ kind: "item" as const, item }))] : [];
+  const entry = queue[pos];
+  const next = () => {
+    advanced.current = true;
+    setPos((p) => p + 1);
+  };
+
+  useShortcutPage("review");
+  useShortcuts("page", (a) => {
+    if (a.name !== "submit" || entry?.kind !== "item" || !itemResults[entry.item.id]) return false;
+    next();
+    return true;
+  });
 
   const filter = (
     <label {...stylex.props(field.inline)}>
@@ -175,9 +194,7 @@ export function ReviewPage() {
       </div>
     );
 
-  const s = session.data!;
-  const queue: Entry[] = [...s.cards.map((card) => ({ kind: "card" as const, card })), ...s.items.map((item) => ({ kind: "item" as const, item }))];
-  const entry = queue[pos];
+  if (!s) return null;
   const finished = queue.length > 0 && pos >= queue.length;
 
   return (
@@ -216,11 +233,11 @@ export function ReviewPage() {
                 card={entry.card}
                 onRated={(r) => {
                   setRatings((x) => [...x, r]);
-                  setPos((p) => p + 1);
+                  next();
                 }}
               />
             ) : entry?.kind === "item" ? (
-              <div {...stylex.props(st.item)}>
+              <div ref={itemRef} tabIndex={-1} aria-label={t(s.retests.includes(entry.item.id) ? "review.retest" : "review.delayedRecall")} {...stylex.props(st.item)}>
                 {s.retests.includes(entry.item.id) ? (
                   <p {...stylex.props(chip.base, chip.butter)}>{t("review.retest")}</p>
                 ) : (
@@ -234,8 +251,8 @@ export function ReviewPage() {
                   onResult={(id, r) => setItemResults((m) => ({ ...m, [id]: r }))}
                 />
                 <div {...stylex.props(st.nav)}>
-                  <button type="button" {...stylex.props(btn.base, btn.primary)} disabled={!itemResults[entry.item.id]} onClick={() => setPos((p) => p + 1)}>
-                    {t("lesson.next")} <ArrowRight size={16} aria-hidden="true" />
+                  <button type="button" {...stylex.props(btn.base, btn.primary)} disabled={!itemResults[entry.item.id]} onClick={next}>
+                    {t("lesson.next")} <ArrowRight size={16} aria-hidden="true" /> <KeyHint>↵</KeyHint>
                   </button>
                 </div>
               </div>

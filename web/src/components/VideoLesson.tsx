@@ -6,6 +6,7 @@ import { Link } from "react-router";
 import type { ItemState, VideoExportView, VideoView } from "@shared/api";
 import type { PublicStep } from "@shared/schemas";
 import { api, ApiFailure, errorText } from "../lib/api";
+import { clock } from "../lib/format";
 import { t, useLang } from "../lib/i18n";
 import { useResource } from "../lib/useResource";
 import { bp, color, font, radius } from "../theme/tokens.stylex";
@@ -57,7 +58,6 @@ const POLL_MS = 2500;
 // The Player sizes itself from its inline style; with only a width it keeps the composition's aspect ratio.
 const PLAYER_STYLE = { width: "100%" };
 
-const clock = (seconds: number) => `${Math.floor(seconds / 60)}:${String(Math.floor(seconds % 60)).padStart(2, "0")}`;
 
 type LessonContext = {
   lessonId: string;

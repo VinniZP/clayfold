@@ -18,6 +18,7 @@ import { CommandPalette } from "./CommandPalette";
 import { Celebrations } from "./meerkat/Celebrations";
 import { HeaderProvider, type HeaderInfo } from "./header";
 import { Intro } from "./Intro";
+import { ShortcutSheet } from "./Shortcuts";
 import { Clay } from "./ui";
 
 const pulse = stylex.keyframes({
@@ -392,7 +393,11 @@ function useDismiss(open: boolean, ref: React.RefObject<HTMLElement | null>, clo
   useEffect(() => {
     if (!open) return;
     const onDown = (e: PointerEvent) => !ref.current?.contains(e.target as Node) && close();
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && close();
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      e.preventDefault();
+      close();
+    };
     document.addEventListener("pointerdown", onDown);
     document.addEventListener("keydown", onKey);
     return () => {
@@ -865,6 +870,7 @@ export function Layout() {
       {claudeMode && <ClaudePanel />}
       <Intro />
       <Celebrations />
+      <ShortcutSheet />
     </AppRoot>
   );
 }

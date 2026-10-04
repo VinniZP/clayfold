@@ -1,16 +1,18 @@
 import * as stylex from "@stylexjs/stylex";
-import { AudioLines, Check, Clapperboard, Gauge, KeyRound, Play, Sparkles, TriangleAlert } from "lucide-react";
+import { AudioLines, Check, Clapperboard, Gauge, Keyboard, KeyRound, Play, Sparkles, TriangleAlert } from "lucide-react";
 import { useId, useRef, useState } from "react";
 import { CLAUDE_MODELS, CLAUDE_ROLES, EFFORTS, TTS_MODELS, supportsEffort, type ClaudeModel, type Effort, type Settings, type SettingsUpdate } from "@shared/api";
 import { Segmented, Select, Switch } from "../components/controls";
 import { useHeader } from "../components/header";
 import { INTRO_EVENT } from "../components/Intro";
 import { Meerkat } from "../components/meerkat/Meerkat";
+import { showShortcuts } from "../components/Shortcuts";
 import { CardHead, ErrorBox, PageLoading, Spinner } from "../components/ui";
 import { api, errorText } from "../lib/api";
 import { setGameOn } from "../lib/game";
 import { setConfidenceEnabled } from "../lib/confidence";
 import { t, useLang } from "../lib/i18n";
+import { setKeyHints } from "../lib/shortcuts";
 import { useResource } from "../lib/useResource";
 import { bp, color, radius } from "../theme/tokens.stylex";
 import { banner, btn, card, chip, field, layout, text } from "../theme/ui";
@@ -28,6 +30,7 @@ const s = stylex.create({
   video: { backgroundImage: `linear-gradient(135deg, ${color.lilacSoft}, ${color.surface})` },
   narrationArt: { backgroundColor: color.peachSoft },
   confidenceArt: { backgroundColor: color.pistachioSoft },
+  keyboardArt: { backgroundColor: color.lilacSoft },
   whatsNew: { display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: 16 },
   keyRow: { display: "flex", gap: 8, flexWrap: "wrap" },
   keyInput: { flex: "1 1 200px" },
@@ -52,6 +55,7 @@ export function SettingsPage() {
       <VideoSettings settings={settings.data} onChange={onChange} />
       <NarrationSettings settings={settings.data} onChange={onChange} />
       <ConfidenceSettings settings={settings.data} onChange={onChange} />
+      <KeyboardSettings settings={settings.data} onChange={onChange} />
       <ClaudeSettings settings={settings.data} onChange={onChange} />
       <WhatsNew onChange={onChange} />
     </div>
@@ -258,6 +262,10 @@ function NarrationSettings({ settings, onChange }: { settings: Settings; onChang
                 onChange={(m) => update({ ttsModel: m })}
               />
             </div>
+            <div {...stylex.props(field.stack)}>
+              <Switch checked={settings.narration.prefetch} disabled={busy} onChange={(on) => update({ narrationPrefetch: on })} label={t("settings.prefetch")} />
+              <p {...stylex.props(text.muted, text.xs, s.intro)}>{t("settings.prefetchHint")}</p>
+            </div>
           </div>
         ) : (
           <form
@@ -376,6 +384,37 @@ function ConfidenceSettings({ settings, onChange }: { settings: Settings; onChan
         onChange={(on) => void save(() => api.setSettings({ confidenceEnabled: on }))}
         label={t("settings.confidenceToggle")}
       />
+      <SaveStatus error={error} saved={saved} />
+    </section>
+  );
+}
+
+function KeyboardSettings({ settings, onChange }: { settings: Settings; onChange: (next: Settings) => void }) {
+  useLang();
+  const { busy, error, saved, save } = useSave((next) => {
+    onChange(next);
+    setKeyHints(next.shortcuts.hints);
+  });
+  return (
+    <section aria-labelledby="settings-keyboard" {...stylex.props(card.base, s.card, s.wide)}>
+      <div {...stylex.props(s.feature)}>
+        <span {...stylex.props(s.featureArt, s.keyboardArt)}>
+          <Keyboard size={34} aria-hidden="true" />
+        </span>
+        <CardHead id="settings-keyboard" title={t("settings.keyboard")} />
+      </div>
+      <p {...stylex.props(text.small, s.intro)}>{t("settings.keyboardIntro")}</p>
+      <Switch
+        checked={settings.shortcuts.hints}
+        disabled={busy}
+        onChange={(on) => void save(() => api.setSettings({ shortcutHints: on }))}
+        label={t("settings.keyHintsToggle")}
+      />
+      <div {...stylex.props(layout.row)}>
+        <button type="button" onClick={showShortcuts} {...stylex.props(btn.base, btn.ghost, btn.sm)}>
+          <Keyboard size={16} aria-hidden="true" /> {t("settings.showShortcuts")}
+        </button>
+      </div>
       <SaveStatus error={error} saved={saved} />
     </section>
   );

@@ -25,6 +25,9 @@ export function formatDateTime(iso: string): string {
   return Number.isNaN(d.getTime()) ? "" : `${dates().format(d)}, ${times().format(d)}`;
 }
 
+/** Media time as m:ss. */
+export const clock = (seconds: number) => `${Math.floor(seconds / 60)}:${String(Math.floor(seconds % 60)).padStart(2, "0")}`;
+
 export function formatUsd(v: number): string {
   return `$${v.toFixed(v < 0.1 ? 3 : 2)}`;
 }

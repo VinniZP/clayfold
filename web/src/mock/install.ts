@@ -618,10 +618,11 @@ let settings: Settings = {
   gamification: mockGameOn(),
   introSeen: mockIntroSeen(),
   language: lang(),
-  narration: { keySet: false, voiceId: null, model: "eleven_v4" },
+  narration: { keySet: false, voiceId: null, model: "eleven_v4", prefetch: false },
   // On in the mock so the Video tab can be looked at; the server default is off.
   video: { enabled: true },
   confidence: { enabled: true },
+  shortcuts: { hints: true },
   claude: Object.fromEntries(
     CLAUDE_ROLES.map((role) => [role, { model: null, effort: null, defaultModel: ["critic", "grading", "narration", "video", "game"].includes(role) ? "sonnet" : "opus", defaultEffort: ({ onboard: "medium", lesson: "high", critic: "high", video: "medium", game: "medium" } as Record<string, Effort>)[role] ?? "low" }]),
   ) as Settings["claude"],
@@ -666,7 +667,7 @@ const videos: Record<string, VideoView> = { "l-cond": readyVideo("l-cond") };
 const exports: Record<string, VideoExportView> = {};
 
 function narration(stepId: string): NarrationView | null {
-  const step = fx.condSteps.find((st) => st.id === stepId);
+  const step = [...fx.condSteps, ...fx.bayesSteps].find((st) => st?.id === stepId);
   if (step?.kind !== "explain") return null;
   const blocks = marked.lexer(step.body).filter((tok) => tok.type !== "space" && tok.type !== "def").length;
   return {
@@ -1009,15 +1010,21 @@ async function route(method: string, path: string, body: Record<string, unknown>
   }
   if (p === "/api/settings") {
     if (method === "PUT") {
-      const { language, voiceId, ttsModel, videoEnabled, claudeRole, confidenceEnabled, gamification, introSeen } = body as SettingsUpdate;
+      const { language, voiceId, ttsModel, videoEnabled, claudeRole, confidenceEnabled, gamification, introSeen, shortcutHints, narrationPrefetch } = body as SettingsUpdate;
       if (gamification !== undefined) setMockGameOn(gamification);
       settings = {
         gamification: gamification ?? settings.gamification,
         introSeen: introSeen ? setMockIntroSeen(introSeen) : settings.introSeen,
         language: language ?? settings.language,
-        narration: { ...settings.narration, voiceId: voiceId ?? settings.narration.voiceId, model: ttsModel ?? settings.narration.model },
+        narration: {
+          ...settings.narration,
+          voiceId: voiceId ?? settings.narration.voiceId,
+          model: ttsModel ?? settings.narration.model,
+          prefetch: narrationPrefetch ?? settings.narration.prefetch,
+        },
         video: { enabled: videoEnabled ?? settings.video.enabled },
         confidence: { enabled: confidenceEnabled ?? settings.confidence.enabled },
+        shortcuts: { hints: shortcutHints ?? settings.shortcuts.hints },
         claude: claudeRole
           ? { ...settings.claude, [claudeRole.role]: { ...settings.claude[claudeRole.role], model: claudeRole.model, effort: claudeRole.effort } }
           : settings.claude,

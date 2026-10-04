@@ -1,5 +1,5 @@
 import * as stylex from "@stylexjs/stylex";
-import { ArrowLeft, ArrowRight, BookOpen, Check, CircleSlash, Clapperboard, Copy, MessageCircle, NotebookText, PanelRightClose, RotateCcw, ShieldCheck, TriangleAlert } from "lucide-react";
+import { ArrowLeft, ArrowRight, BookOpen, Check, CircleSlash, Clapperboard, Copy, Headphones, MessageCircle, NotebookText, PanelRightClose, RotateCcw, ShieldCheck, TriangleAlert } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { Link, useParams, useSearchParams } from "react-router";
 import type { LessonView, PracticeFrom } from "@shared/api";
@@ -15,8 +15,11 @@ import { StaleSources } from "../components/LessonStatus";
 import { useHeader } from "../components/header";
 import type { ItemResult } from "../components/ItemView";
 import { FOCUS_LABEL, PracticeDialog, PracticeEnd, PracticeOffer } from "../components/Practice";
+import { LessonPlayer } from "../components/LessonPlayer";
+import { LessonAudio } from "../components/Narration";
 import { ProposedCards } from "../components/ProposedCards";
-import { SelectionActions, type SelectedText } from "../components/SelectionActions";
+import { type SelectedText, SelectionActions } from "../components/SelectionActions";
+import { KeyHint } from "../components/Shortcuts";
 import { StepView, type LineResults, type TutorHooks } from "../components/Steps";
 import { CardHead, Clay, Empty, ErrorBox, Markdown, PageLoading, Progress, Spinner } from "../components/ui";
 import { VideoLesson } from "../components/VideoLesson";
@@ -28,6 +31,8 @@ import { useOverlayScroll } from "../lib/overlayScroll";
 import { useRecentVisit } from "../lib/recent";
 import { useStreamStatus, useTopicStream } from "../lib/stream";
 import { useGlossaryScope } from "../lib/glossary";
+import { useShortcutPage, useShortcuts } from "../lib/shortcuts";
+import { itemSettled, upcoming, type Track } from "../lib/listen";
 import { useResource } from "../lib/useResource";
 import { bp, color, font, radius } from "../theme/tokens.stylex";
 import { banner, btn, card, chip, layout, shadow, text } from "../theme/ui";
@@ -203,7 +208,7 @@ const s = stylex.create({
   },
   tutorHead: { display: "flex", alignItems: "center", gap: 12 },
   tutorAvatar: { borderRadius: "50%", backgroundColor: color.surface2 },
-  tutorName: { fontFamily: font.display, fontSize: 22, fontWeight: 800, letterSpacing: "-0.01em", flexGrow: 1 },
+  tutorName: { fontFamily: font.display, fontSize: 22, fontWeight: 800, letterSpacing: "-0.01em", flexGrow: 1, outline: "none" },
   tutorIntro: { display: "grid", gap: 8, color: color.textMuted },
   tutorList: { display: "grid", gap: 4, margin: 0, paddingLeft: 18, fontSize: 13.5 },
   offer: { display: "grid", gap: 10, padding: 16, borderRadius: radius.inner, backgroundColor: color.lilacSoft },
@@ -258,9 +263,14 @@ export function LessonPage() {
   const [checkResults, setCheckResults] = useState<{ item: PublicItem; result: ItemResult | undefined }[] | null>(null);
   const [tutorOpen, setTutorOpen] = useState(false);
   const [tab, setTab] = useState<"lesson" | "cards" | "notes" | "video">("lesson");
-  const videoOn = useResource(() => api.settings(), "settings").data?.video.enabled ?? false;
+  const settings = useResource(() => api.settings(), "settings").data;
+  const videoOn = settings?.video.enabled ?? false;
+  const [listening, setListening] = useState(false);
+  const [answered, setAnswered] = useState<Record<string, boolean>>({});
   const docked = useMediaQuery("(min-width: 1281px)");
   const outlineRef = useRef<HTMLElement>(null);
+  const tutorRef = useRef<HTMLElement>(null);
+  const tutorToggle = useRef<HTMLButtonElement>(null);
   useOverlayScroll(outlineRef);
   const [offer, setOffer] = useState<Offer | null>(null);
   const [tutorCtx, setTutorCtx] = useState<{ itemId?: string; stepId?: string; line?: number }>({});
@@ -270,7 +280,6 @@ export function LessonPage() {
   const [tutorQuote, setTutorQuote] = useState<string | null>(null);
   const [tutorFocus, setTutorFocus] = useState(0);
   const mainRef = useRef<HTMLElement>(null);
-  const tutorRef = useRef<HTMLElement>(null);
   const offered = useRef(new Set<string>());
   const navigated = useRef(false);
   const v = view.data;
@@ -380,6 +389,21 @@ export function LessonPage() {
     () => void view.reload(),
   );
 
+  const tracks: Track[] = useMemo(
+    () =>
+      outline.map((o, i) => {
+        const st = steps[i];
+        return { kind: o.kind, state: status[i] ?? "pending", checks: st?.kind === "explain" ? st.checks.map((c) => c.id) : [] };
+      }),
+    [outline, status, steps],
+  );
+  const settled = useMemo(() => {
+    const out: Record<string, boolean> = {};
+    for (const [id, state] of Object.entries(v?.itemStates ?? {})) out[id] = itemSettled(state);
+    return { ...out, ...answered };
+  }, [v, answered]);
+  const audio = useMemo(() => ({ open: listening, start: () => setListening(true) }), [listening]);
+
   const total = outline.length;
   const requested = Number(params.get("step"));
   const firstPublished = status.findIndex((s) => s === "published");
@@ -408,7 +432,7 @@ export function LessonPage() {
   useEffect(() => {
     if (!navigated.current) return;
     const el = current ? document.getElementById(`step-title-${current.id}`) : document.getElementById("step-placeholder");
-    el?.focus();
+    if (!document.activeElement?.closest("[data-lesson-player]")) el?.focus();
     const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     window.scrollTo({ top: 0, behavior: reduce ? "auto" : "smooth" });
   }, [pos, current]);
@@ -458,6 +482,49 @@ export function LessonPage() {
     setTutorOpen(true);
     setAutoSend({ text: t("selection.defineMessage", { term: sel.term }), quote: sel.quote, nonce: Date.now() });
   };
+
+  const tutorAllowed = !inCheck && topicId !== null && (docked || (!isEnd && total > 0));
+  const focusTutor = () => {
+    setTutorOpen(true);
+    requestAnimationFrame(() => {
+      const box = tutorRef.current;
+      (box?.querySelector<HTMLElement>("form textarea:not(:disabled)") ?? box?.querySelector<HTMLElement>("h2"))?.focus();
+    });
+  };
+
+  useShortcutPage("lesson");
+  useShortcuts(
+    "page",
+    (a) => {
+      switch (a.name) {
+        case "submit":
+        case "nextStep":
+          if (isEnd || total === 0) return false;
+          go(nextPos);
+          return true;
+        case "prevStep":
+          if (prevPos < 0) return false;
+          go(prevPos);
+          return true;
+        case "tutor":
+          if (!tutorAllowed) return false;
+          focusTutor();
+          return true;
+        case "narration":
+          if (listening || inCheck || isEnd || upcoming(tracks, pos) < 0) return false;
+          setListening(true);
+          return true;
+        case "escape":
+          if (docked || !tutorOpen || inCheck) return false;
+          setTutorOpen(false);
+          tutorToggle.current?.focus();
+          return true;
+        default:
+          return false;
+      }
+    },
+    tab === "lesson",
+  );
 
   useHeader({
     title: v?.lesson.title ?? t("lesson.title"),
@@ -541,7 +608,10 @@ export function LessonPage() {
           id={`tab-${key}`}
           aria-selected={tab === key}
           aria-controls={`panel-${key}`}
-          onClick={() => setTab(key)}
+          onClick={() => {
+            setTab(key);
+            if (key !== "lesson") setListening(false);
+          }}
           {...stylex.props(s.tab, tab === key && s.tabOn)}
         >
           {icon} {t(label)}
@@ -592,7 +662,7 @@ export function LessonPage() {
     );
 
   return (
-    <>
+    <LessonAudio.Provider value={audio}>
       {tabs}
       {stale}
       <div role="tabpanel" id="panel-lesson" aria-labelledby="tab-lesson" {...stylex.props(s.grid, showTutor && docked && s.gridDocked)}>
@@ -649,8 +719,13 @@ export function LessonPage() {
                 <div {...stylex.props(s.progressBar)}>
                   <Progress value={done} max={total} label={t("lesson.stepsDone")} />
                 </div>
+                {!listening && !inCheck && !isEnd && current?.kind !== "explain" && upcoming(tracks, pos) >= 0 && (
+                  <button type="button" onClick={() => setListening(true)} {...stylex.props(btn.base, btn.ghost, btn.sm)}>
+                    <Headphones size={16} aria-hidden="true" /> {t("narration.listenLesson")}
+                  </button>
+                )}
                 {!inCheck && !isEnd && !docked && (
-                  <button type="button" aria-expanded={tutorOpen} onClick={() => setTutorOpen((o) => !o)} {...stylex.props(btn.base, btn.ghost, btn.sm)}>
+                  <button ref={tutorToggle} type="button" aria-expanded={tutorOpen} onClick={() => setTutorOpen((o) => !o)} {...stylex.props(btn.base, btn.ghost, btn.sm)}>
                     <MessageCircle size={16} aria-hidden="true" /> {t("lesson.tutor")}
                   </button>
                 )}
@@ -673,6 +748,7 @@ export function LessonPage() {
                     tutor={tutorHooks}
                     onCheckResults={(_, r) => setCheckResults(r)}
                     onPractiseMore={(itemId) => setPracticeFrom({ itemId })}
+                    onExplainCheck={(itemId, r) => setAnswered((m) => ({ ...m, [itemId]: r.gaveUp !== null || r.response.correct !== false }))}
                     itemStates={v.itemStates}
                     revealedLines={v.revealedLines[st.id] ?? []}
                     lineResults={lineResults[st.id]}
@@ -709,14 +785,29 @@ export function LessonPage() {
 
               <nav aria-label={t("lesson.stepNav")} {...stylex.props(s.nav)}>
                 <button type="button" disabled={prevPos < 0} onClick={() => go(prevPos)} {...stylex.props(btn.base, btn.ghost, s.navBtn)}>
-                  <ArrowLeft size={17} aria-hidden="true" /> {t("lesson.back")}
+                  <ArrowLeft size={17} aria-hidden="true" /> {t("lesson.back")} <KeyHint>K</KeyHint>
                 </button>
                 {!isEnd && (
                   <button type="button" onClick={() => go(nextPos)} {...stylex.props(btn.base, btn.primary, s.navBtn)}>
-                    {t(nextPos >= total ? "lesson.toSummary" : "lesson.next")} <ArrowRight size={17} aria-hidden="true" />
+                    {t(nextPos >= total ? "lesson.toSummary" : "lesson.next")} <ArrowRight size={17} aria-hidden="true" /> <KeyHint>J</KeyHint>
                   </button>
                 )}
               </nav>
+
+              {listening && (
+                <LessonPlayer
+                  tracks={tracks}
+                  titles={outline.map((o) => o.title)}
+                  steps={steps}
+                  pos={pos}
+                  settled={settled}
+                  go={go}
+                  lessonTitle={v.lesson.title}
+                  topicTitle={topicTitle}
+                  prefetch={settings?.narration.prefetch ?? false}
+                  onClose={() => setListening(false)}
+                />
+              )}
             </>
           )}
         </section>
@@ -735,7 +826,9 @@ export function LessonPage() {
           <aside ref={tutorRef} aria-label={t("lesson.aiTutor")} {...stylex.props(card.base, s.tutor, !docked && s.tutorFloating, !docked && shadow.pop)}>
             <div {...stylex.props(s.tutorHead)}>
               <Clay name="tutor-avatar" size={56} xstyle={s.tutorAvatar} />
-              <h2 {...stylex.props(s.tutorName)}>{t("lesson.aiTutor")}</h2>
+              <h2 tabIndex={-1} {...stylex.props(s.tutorName)}>
+                {t("lesson.aiTutor")}
+              </h2>
               {!docked && (
                 <button type="button" aria-label={t("lesson.closeTutor")} onClick={() => setTutorOpen(false)} {...stylex.props(btn.base, btn.icon)}>
                   <PanelRightClose size={18} aria-hidden="true" />
@@ -802,7 +895,7 @@ export function LessonPage() {
         onAsk={askAbout}
         onDefine={defineViaTutor}
       />
-    </>
+    </LessonAudio.Provider>
   );
 }
 
