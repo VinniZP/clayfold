@@ -200,6 +200,8 @@ export type ItemState = {
   hints: string[];
   /** Feedback of the latest attempt. */
   lastFeedback: string | null;
+  /** Confidence the learner gave with the latest answer. */
+  lastConfidence: Confidence | null;
   /** Present once solved, given up, or for an answered prequestion (L7). */
   solution?: string;
   correctAnswer?: string;
@@ -238,9 +240,22 @@ export type SendMessageRequest = { text: string };
 
 // Items (grading happens on the server; keys never leave it)
 // POST /api/items/:itemId/attempt AttemptRequest -> AttemptResponse
-export type AttemptRequest = { answer: Answer; hintsUsed: number; durationMs: number; context: "activate" | "check" | "practice" | "explain" | "review" };
+
+/** How sure the learner was before checking an answer (L20). Self-reported: it changes neither the grade nor mastery. */
+export const CONFIDENCE_LEVELS = ["guess", "unsure", "sure"] as const;
+export type Confidence = (typeof CONFIDENCE_LEVELS)[number];
+
+export type AttemptRequest = {
+  answer: Answer;
+  hintsUsed: number;
+  durationMs: number;
+  context: "activate" | "check" | "practice" | "explain" | "review";
+  confidence?: Confidence;
+};
 export type AttemptResponse = {
   correct: boolean | null; // null for ungraded prequestions and pending short answers
+  /** The confidence stored with the attempt; prequestions store none. */
+  confidence: Confidence | null;
   /** Option-specific feedback, or general feedback. */
   feedback: string;
   /** match and sort: per entry in display order, whether the learner placed it right. */
@@ -270,7 +285,12 @@ export type TutorRequest = { itemId?: string; stepId?: string; line?: number; qu
 // Review
 // GET /api/review?topicId= -> ReviewSession
 export type ReviewCard = { id: string; topicId: string; kind: Card["kind"]; front: string; back: string; nodeId: string };
-export type ReviewSession = { cards: ReviewCard[]; items: PublicItem[] };
+export type ReviewSession = {
+  cards: ReviewCard[];
+  items: PublicItem[];
+  /** Ids of `items` that return because the learner was sure of a wrong answer to them (L20). */
+  retests: string[];
+};
 // POST /api/cards/:cardId/review { rating: 1|2|3|4, durationMs? } -> { due }
 export type ReviewRating = 1 | 2 | 3 | 4;
 // GET /api/topics/:topicId/cards?status=proposed -> CardView[]
@@ -297,6 +317,16 @@ export type AuditVerdict = { verdict: "ok" | "missed_defect"; note?: string };
 // Stats: GET /api/stats/activity?days=7&topicId= -> ActivityDay[] (oldest first, one entry per local day,
 // days without activity included with zeros). Minutes are the sum of attempt durations and review time.
 export type ActivityDay = { date: string; attempts: number; correct: number; reviews: number; minutes: number };
+
+// Calibration: GET /api/stats/calibration -> CalibrationView
+// Graded answers that carry a confidence rating (prequestions and give-ups excluded), all time.
+export type CalibrationLevel = { confidence: Confidence; attempts: number; correct: number };
+export type CalibrationView = {
+  /** One entry per confidence level, in CONFIDENCE_LEVELS order. */
+  overall: CalibrationLevel[];
+  /** Topics with rated answers, most rated first; levels as in `overall`. */
+  topics: { topicId: string; title: string; levels: CalibrationLevel[] }[];
+};
 
 // Weak spots: GET /api/weak?topicId=&limit=10 -> WeakSpot[]
 // Items with at least 2 wrong attempts in the last 30 days, and leech cards (lapses >= 8), worst first.
@@ -357,6 +387,8 @@ export type Settings = {
   narration: { keySet: boolean; voiceId: string | null; model: TtsModel };
   /** Video lessons; they use the narration key, voice and model. */
   video: { enabled: boolean };
+  /** Graded answers offer a confidence rating before they are checked (L20); on by default. */
+  confidence: { enabled: boolean };
   claude: Record<ClaudeInstanceKind, ClaudeRoleSetting & { defaultModel: string; defaultEffort: Effort }>;
   /** The meerkat; off by default. While on, goal plans carry trophies and lessons a challenge step. */
   gamification: boolean;
@@ -380,6 +412,7 @@ export type SettingsUpdate = {
   voiceId?: string;
   ttsModel?: TtsModel;
   videoEnabled?: boolean;
+  confidenceEnabled?: boolean;
   claudeRole?: ClaudeRoleSetting & { role: ClaudeInstanceKind };
 };
 

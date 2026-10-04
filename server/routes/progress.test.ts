@@ -34,7 +34,7 @@ test("an unsolved item's state carries no solution, key, unseen hint or misconce
   const { itemIds } = insertStep(database, 0, { kind: "practice", title: "Practice", item: items.single("p") });
   const id = itemIds[0]!;
   takeHint(id, 1, database);
-  await submitAttempt(id, { answer: { format: "single", choice: 0 }, hintsUsed: 0, durationMs: 9000, context: "practice" }, { database });
+  await submitAttempt(id, { answer: { format: "single", choice: 0 }, hintsUsed: 0, durationMs: 9000, context: "practice", confidence: "sure" }, { database });
 
   const json = lessonViewJson();
   for (const secret of ["SECRET-SOL", '"solution"', '"correctAnswer"', "SECRET-HINT2", "SECRET-MISC"]) expect(json).not.toContain(secret);
@@ -45,10 +45,11 @@ test("an unsolved item's state carries no solution, key, unseen hint or misconce
     gaveUp: false,
     hints: ["SECRET-HINT1-p"],
     lastFeedback: "SECRET-FB2-p",
+    lastConfidence: "sure",
   });
 
   giveUp(id, { database });
-  expect(lessonItemStates("ls1", database)[id]).toMatchObject({ gaveUp: true, lastFeedback: null, solution: "SECRET-SOL-p", correctAnswer: "key p" });
+  expect(lessonItemStates("ls1", database)[id]).toMatchObject({ gaveUp: true, lastFeedback: null, lastConfidence: null, solution: "SECRET-SOL-p", correctAnswer: "key p" });
 });
 
 test("a wrong sort answer's placement feedback is restored after reload", async () => {

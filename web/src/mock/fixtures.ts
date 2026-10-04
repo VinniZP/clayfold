@@ -1,4 +1,4 @@
-import type { ActivityDay, AlternativeView, AuditEntry, CardView, ChatMessage, ExplainLens, GlossaryEntry, ItemState, LessonSummary, MaterialView, MemoryFile, NodeView, NoteView, SourceView, SystemView, TodayView, TopicDetail, UpdateView, VideoTimeline, WeakSpot } from "@shared/api";
+import type { ActivityDay, AlternativeView, AuditEntry, CalibrationView, CardView, ChatMessage, ExplainLens, GlossaryEntry, ItemState, LessonSummary, MaterialView, MemoryFile, NodeView, NoteView, SourceView, SystemView, TodayView, TopicDetail, UpdateView, VideoTimeline, WeakSpot } from "@shared/api";
 import type { PublicCite, PublicFigure, PublicItem, PublicStep } from "@shared/schemas";
 
 // Development fixtures for VITE_MOCK=1. Content is illustrative.
@@ -770,11 +770,19 @@ export const cards: CardView[] = [
 
 export const reviewItems: PublicItem[] = [
   item(
+    "r2",
+    { format: "single", prompt: "A test's sensitivity is 90%. Which probability equals 90%?", bloom: "understand", options: [{ text: "P(sick | test+)" }, { text: "P(test+ | sick)" }, { text: "P(sick)" }] },
+    { correct: 1, optionFeedback: ["That is the inverse probability: the chance of disease given a positive result.", "Correct.", "That is the prevalence."], solution: "Sensitivity is computed among the sick: P(test+ | sick).", correctAnswer: "P(test+ | sick)", hints: [] },
+  ),
+  item(
     "r1",
     { format: "single", prompt: "Besides the test's characteristics, which number do you need to find P(sick | test+)?", bloom: "remember", options: [{ text: "Prevalence of the disease" }, { text: "Number of people tested" }, { text: "Price of the test" }] },
     { correct: 0, optionFeedback: ["Correct.", "The number of people tested scales every group equally.", "The price does not affect the probability."], solution: "You need the prior probability, which is the prevalence.", correctAnswer: "Prevalence of the disease", hints: [] },
   ),
 ];
+
+/** Review items that return because the learner was sure of a wrong answer to them; listed first, as the server does. */
+export const reviewRetests = ["r2"];
 
 export const memoryFiles: Record<string, MemoryFile[]> = {
   "t-bayes": [
@@ -877,6 +885,7 @@ export const itemStates: Record<string, ItemState> = {
     gaveUp: false,
     hints: [],
     lastFeedback: "Close to intuition, but the rarity of the disease pulls the answer down.",
+    lastConfidence: null,
     solution: "Of 1000 people, 10 are sick and the test detects 9. Of the 990 healthy, the test wrongly fires for 89. That makes 98 positives, 9 of them sick: **9 / 98 ≈ 9%**.",
     correctAnswer: "About 9%",
   },
@@ -887,6 +896,7 @@ export const itemStates: Record<string, ItemState> = {
     gaveUp: false,
     hints: ["Sensitivity describes the test, not the patient holding a result."],
     lastFeedback: "That is the inverse probability: it is what we are looking for, and it does not equal the sensitivity.",
+    lastConfidence: "sure",
   },
 };
 
@@ -939,6 +949,16 @@ export const today: TodayView = {
   goal: { minutes: 10, done: 7 },
   advanced: [{ topicId: "t-bayes", nodeId: "cond-prob", title: "Conditional probability", mastery: "exit_passed" }],
   nextReview: { date: localDay(-1), cards: 6 },
+};
+
+const level = (confidence: "guess" | "unsure" | "sure", correct: number, attempts: number) => ({ confidence, correct, attempts });
+
+export const calibration: CalibrationView = {
+  overall: [level("guess", 8, 20), level("unsure", 17, 28), level("sure", 45, 50)],
+  topics: [
+    { topicId: "t-bayes", title: "Bayesian statistics", levels: [level("guess", 7, 17), level("unsure", 13, 22), level("sure", 34, 37)] },
+    { topicId: "t-git", title: "Git basics", levels: [level("guess", 1, 3), level("unsure", 4, 6), level("sure", 11, 13)] },
+  ],
 };
 
 export const weak: WeakSpot[] = [

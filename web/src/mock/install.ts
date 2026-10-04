@@ -52,7 +52,7 @@ const emit = sim.emit;
 // ---------- Grading ----------
 
 function stateOf(itemId: string): ItemState {
-  return (fx.itemStates[itemId] ??= { attempts: 0, wrongAttempts: 0, solved: false, gaveUp: false, hints: [], lastFeedback: null });
+  return (fx.itemStates[itemId] ??= { attempts: 0, wrongAttempts: 0, solved: false, gaveUp: false, hints: [], lastFeedback: null, lastConfidence: null });
 }
 
 function grade(itemId: string, body: AttemptRequest): AttemptResponse {
@@ -60,7 +60,7 @@ function grade(itemId: string, body: AttemptRequest): AttemptResponse {
   const st = stateOf(itemId);
   st.attempts++;
   const attemptNo = st.attempts;
-  if (!key) return { correct: null, feedback: "No answer key in the mock data.", attemptNo, offerTutor: false };
+  if (!key) return { correct: null, confidence: null, feedback: "No answer key in the mock data.", attemptNo, offerTutor: false };
   const a = body.answer;
   let correct = false;
   let feedback = key.feedback ?? "";
@@ -103,7 +103,17 @@ function grade(itemId: string, body: AttemptRequest): AttemptResponse {
   if (body.context === "activate") {
     st.solution = key.solution;
     st.correctAnswer = key.correctAnswer;
-    return { correct: null, feedback, marks, solution: key.solution, correctAnswer: key.correctAnswer, attemptNo, offerTutor: false };
+    st.lastConfidence = null;
+    return { correct: null, confidence: null, feedback, marks, solution: key.solution, correctAnswer: key.correctAnswer, attemptNo, offerTutor: false };
+  }
+  const confidence = body.confidence ?? null;
+  st.lastConfidence = confidence;
+  if (confidence) {
+    for (const levels of [fx.calibration.overall, fx.calibration.topics[0]!.levels]) {
+      const level = levels.find((l) => l.confidence === confidence)!;
+      level.attempts++;
+      if (correct) level.correct++;
+    }
   }
   if (correct) {
     st.solved = true;
@@ -115,6 +125,7 @@ function grade(itemId: string, body: AttemptRequest): AttemptResponse {
   }
   return {
     correct,
+    confidence,
     feedback,
     marks,
     solution: correct ? key.solution : undefined,
@@ -276,6 +287,7 @@ let settings: Settings = {
   narration: { keySet: false, voiceId: null, model: "eleven_v4" },
   // On in the mock so the Video tab can be looked at; the server default is off.
   video: { enabled: true },
+  confidence: { enabled: true },
   claude: Object.fromEntries(
     CLAUDE_ROLES.map((role) => [role, { model: null, effort: null, defaultModel: ["critic", "grading", "narration", "video", "game"].includes(role) ? "sonnet" : "opus", defaultEffort: ({ onboard: "medium", lesson: "high", critic: "high", video: "medium", game: "medium" } as Record<string, Effort>)[role] ?? "low" }]),
   ) as Settings["claude"],
@@ -547,6 +559,7 @@ async function route(method: string, path: string, body: Record<string, unknown>
     const session: ReviewSession = {
       cards: fx.cards.filter((c) => c.status === "active" && c.due && new Date(c.due) <= new Date() && (!topicId || c.topicId === topicId)),
       items: !topicId || topicId === "t-bayes" ? fx.reviewItems : [],
+      retests: !topicId || topicId === "t-bayes" ? fx.reviewRetests : [],
     };
     return json(session);
   }
@@ -577,10 +590,11 @@ async function route(method: string, path: string, body: Record<string, unknown>
   }
   if (p === "/api/reports") return json(undefined, 202);
   if (p === "/api/stats/activity") return json(fx.activity(Number(url.searchParams.get("days") ?? 7)));
+  if (p === "/api/stats/calibration") return json(fx.calibration);
   if (p === "/api/today") return json(fx.today);
   if (p === "/api/settings") {
     if (method === "PUT") {
-      const { language, voiceId, ttsModel, videoEnabled, claudeRole, gamification, introSeen } = body as SettingsUpdate;
+      const { language, voiceId, ttsModel, videoEnabled, claudeRole, confidenceEnabled, gamification, introSeen } = body as SettingsUpdate;
       if (gamification !== undefined) setMockGameOn(gamification);
       settings = {
         gamification: gamification ?? settings.gamification,
@@ -588,6 +602,7 @@ async function route(method: string, path: string, body: Record<string, unknown>
         language: language ?? settings.language,
         narration: { ...settings.narration, voiceId: voiceId ?? settings.narration.voiceId, model: ttsModel ?? settings.narration.model },
         video: { enabled: videoEnabled ?? settings.video.enabled },
+        confidence: { enabled: confidenceEnabled ?? settings.confidence.enabled },
         claude: claudeRole
           ? { ...settings.claude, [claudeRole.role]: { ...settings.claude[claudeRole.role], model: claudeRole.model, effort: claudeRole.effort } }
           : settings.claude,

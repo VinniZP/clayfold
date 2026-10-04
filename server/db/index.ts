@@ -18,6 +18,7 @@ const ADDED_COLUMNS = [
   ["sources", "origin", "TEXT NOT NULL DEFAULT 'web' CHECK (origin IN ('web','learner'))"],
   ["sources", "bytes", "INTEGER"],
   ["sources", "headings", "TEXT"],
+  ["attempts", "confidence", "TEXT CHECK (confidence IN ('guess','unsure','sure'))"],
 ] as const;
 
 export function openDb(file: string = paths.db): Database {

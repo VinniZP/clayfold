@@ -7,6 +7,8 @@ import { publicItem, type ItemRow } from "../routes/public";
 const DAY_MS = 24 * 60 * 60 * 1000;
 const ITEMS_PER_NODE = 2;
 const MAX_CARDS = 100;
+const MAX_RETESTS = 10;
+const GRADED_ROLES = "('check','practice','explain_check','review')";
 
 /** Groups nodes into clusters of siblings: nodes that share at least one prerequisite. */
 function siblingClusters(nodes: { id: string; prereqs: string[] }[]): string[][] {
@@ -39,9 +41,30 @@ function interleave<T>(lists: T[][]): T[] {
 }
 
 /**
- * Due cards plus delayed-retrieval items (L12) for nodes whose exit check passed at least a day ago.
- * L14: items interleave only within a cluster of confusable nodes and stay blocked otherwise; siblings
- * that share a prerequisite stand in for "confusable" (a heuristic, not a measure of similarity).
+ * L20: items with a wrong answer rated "sure" and no correct review answer since, once a day has passed
+ * since their latest attempt, whatever the mastery of their node. Oldest confident error first.
+ */
+export function retestItems(topicId: string | null, at: Date = new Date(), database: Database = db()): ItemRow[] {
+  return database
+    .query<ItemRow, string[]>(
+      `SELECT i.* FROM items i
+       JOIN (SELECT a.item_id, min(a.created_at) AS since FROM attempts a
+             WHERE a.confidence = 'sure' AND a.correct = 0 AND a.gave_up = 0 AND NOT EXISTS (
+               SELECT 1 FROM attempts r WHERE r.item_id = a.item_id AND r.context = 'review' AND r.correct = 1 AND r.created_at > a.created_at)
+             GROUP BY a.item_id) e ON e.item_id = i.id
+       WHERE i.status = 'active' AND i.role IN ${GRADED_ROLES} ${topicId ? "AND i.topic_id = ?" : ""}
+         AND (SELECT max(created_at) FROM attempts WHERE item_id = i.id) <= ?
+       ORDER BY e.since, i.rowid
+       LIMIT ${MAX_RETESTS}`,
+    )
+    .all(...(topicId ? [topicId] : []), new Date(at.getTime() - DAY_MS).toISOString());
+}
+
+/**
+ * Due cards, retests of confident errors (L20), and delayed-retrieval items (L12) for nodes whose exit check
+ * passed at least a day ago. L14: delayed-retrieval items interleave only within a cluster of confusable nodes
+ * and stay blocked otherwise; siblings that share a prerequisite stand in for "confusable" (a heuristic, not a
+ * measure of similarity).
  */
 export function reviewSession(topicId: string | null, at: Date = new Date(), database: Database = db()): ReviewSession {
   const topicFilter = topicId ? "AND topic_id = ?" : "";
@@ -64,16 +87,20 @@ export function reviewSession(topicId: string | null, at: Date = new Date(), dat
 
   const pick = database.query<ItemRow, [string, string]>(
     `SELECT i.* FROM items i
-     WHERE i.topic_id = ? AND i.node_id = ? AND i.status = 'active' AND i.role IN ('check','practice','explain_check','review')
+     WHERE i.topic_id = ? AND i.node_id = ? AND i.status = 'active' AND i.role IN ${GRADED_ROLES}
      ORDER BY (SELECT max(created_at) FROM attempts WHERE item_id = i.id), i.rowid
      LIMIT ${ITEMS_PER_NODE}`,
   );
-  const items: PublicItem[] = [];
+  const retests = retestItems(topicId, at, database);
+  const listed = new Set(retests.map((r) => r.id));
+  const items: PublicItem[] = retests.map(publicItem);
   const byTopic = new Map<string, typeof nodes>();
   for (const n of nodes) byTopic.set(n.topic_id, [...(byTopic.get(n.topic_id) ?? []), n]);
   for (const [topic, topicNodes] of byTopic) {
     const clusters = siblingClusters(topicNodes.map((n) => ({ id: n.id, prereqs: JSON.parse(n.prereqs) as string[] })));
-    for (const cluster of clusters) items.push(...interleave(cluster.map((nodeId) => pick.all(topic, nodeId).map(publicItem))));
+    for (const cluster of clusters) {
+      items.push(...interleave(cluster.map((nodeId) => pick.all(topic, nodeId).filter((r) => !listed.has(r.id)).map(publicItem))));
+    }
   }
-  return { cards, items };
+  return { cards, items, retests: [...listed] };
 }

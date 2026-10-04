@@ -1,12 +1,12 @@
 import type { Database } from "bun:sqlite";
-import type { ItemState, LessonView } from "../../shared/api";
+import type { Confidence, ItemState, LessonView } from "../../shared/api";
 import type { Answer, Item } from "../../shared/schemas";
 import { db } from "../db";
 import { displayLength } from "../gates/content";
 import { correctAnswerText, genericFeedback, gradeClosed, GradingError } from "./grading";
 import { displayOrder, type ItemRow } from "./public";
 
-type AttemptRow = { item_id: string; answer: string; correct: number | null; chosen_option: number | null; gave_up: number };
+type AttemptRow = { item_id: string; answer: string; correct: number | null; chosen_option: number | null; gave_up: number; confidence: Confidence | null };
 
 /** The feedback the latest answer got: the chosen option's, a match or sort answer's placement feedback, or the generic line. */
 function attemptFeedback(item: Item, row: ItemRow, last: AttemptRow): string {
@@ -32,7 +32,7 @@ export function lessonItemStates(lessonId: string, database: Database = db()): R
     )
     .all(lessonId);
   const attemptsOf = database.query<AttemptRow, [string]>(
-    "SELECT item_id, answer, correct, chosen_option, gave_up FROM attempts WHERE item_id = ? ORDER BY created_at, rowid",
+    "SELECT item_id, answer, correct, chosen_option, gave_up, confidence FROM attempts WHERE item_id = ? ORDER BY created_at, rowid",
   );
   const maxHint = database.query<{ level: number }, [string]>("SELECT coalesce(max(level), 0) AS level FROM hint_views WHERE item_id = ?");
 
@@ -53,6 +53,7 @@ export function lessonItemStates(lessonId: string, database: Database = db()): R
       gaveUp,
       hints: item.hints.slice(0, maxHint.get(row.id)!.level),
       lastFeedback,
+      lastConfidence: last && last.gave_up === 0 ? last.confidence : null,
       ...(reveal ? { solution: item.solution, correctAnswer: correctAnswerText(item) } : {}),
     };
   }

@@ -1,5 +1,5 @@
 import * as stylex from "@stylexjs/stylex";
-import { AudioLines, Check, Clapperboard, KeyRound, Play, Sparkles, TriangleAlert } from "lucide-react";
+import { AudioLines, Check, Clapperboard, Gauge, KeyRound, Play, Sparkles, TriangleAlert } from "lucide-react";
 import { useId, useRef, useState } from "react";
 import { CLAUDE_MODELS, CLAUDE_ROLES, EFFORTS, TTS_MODELS, supportsEffort, type ClaudeModel, type Effort, type Settings, type SettingsUpdate } from "@shared/api";
 import { Segmented, Select, Switch } from "../components/controls";
@@ -9,6 +9,7 @@ import { Meerkat } from "../components/meerkat/Meerkat";
 import { CardHead, ErrorBox, PageLoading, Spinner } from "../components/ui";
 import { api, errorText } from "../lib/api";
 import { setGameOn } from "../lib/game";
+import { setConfidenceEnabled } from "../lib/confidence";
 import { t, useLang } from "../lib/i18n";
 import { useResource } from "../lib/useResource";
 import { bp, color, radius } from "../theme/tokens.stylex";
@@ -26,6 +27,7 @@ const s = stylex.create({
   game: { backgroundImage: `linear-gradient(135deg, ${color.butter}, ${color.peachSoft})` },
   video: { backgroundImage: `linear-gradient(135deg, ${color.lilacSoft}, ${color.surface})` },
   narrationArt: { backgroundColor: color.peachSoft },
+  confidenceArt: { backgroundColor: color.pistachioSoft },
   whatsNew: { display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: 16 },
   keyRow: { display: "flex", gap: 8, flexWrap: "wrap" },
   keyInput: { flex: "1 1 200px" },
@@ -49,6 +51,7 @@ export function SettingsPage() {
       <GameSettings settings={settings.data} onChange={onChange} />
       <VideoSettings settings={settings.data} onChange={onChange} />
       <NarrationSettings settings={settings.data} onChange={onChange} />
+      <ConfidenceSettings settings={settings.data} onChange={onChange} />
       <ClaudeSettings settings={settings.data} onChange={onChange} />
       <WhatsNew onChange={onChange} />
     </div>
@@ -347,6 +350,32 @@ function ClaudeSettings({ settings, onChange }: { settings: Settings; onChange: 
           <TriangleAlert size={18} aria-hidden="true" /> {t("settings.claude.sameCritic", { model: modelOf("lesson") })}
         </p>
       )}
+      <SaveStatus error={error} saved={saved} />
+    </section>
+  );
+}
+
+function ConfidenceSettings({ settings, onChange }: { settings: Settings; onChange: (next: Settings) => void }) {
+  useLang();
+  const { busy, error, saved, save } = useSave((next) => {
+    setConfidenceEnabled(next.confidence.enabled);
+    onChange(next);
+  });
+  return (
+    <section aria-labelledby="settings-confidence" {...stylex.props(card.base, s.card, s.wide)}>
+      <div {...stylex.props(s.feature)}>
+        <span {...stylex.props(s.featureArt, s.confidenceArt)}>
+          <Gauge size={34} aria-hidden="true" />
+        </span>
+        <CardHead id="settings-confidence" title={t("settings.confidence")} />
+      </div>
+      <p {...stylex.props(text.small, s.intro)}>{t("settings.confidenceIntro")}</p>
+      <Switch
+        checked={settings.confidence.enabled}
+        disabled={busy}
+        onChange={(on) => void save(() => api.setSettings({ confidenceEnabled: on }))}
+        label={t("settings.confidenceToggle")}
+      />
       <SaveStatus error={error} saved={saved} />
     </section>
   );

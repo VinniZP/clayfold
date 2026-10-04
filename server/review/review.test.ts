@@ -152,4 +152,26 @@ describe("review session", () => {
     expect(session.items.map((i) => i.id)).toEqual([ids.b![0]!, ids.c![0]!, ids.b![1]!, ids.c![1]!, ids.d![0]!, ids.d![1]!]);
     expect(JSON.stringify(session)).not.toContain("SECRET");
   });
+
+  test("a wrong answer rated sure comes back first, a day after the item's latest attempt, until a review answer is right (L20)", async () => {
+    database.query("UPDATE nodes SET mastery = 'exit_passed', exit_passed_at = ? WHERE topic_id = 'tp1' AND id = 'b'").run(T0.toISOString());
+    const planned = insertItem(database, items.single("b0", "b"), { role: "check", lessonId: "ls1" });
+    const sure = insertItem(database, items.single("s", "b"), { role: "practice", lessonId: "ls1" });
+    const unsure = insertItem(database, items.single("u", "a"), { role: "practice", lessonId: "ls1" });
+    await attempt(sure, WRONG, "practice", T0, { confidence: "sure" });
+    await attempt(sure, KEY, "practice", later(60_000));
+    await attempt(unsure, WRONG, "practice", T0, { confidence: "unsure" });
+    const retests = (at: Date) => reviewSession("tp1", at, database).retests;
+
+    expect(retests(later(DAY))).toEqual([]); // the latest attempt is less than a day old
+    const session = reviewSession("tp1", later(DAY + 60_000), database);
+    expect(session.retests).toEqual([sure]);
+    expect(session.items.map((i) => i.id)).toEqual([sure, planned]); // listed once, ahead of delayed retrieval
+
+    await attempt(sure, WRONG, "review", later(DAY + 120_000), { confidence: "sure" });
+    expect(retests(later(DAY + 180_000))).toEqual([]);
+    expect(retests(later(2 * DAY + 180_000))).toEqual([sure]);
+    await attempt(sure, KEY, "review", later(2 * DAY + 240_000));
+    expect(retests(later(4 * DAY))).toEqual([]);
+  });
 });

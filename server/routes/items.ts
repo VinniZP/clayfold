@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { z } from "zod";
-import type { AttemptResponse, WorkedLineResponse } from "../../shared/api";
+import { CONFIDENCE_LEVELS, type AttemptResponse, type WorkedLineResponse } from "../../shared/api";
 import { db, newId } from "../db";
 import { publish } from "../hub";
 import { fail, readBody } from "./http";
@@ -23,6 +23,7 @@ const AttemptSchema = z.object({
   hintsUsed: z.number().int().min(0).default(0),
   durationMs: z.number().min(0).default(0),
   context: z.enum(["activate", "check", "practice", "explain", "review"]),
+  confidence: z.enum(CONFIDENCE_LEVELS).optional(),
 });
 
 function guard<T>(fn: () => T): T {

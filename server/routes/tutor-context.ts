@@ -1,10 +1,13 @@
 import type { Database } from "bun:sqlite";
+import type { Confidence } from "../../shared/api";
 import type { Answer, Item, Step } from "../../shared/schemas";
 import { db } from "../db";
 import { displayLength, matchOrders, matchTargets } from "../gates/content";
 import { displayOrder, type ItemRow, type StepRow } from "./public";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
+
+const CONFIDENCE_WORDS: Record<Confidence, string> = { guess: "guessing", unsure: "unsure", sure: "sure" };
 
 function describeItem(item: Item): string {
   const lines = [`Format: ${item.format}; Bloom: ${item.bloom}; node: ${item.nodeId}`, `Prompt: ${item.prompt}`];
@@ -158,8 +161,8 @@ export function buildTutorContext(
     const item = JSON.parse(row.content) as Item;
     parts.push(`Item (${row.role}); the learner does not see it in this form:\n${describeItem(item)}`);
     const attempts = database
-      .query<{ answer: string; correct: number | null; misconception: string | null; hints_used: number; gave_up: number }, [string]>(
-        "SELECT answer, correct, misconception, hints_used, gave_up FROM attempts WHERE item_id = ? ORDER BY created_at, rowid",
+      .query<{ answer: string; correct: number | null; misconception: string | null; hints_used: number; gave_up: number; confidence: Confidence | null }, [string]>(
+        "SELECT answer, correct, misconception, hints_used, gave_up, confidence FROM attempts WHERE item_id = ? ORDER BY created_at, rowid",
       )
       .all(row.id);
     parts.push(
@@ -167,7 +170,11 @@ export function buildTutorContext(
         ? `The learner's attempts on this item:\n${attempts
             .map((a, i) => {
               const verdict = a.gave_up ? "gave up" : a.correct === 1 ? "correct" : "wrong";
-              const extra = [a.misconception ? `misconception: ${a.misconception}` : "", a.hints_used ? `hints: ${a.hints_used}` : ""]
+              const extra = [
+                a.confidence ? `confidence before checking: ${CONFIDENCE_WORDS[a.confidence]}` : "",
+                a.misconception ? `misconception: ${a.misconception}` : "",
+                a.hints_used ? `hints: ${a.hints_used}` : "",
+              ]
                 .filter(Boolean)
                 .join("; ");
               return `${i + 1}. ${describeAnswer(a.answer, item, row)} — ${verdict}${extra ? ` (${extra})` : ""}`;
@@ -175,6 +182,11 @@ export function buildTutorContext(
             .join("\n")}`
         : "No attempts on this item yet.",
     );
+    if (attempts.some((a) => a.confidence === "sure" && a.correct === 0 && a.gave_up === 0)) {
+      parts.push(
+        "The learner was sure of a wrong answer on this item (L20). Name the belief that answer rests on and set it against the correct reasoning; the item returns in their review a day after their last attempt.",
+      );
+    }
 
     const node = database
       .query<{ prereqs: string }, [string, string]>("SELECT prereqs FROM nodes WHERE topic_id = ? AND id = ?")

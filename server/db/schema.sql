@@ -132,7 +132,8 @@ CREATE TABLE IF NOT EXISTS attempts (          -- A
   gave_up INTEGER NOT NULL DEFAULT 0,
   duration_ms INTEGER,
   context TEXT NOT NULL,
-  created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+  created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+  confidence TEXT CHECK (confidence IN ('guess','unsure','sure'))  -- learner's rating before the check (L20)
 );
 
 CREATE TABLE IF NOT EXISTS cards (             -- B inserts proposals; A owns review state

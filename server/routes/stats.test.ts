@@ -1,9 +1,10 @@
 import { beforeEach, expect, test } from "bun:test";
 import type { Database } from "bun:sqlite";
+import type { Confidence } from "../../shared/api";
 import { openDb } from "../db";
 import { activateCard, reviewCard } from "../review/fsrs";
-import { submitAttempt } from "./grading";
-import { activity, weakSpots } from "./stats";
+import { giveUp, submitAttempt } from "./grading";
+import { activity, calibration, weakSpots } from "./stats";
 import { insertCard, insertItem, items, seed } from "./test-fixtures";
 
 let database: Database;
@@ -52,4 +53,32 @@ test("weak spots: items wrong twice in 30 days and leech cards, worst first rela
   expect(spots.map((s) => (s.kind === "item" ? s.itemId : s.cardId))).toEqual([thrice, leech, twice]);
   expect(spots[0]).toMatchObject({ kind: "item", wrongAttempts: 3, lastMisconception: "SECRET-MISC1-w3", prompt: "Prompt w3", lessonId: "ls1" });
   expect(weakSpots("tp1", 1, NOW, database)).toHaveLength(1);
+});
+
+test("calibration counts rated, graded answers per confidence level, overall and per topic, busiest topic first (L20)", async () => {
+  database.query("INSERT INTO topics (id, slug, title, request) VALUES ('tp2', 'tp2', 'Second', 'request')").run();
+  const rate = (id: string, choice: number, confidence?: Confidence, context: "practice" | "activate" = "practice") =>
+    submitAttempt(id, { answer: { format: "single", choice }, hintsUsed: 0, durationMs: 1000, context, confidence }, { database, at: NOW });
+  const one = insertItem(database, items.single("one"), { role: "practice", lessonId: "ls1" });
+  const pre = insertItem(database, items.single("pre"), { role: "activate", lessonId: "ls1" });
+  const other = insertItem(database, items.single("other"), { role: "check", lessonId: "ls1" });
+  database.query("UPDATE items SET topic_id = 'tp2' WHERE id = ?").run(other);
+  await rate(one, 2, "sure");
+  await rate(one, 0, "sure");
+  await rate(one, 2, "guess");
+  await rate(one, 0); // unrated
+  await rate(pre, 2, "sure", "activate");
+  await rate(other, 0, "guess");
+  giveUp(one, { database, at: NOW });
+
+  const view = calibration(database);
+  expect(view.overall).toEqual([
+    { confidence: "guess", attempts: 2, correct: 1 },
+    { confidence: "unsure", attempts: 0, correct: 0 },
+    { confidence: "sure", attempts: 2, correct: 1 },
+  ]);
+  expect(view.topics.map((t) => [t.title, t.levels.map((l) => `${l.correct}/${l.attempts}`)])).toEqual([
+    ["Topic", ["1/1", "0/0", "1/2"]],
+    ["Second", ["0/1", "0/0", "0/0"]],
+  ]);
 });

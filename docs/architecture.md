@@ -109,6 +109,12 @@ Optional gamification, off by default (`settings.gamification`). Catalogs and co
 - `material_list` and `material_read` give Claude the materials and their headings with offsets. The onboard and lesson-author skills build on them first; a lesson planned after a material is added sees it in `get_learner_state`, and a lesson being written hears of it through the new-source note of `step_submit`.
 - A material that a step, item or card cites cannot be removed (409).
 
+## Confidence ratings
+
+- With `settings.confidence_enabled` (on unless set to false), the first answer to a graded item (practice, explain check, exit check, review item) is checked through one of three buttons, Guessing, Unsure or Sure, instead of a single Check button; retries, prequestions and cards are not rated. `attempts.confidence` stores the rating. Grading, mastery and learner signals do not read it (L12, L20).
+- An item with a wrong answer rated `sure` and no correct review answer since comes back in `GET /api/review` once a day has passed since its latest attempt, whatever its node's mastery: `ReviewSession.retests` lists it, and it comes before the delayed-retrieval items (`retestItems` in `server/review/session.ts`). The tutor context gives the rating of each attempt and marks such an item.
+- `GET /api/stats/calibration` counts rated answers and correct ones per level, overall and per topic; Home shows the shares and one sentence comparing the levels that have at least five answers.
+
 ## Narration
 
 - `POST /api/steps/:stepId/narration` voices an `explain` step when the learner presses Listen. A `runJsonPrompt` call (purpose `narration`) rewrites the body for speech as parts, each tied to a top-level markdown block. ElevenLabs `/v1/text-to-speech/{voice}/with-timestamps` speaks the joined parts, and its per-character timing gives each block a start and an end. The web app highlights the block being read.
