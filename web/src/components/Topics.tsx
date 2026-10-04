@@ -1,6 +1,6 @@
 import * as stylex from "@stylexjs/stylex";
 import { ArrowRight, Flag, Repeat2, Search, Sparkles } from "lucide-react";
-import { useId, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router";
 import type { TopicSummary } from "@shared/api";
 import { CONTENT_RULES, TOPIC_ART } from "@shared/i18n";
@@ -131,7 +131,8 @@ export function topicObject(title: string): ClayName {
   return CLAY_TOPICS[h % CLAY_TOPICS.length]!;
 }
 
-export function NewTopicForm({ big }: { big?: boolean }) {
+/** A new `focusKey` moves focus to the input. */
+export function NewTopicForm({ big, focusKey }: { big?: boolean; focusKey?: string }) {
   useLang();
   const [kind, setKind] = useState<TopicSummary["kind"]>("topic");
   const [value, setValue] = useState("");
@@ -139,6 +140,10 @@ export function NewTopicForm({ big }: { big?: boolean }) {
   const [error, setError] = useState<string | null>(null);
   const navigate = useNavigate();
   const id = useId();
+  const input = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    if (focusKey) input.current?.focus();
+  }, [focusKey]);
   return (
     <form
       onSubmit={async (e) => {
@@ -170,6 +175,7 @@ export function NewTopicForm({ big }: { big?: boolean }) {
         <div {...stylex.props(s.inputWrap)}>
           <Search size={20} aria-hidden="true" {...stylex.props(s.inputIcon)} />
           <input
+            ref={input}
             id={id}
             value={value}
             onChange={(e) => setValue(e.target.value)}

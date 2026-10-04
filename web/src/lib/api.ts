@@ -22,6 +22,7 @@ import type {
   ReportRequest,
   ReviewRating,
   ReviewSession,
+  SearchResults,
   Settings,
   SettingsUpdate,
   StartLessonResponse,
@@ -117,6 +118,8 @@ export const api = {
   cards: (topicId: string, status: CardView["status"]) => get<CardView[]>(`/api/topics/${e(topicId)}/cards?status=${status}`),
   cardAction: (cardId: string, action: "accept" | "suspend" | "reject") => post<unknown>(`/api/cards/${e(cardId)}/${action}`),
   editCard: (cardId: string, front: string, back: string) => request<unknown>("PATCH", `/api/cards/${e(cardId)}`, { front, back }),
+
+  search: (q: string) => get<SearchResults>(`/api/search?q=${e(q)}`),
 
   notes: (topicId: string) => get<NoteView[]>(`/api/topics/${e(topicId)}/notes`),
   addNote: (body: NoteRequest) => post<unknown>("/api/notes", body),

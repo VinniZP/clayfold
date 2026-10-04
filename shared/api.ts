@@ -221,6 +221,39 @@ export type CardView = ReviewCard & { status: "proposed" | "active" | "suspended
 export type NoteRequest = { topicId: string; lessonId?: string; stepId?: string; quote?: string; text: string };
 export type NoteView = NoteRequest & { id: string; createdAt: string };
 
+// Search: GET /api/search?q= -> SearchResults
+// Matches what the learner can see: topic and goal titles and requests, lesson titles and objectives, the text of
+// published explain and worked-example steps without faded lines, glossary terms and definitions, notes, and the
+// fronts of accepted cards. Lessons that a newer version supersedes, and their steps, are left out. Case and the
+// letters of ContentRules.fold are ignored. Every word of at least MIN_WORD (shared/search.ts) characters must occur
+// and shorter words are ignored; a query with no such word matches titles that contain it.
+// Hits come grouped in SEARCH_KINDS order, best first, at most SEARCH_PER_KIND of a kind.
+
+export const SEARCH_KINDS = ["topic", "lesson", "step", "term", "note", "card"] as const;
+export type SearchKind = (typeof SEARCH_KINDS)[number];
+export const SEARCH_PER_KIND = 5;
+
+/** `marks` are the matched [start, end) ranges of `text`, as UTF-16 offsets. */
+export type SearchText = { text: string; marks: [number, number][] };
+
+export type SearchHit = {
+  kind: SearchKind;
+  /** The topic, lesson, step, note or card id; for a term, its glossary key. */
+  id: string;
+  title: SearchText;
+  /** The passage that matched; a lesson's objective, a term's definition, a note's quote. */
+  snippet: SearchText | null;
+  topicId: string;
+  topicTitle: string;
+  topicKind: TopicSummary["kind"];
+  lessonId: string | null;
+  lessonTitle: string | null;
+  /** The step the hit is in, as a 0-based index into the lesson outline. */
+  stepIdx: number | null;
+};
+
+export type SearchResults = { query: string; hits: SearchHit[] };
+
 // Reports: POST /api/reports { targetType, targetId, text } -> 202
 export type ReportRequest = { targetType: "item" | "card" | "step"; targetId: string; text: string };
 

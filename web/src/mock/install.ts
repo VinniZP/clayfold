@@ -7,6 +7,7 @@ import { marked } from "marked";
 import { lang, t } from "../lib/i18n";
 import * as fx from "./fixtures";
 import { mockBackfill, mockCrowns, mockGameOn, mockGameView, mockIntroSeen, mockSeen, mockWear, setMockGameOn, setMockIntroSeen, startMockBackfill } from "./game";
+import { mockSearch } from "./search";
 import * as sim from "./sim";
 
 // Dev-only stand-in for the server: answers /api/* from fixtures and drives the topic
@@ -563,6 +564,7 @@ async function route(method: string, path: string, body: Record<string, unknown>
   }
   if (p === "/api/audit/sample") return json(fx.audit);
   if (p === "/api/glossary") return json(fx.glossary);
+  if (p === "/api/search") return json(mockSearch(url.searchParams.get("q") ?? ""));
   if (p === "/api/system") return json(fx.system());
   if (p === "/api/update" && method === "POST") fx.update.state = body.mode === "now" ? "installing" : "waiting";
   if (p === "/api/update") return json(fx.update);

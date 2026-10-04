@@ -1,7 +1,7 @@
 import * as stylex from "@stylexjs/stylex";
-import { ArrowLeft, Bell, BookA, Brain, CircleArrowUp, House, Layers, Menu, Moon, PawPrint, Repeat2, Search, Settings, ShieldCheck, Snowflake, SquareTerminal, Sun, X } from "lucide-react";
-import { useCallback, useEffect, useId, useRef, useState, type ReactNode } from "react";
-import { Link, NavLink, Outlet, useLocation, useNavigate } from "react-router";
+import { ArrowLeft, Bell, BookA, Brain, CircleArrowUp, House, Layers, Menu, Moon, PawPrint, Repeat2, Settings, ShieldCheck, Snowflake, SquareTerminal, Sun, X } from "lucide-react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { Link, NavLink, Outlet, useLocation } from "react-router";
 import type { TodayView, TopicSummary, UpdateMode, UpdateView } from "@shared/api";
 import { LANGS, translate, type Lang, type MessageKey } from "@shared/i18n";
 import { api, errorText } from "../lib/api";
@@ -14,6 +14,7 @@ import { bp, color, font, motion, radius } from "../theme/tokens.stylex";
 import { btn, layout, shadow, text } from "../theme/ui";
 import { AppRoot } from "./AppRoot";
 import { ClaudePanel } from "./ClaudePanel";
+import { CommandPalette } from "./CommandPalette";
 import { Celebrations } from "./meerkat/Celebrations";
 import { HeaderProvider, type HeaderInfo } from "./header";
 import { Intro } from "./Intro";
@@ -167,21 +168,6 @@ const s = stylex.create({
     display: { default: "block", [bp.mobile]: "none" },
   },
   topTools: { display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", justifyContent: "flex-end", width: { default: "auto", [bp.mobile]: "100%" } },
-  search: { position: "relative", flexGrow: { default: 0, [bp.mobile]: 1 } },
-  searchIcon: { position: "absolute", left: 16, top: "50%", transform: "translateY(-50%)", color: color.textMuted, pointerEvents: "none" },
-  searchInput: {
-    width: { default: 260, [bp.mobile]: "100%" },
-    height: 46,
-    paddingInline: "44px 18px",
-    borderWidth: 1.5,
-    borderStyle: "solid",
-    borderColor: { default: color.border, ":hover": color.borderStrong, ":focus-visible": color.focus },
-    borderRadius: radius.pill,
-    backgroundColor: color.surface,
-    color: color.text,
-    outline: { default: null, ":focus-visible": "none" },
-    boxShadow: { default: null, ":focus-visible": `0 0 0 3px ${color.lilacSoft}` },
-  },
   popover: {
     position: "absolute",
     zIndex: 30,
@@ -198,8 +184,6 @@ const s = stylex.create({
     margin: 0,
   },
   popNote: { paddingBlock: 10, paddingInline: 12, color: color.textMuted, fontSize: 14 },
-  option: { display: "flex", justifyContent: "space-between", gap: 12, paddingBlock: 10, paddingInline: 12, borderRadius: 12, cursor: "pointer", backgroundColor: { default: "transparent", ":hover": color.lilacSoft } },
-  optionOn: { backgroundColor: color.lilacSoft },
   rel: { position: "relative" },
   dot: { position: "absolute", top: 10, right: 11, width: 9, height: 9, borderRadius: "50%", backgroundColor: color.chart2, boxShadow: `0 0 0 2px ${color.surface2}` },
   notifPop: { width: 300 },
@@ -399,92 +383,6 @@ function Rail({ due }: { due: number }) {
       </div>
       </div>
     </aside>
-  );
-}
-
-function SearchBox() {
-  useLang();
-  const [query, setQuery] = useState("");
-  const [topics, setTopics] = useState<TopicSummary[] | null>(null);
-  const [open, setOpen] = useState(false);
-  const [active, setActive] = useState(0);
-  const navigate = useNavigate();
-  const listId = useId();
-  const q = query.trim().toLowerCase();
-  const results = q && topics ? topics.filter((t) => t.title.toLowerCase().includes(q)).slice(0, 6) : [];
-
-  const go = (t: TopicSummary) => {
-    setOpen(false);
-    setQuery("");
-    navigate(`/topics/${t.id}`);
-  };
-
-  return (
-    <div {...stylex.props(s.search)} onBlur={(e) => !e.currentTarget.contains(e.relatedTarget) && setOpen(false)}>
-      <Search size={18} aria-hidden="true" {...stylex.props(s.searchIcon)} />
-      <input
-        type="search"
-        role="combobox"
-        aria-label={t("search.label")}
-        aria-expanded={open && q.length > 0}
-        aria-controls={listId}
-        aria-activedescendant={results[active] ? `${listId}-${active}` : undefined}
-        placeholder={t("search.label")}
-        value={query}
-        {...stylex.props(s.searchInput)}
-        onFocus={() => {
-          if (topics === null) api.topics().then(setTopics, () => setTopics([]));
-          setOpen(true);
-        }}
-        onChange={(e) => {
-          setQuery(e.target.value);
-          setActive(0);
-          setOpen(true);
-        }}
-        onKeyDown={(e) => {
-          if (e.key === "ArrowDown") {
-            e.preventDefault();
-            setActive((a) => Math.min(a + 1, results.length - 1));
-          } else if (e.key === "ArrowUp") {
-            e.preventDefault();
-            setActive((a) => Math.max(a - 1, 0));
-          } else if (e.key === "Enter" && results[active]) {
-            e.preventDefault();
-            go(results[active]);
-          } else if (e.key === "Escape") {
-            setOpen(false);
-          }
-        }}
-      />
-      {open && q && (
-        <ul id={listId} role="listbox" aria-label={t("search.results")} {...stylex.props(s.popover, shadow.pop)}>
-          {topics === null ? (
-            <li {...stylex.props(s.popNote)}>{t("search.searching")}</li>
-          ) : results.length === 0 ? (
-            <li {...stylex.props(s.popNote)}>{t("search.nothing")}</li>
-          ) : (
-            results.map((t, i) => (
-              <li
-                key={t.id}
-                id={`${listId}-${i}`}
-                role="option"
-                aria-selected={i === active}
-                {...stylex.props(s.option, i === active && s.optionOn)}
-                onMouseDown={(e) => {
-                  e.preventDefault();
-                  go(t);
-                }}
-              >
-                <span>{t.title}</span>
-                <span {...stylex.props(text.muted, text.tnum)}>
-                  {t.nodesMastered}/{t.nodesTotal}
-                </span>
-              </li>
-            ))
-          )}
-        </ul>
-      )}
-    </div>
   );
 }
 
@@ -851,7 +749,7 @@ export function Layout() {
   useLang();
   const [header, setHeader] = useState<HeaderInfo>({ title: "" });
   const [due, setDue] = useState(0);
-  const [streak, setStreak] = useState<TodayView["streak"] | null>(null);
+  const [today, setToday] = useState<TodayView | null>(null);
   const location = useLocation();
   const drawer = useRef<HTMLDialogElement>(null);
   const onHeader = useCallback((info: HeaderInfo) => setHeader(info), []);
@@ -867,10 +765,7 @@ export function Layout() {
       (r) => setDue(r.cards.length + r.items.length),
       () => setDue(0),
     );
-    api.today().then(
-      (t) => setStreak(t.streak),
-      () => setStreak(null),
-    );
+    api.today().then(setToday, () => setToday(null));
   }, [location.pathname]);
 
   useEffect(() => {
@@ -927,7 +822,7 @@ export function Layout() {
                 ))}
               </ul>
             </nav>
-            <StreakPill streak={streak} />
+            <StreakPill streak={today?.streak ?? null} />
             <ClaudeModeSwitch />
             <ThemeSwitch />
             <LangSwitch />
@@ -940,10 +835,10 @@ export function Layout() {
               Clayfold
             </Link>
             <div {...stylex.props(s.topTools)}>
-              <SearchBox />
+              <CommandPalette due={due} goal={today?.goal ?? null} />
               <UpdatePill view={update} onChange={setUpdate} />
               <WorkingPill topics={running} />
-              <StreakPill streak={streak} />
+              <StreakPill streak={today?.streak ?? null} />
               <Notifications due={due} />
             </div>
           </div>

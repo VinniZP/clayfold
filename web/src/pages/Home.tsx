@@ -1,7 +1,7 @@
 import * as stylex from "@stylexjs/stylex";
 import { ArrowRight, Play } from "lucide-react";
-import { useState } from "react";
-import { Link } from "react-router";
+import { useEffect, useState } from "react";
+import { Link, useLocation } from "react-router";
 import type { ActivityDay, GoalMinutes, ReviewSession, TodayView, TopicDetail, TopicSummary, WeakSpot } from "@shared/api";
 import { ActivityCalendar, buildCalendar, CALENDAR_WEEKS, RibbonLegend } from "../components/ActivityCalendar";
 import { Gauge, HatchedBars, Rings, WeekDots } from "../components/Charts";
@@ -163,6 +163,15 @@ export function Home() {
   useHeader({ title: t("home.title"), sub: t("home.sub") });
   const res = useResource(loadDashboard, "home");
   const [goalError, setGoalError] = useState<string | null>(null);
+  // The command palette lands here on the daily goal or on the new-topic form.
+  const location = useLocation();
+  const land = (location.state as { land?: string } | null)?.land;
+  const goalLanding = land === "goal" && !!res.data;
+  useEffect(() => {
+    if (!goalLanding) return;
+    const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    document.getElementById("track-title")?.scrollIntoView({ block: "center", behavior: reduce ? "auto" : "smooth" });
+  }, [goalLanding, location.key]);
 
   const hero = (
     <section aria-labelledby="hero-title" {...stylex.props(s.hero)}>
@@ -170,7 +179,7 @@ export function Home() {
         {t("topics.prompt")}
       </h2>
       <p {...stylex.props(s.heroSub)}>{t("home.heroSub")}</p>
-      <NewTopicForm big />
+      <NewTopicForm big focusKey={land === "new-topic" ? location.key : undefined} />
       <Clay name="hero-knot" size={340} xstyle={s.heroArt} eager />
     </section>
   );

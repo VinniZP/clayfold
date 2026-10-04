@@ -22,6 +22,7 @@ import { formatDateTime, kindLabel, levelLabel } from "../lib/format";
 import { useCelebrationHold } from "../lib/game";
 import { t, useLang } from "../lib/i18n";
 import { useOverlayScroll } from "../lib/overlayScroll";
+import { useRecentVisit } from "../lib/recent";
 import { useStreamStatus, useTopicStream } from "../lib/stream";
 import { useGlossaryScope } from "../lib/glossary";
 import { useResource } from "../lib/useResource";
@@ -281,6 +282,7 @@ export function LessonPage() {
   const streamStatus = useStreamStatus(topicId);
   const topics = useResource(api.topics, topicId ? "topics" : null);
   const topicTitle = topics.data?.find((t) => t.id === topicId)?.title ?? null;
+  useRecentVisit(v ? { kind: "lesson", id: lessonId, title: v.lesson.title, context: topicTitle, goal: false } : null);
 
   // The lesson grid is the page's snap point: stopping near it lines the sticky outline and tutor up with the viewport.
   useEffect(() => {
