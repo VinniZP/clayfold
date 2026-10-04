@@ -1,4 +1,4 @@
-import type { ActivityDay, AuditEntry, CardView, ChatMessage, GlossaryEntry, ItemState, LessonSummary, MaterialView, MemoryFile, NodeView, NoteView, SourceView, SystemView, TodayView, TopicDetail, UpdateView, VideoTimeline, WeakSpot } from "@shared/api";
+import type { ActivityDay, AlternativeView, AuditEntry, CardView, ChatMessage, ExplainLens, GlossaryEntry, ItemState, LessonSummary, MaterialView, MemoryFile, NodeView, NoteView, SourceView, SystemView, TodayView, TopicDetail, UpdateView, VideoTimeline, WeakSpot } from "@shared/api";
 import type { PublicCite, PublicFigure, PublicItem, PublicStep } from "@shared/schemas";
 
 // Development fixtures for VITE_MOCK=1. Content is illustrative.
@@ -891,6 +891,30 @@ export const itemStates: Record<string, ItemState> = {
 };
 
 export const revealedLines: Record<string, { idx: number; text: string }[]> = {};
+
+/** Canned "Explain differently" answers; a lens asked again gets its next variant. */
+export const alternativeBodies: Record<ExplainLens, string[]> = {
+  simpler: [
+    "We only look at the cases where the condition is true, and ask how often the event happens **among them**.\n\nThat is all [[conditional probability|Conditional probability]] means: shrink the world to the condition, then count again.",
+  ],
+  analogy: [
+    "Think of an online shop's purchase funnel.\n\n- All visitors are the whole world: P(A and B) counts visitors who **both** opened the cart (B) **and** paid (A), out of everyone.\n- P(A | B) asks a different question: of the visitors who opened the cart, what share paid? You divide by the cart visitors only.\n\nThe analogy stops fitting when the condition is not something you can watch happen first, like a hidden illness behind a test result.",
+    "Picture a newsletter: of 1,000 subscribers, 200 open an email and 50 of those click a link.\n\nThe share of **all** subscribers who opened and clicked is 50 / 1,000, a [[joint probability|Joint probability]]. The share of **openers** who clicked is 50 / 200: you changed who counts as everyone.\n\nThe picture breaks down when the groups overlap in ways a funnel does not show.",
+  ],
+  steps: [
+    "1. Write down the condition B: the group you are told about.\n2. Keep only the cases inside B; the rest no longer matter.\n3. Among those, find the cases where A also happens: that is P(A and B).\n4. Divide by the size of the group you kept, P(B).\n5. The result, P(A | B), answers \"how often A, given B\".",
+  ],
+  example: [
+    "Over 100 days, 30 were rainy, and on 12 of the rainy days your bus was late.\n\nAsked \"on what share of all days was it rainy and the bus late?\", you divide by every day: 12 / 100.\n\nAsked \"on what share of the rainy days was the bus late?\", the rainy days become your whole world: 12 / 30.\n\nThe second question is a [[conditional probability|Conditional probability]]: the condition decides what you divide by.",
+  ],
+  precise: [
+    "For events A and B with P(B) > 0, [[conditional probability|Conditional probability]] is defined as P(A | B) = P(A and B) / P(B).\n\n- The numerator is the [[joint probability|Joint probability]] of A and B.\n- Dividing by P(B) rescales the probabilities inside B so that they add up to 1: B becomes the new sample space.\n- When P(B) = 0 the ratio is undefined, which is why the condition must be possible.",
+  ],
+};
+
+export const alternatives: Record<string, AlternativeView[]> = {
+  "cs-1": [{ id: "alt-seed", lens: "simpler", body: alternativeBodies.simpler[0]!, createdAt: iso(9) }],
+};
 
 /** Minutes per day for the last `days` days, oldest first; a fixed pattern with rest days. */
 export function activity(days: number): ActivityDay[] {

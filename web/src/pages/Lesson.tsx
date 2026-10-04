@@ -621,6 +621,7 @@ export function LessonPage() {
                     itemStates={v.itemStates}
                     revealedLines={v.revealedLines[st.id] ?? []}
                     lineResults={lineResults[st.id]}
+                    alternatives={v.alternatives[st.id] ?? []}
                   />
                 </div>
               ))}

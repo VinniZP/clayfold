@@ -58,3 +58,24 @@ test("tutor context for an open worked line carries its question, hidden line, c
   expect(buildTutorContext({ lessonId: "ls1", stepId, line: 2 }, database)).toContain("Accepted phrasings, as examples only: sends the history to the model");
   expect(buildTutorContext({ lessonId: "ls1", stepId }, database)).not.toContain("Open question on line");
 });
+
+test("tutor context names the lenses the learner asked for and carries the last alternative they read", () => {
+  const database = openDb(":memory:");
+  seed(database);
+  const { stepId, itemIds } = insertStep(database, 0, {
+    kind: "explain",
+    title: "Explain",
+    body: "Body",
+    cites: [{ sourceId: "src1", quote: "A verbatim quote from the source." }],
+    checks: [items.single("e")],
+  });
+  expect(buildTutorContext({ lessonId: "ls1", stepId }, database)).not.toContain("explained differently");
+  const add = database.query("INSERT INTO alternatives (id, step_id, lens, body, created_at) VALUES (?, ?, ?, ?, ?)");
+  add.run("alt1", stepId, "simpler", "Plain version", "2026-01-01T00:00:00.000Z");
+  add.run("alt2", stepId, "analogy", "Analogy version", "2026-01-01T00:01:00.000Z");
+
+  const context = buildTutorContext({ lessonId: "ls1", itemId: itemIds[0] }, database);
+  expect(context).toContain("explained differently 2 time(s), with the lenses: simpler, analogy");
+  expect(context).toContain("Analogy version");
+  expect(context).not.toContain("Plain version");
+});

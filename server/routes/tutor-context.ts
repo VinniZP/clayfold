@@ -92,6 +92,18 @@ function describeStep(step: Step): string {
   }
 }
 
+function describeAlternatives(stepId: string, database: Database): string | null {
+  const rows = database
+    .query<{ lens: string; body: string }, [string]>("SELECT lens, body FROM alternatives WHERE step_id = ? ORDER BY created_at, rowid")
+    .all(stepId);
+  const last = rows.at(-1);
+  if (!last) return null;
+  return [
+    `The learner asked for this step to be explained differently ${rows.length} time(s), with the lenses: ${[...new Set(rows.map((r) => r.lens))].join(", ")}. Its explanation did not land at first; build on the alternative they read last:`,
+    last.body,
+  ].join("\n");
+}
+
 /** The open blank of a worked-example line the learner answers through the tutor, with its answer sheet and their earlier answers. */
 function describeOpenLine(stepRow: StepRow, idx: number, database: Database): string | null {
   const step = JSON.parse(stepRow.content) as Step;
@@ -117,7 +129,8 @@ function describeOpenLine(stepRow: StepRow, idx: number, database: Database): st
 
 /**
  * L17 context for a tutor turn: the item with its key, misconceptions, solution and hints; the learner's
- * attempts on it; unmastered prerequisites of its node; the step text; and the last 24 h of attempts.
+ * attempts on it; unmastered prerequisites of its node; the step text and the alternative explanations the learner
+ * asked for; and the last 24 h of attempts.
  */
 export function buildTutorContext(
   opts: { lessonId: string; itemId?: string; stepId?: string; line?: number; at?: Date },
@@ -134,6 +147,8 @@ export function buildTutorContext(
   const stepId = opts.stepId ?? row?.step_id ?? null;
   const stepRow = stepId ? database.query<StepRow, [string]>("SELECT * FROM steps WHERE id = ?").get(stepId) : null;
   if (stepRow) parts.push(describeStep(JSON.parse(stepRow.content) as Step));
+  const alternatives = stepRow ? describeAlternatives(stepRow.id, database) : null;
+  if (alternatives) parts.push(alternatives);
   if (stepRow && opts.line !== undefined) {
     const section = describeOpenLine(stepRow, opts.line, database);
     if (section) parts.push(section);

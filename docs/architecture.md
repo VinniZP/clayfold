@@ -12,7 +12,7 @@ Browser (React, web/) ──HTTP + SSE──▶ Bun + Hono (server/), 127.0.0.1:
                                         ├─ /mcp                   MCP Streamable HTTP, tools in shared/tools.ts
                                         └─ SQLite data/clayfold.sqlite schema in server/db/schema.sql
           spawn per turn ──▶ claude -p … --plugin-dir plugin   (cwd data/workspaces/<slug>)
-          spawn per check ─▶ claude -p … --json-schema (critic, grading, narration and video scripts; no plugin, no tools)
+          spawn per check ─▶ claude -p … --json-schema (critic, grading, narration and video scripts, alternative explanations; no plugin, no tools)
           HTTPS ───────────▶ api.elevenlabs.io (narration and video audio, key from the OS credential store)
 ```
 
@@ -65,7 +65,7 @@ cwd: data/workspaces/<slug>     stdin: /dev/null     env: childEnv({ CLAYFOLD_MC
 - Term marks `[[surface|Term]]` in model-written text resolve against `glossary_terms`, filled with `glossary_set`; the step gate rejects a mark whose term the topic glossary lacks (L19), the web Markdown renderer turns marks into terms, and one popover (`web/src/components/TermPopover.tsx`) shows their definitions.
 - A worked-example blank whose answer is in plain words (an open blank with `criteria`, or an older blank with a phrase among its `answers`) is answered through the tutor: the tutor turn carries the line and its criteria, and the tutor records the verdict with `worked_line_record`, which publishes `worked.answered`. Closed blanks keep exact checking in `server/routes/grading.ts`. Tutor turns carry no skill command; the server prepends the tutor context (L17).
 - The appended system prompt names the app language (`settings.language`, English by default); Claude writes everything the learner sees in it. `--system-prompt-snapshot off` lets a resumed conversation pick up a language change.
-- The model and effort come from the conversation kind's entry in `settings.claude_roles` (`server/claude/roles.ts`), set on the Settings page. Without an entry the model is `CLAYFOLD_MODEL` and the effort is the role default in `DEFAULT_EFFORT`. Haiku models get no `--effort`: they do not support it. The critic, grading and narration calls (`runJsonPrompt`) read the same setting by their purpose, with `CLAYFOLD_CRITIC_MODEL` as the default model.
+- The model and effort come from the conversation kind's entry in `settings.claude_roles` (`server/claude/roles.ts`), set on the Settings page. Without an entry the model is `CLAYFOLD_MODEL` and the effort is the role default in `DEFAULT_EFFORT`. Haiku models get no `--effort`: they do not support it. The critic, grading and narration calls (`runJsonPrompt`) read the same setting by their purpose, with `CLAYFOLD_CRITIC_MODEL` as the default model; an alternative explanation reads the tutor's entry.
 - `--strict-mcp-config` is not used: it also drops the plugin's MCP server.
 - Plugin skills are namespaced: `/clayfold:<skill>`.
 - The plugin's `.mcp.json` takes `url` and the `X-Clayfold-Topic` header from `CLAYFOLD_MCP_URL` and `CLAYFOLD_TOPIC_ID`, with `timeout: 180000` because `step_submit` waits for the critic.
@@ -113,6 +113,14 @@ Optional gamification, off by default (`settings.gamification`). Catalogs and co
 - `POST /api/steps/:stepId/narration` voices an `explain` step when the learner presses Listen. A `runJsonPrompt` call (purpose `narration`) rewrites the body for speech as parts, each tied to a top-level markdown block. ElevenLabs `/v1/text-to-speech/{voice}/with-timestamps` speaks the joined parts, and its per-character timing gives each block a start and an end. The web app highlights the block being read.
 - `narrations` stores the audio and segments per step, for one voice and model; a change of either voices the step again on the next Listen.
 - The ElevenLabs key is kept with `Bun.secrets` (`server/secrets.ts`), not in `data/`. The browser only learns whether a key is set, and the key never enters a prompt or the environment of a `claude` process.
+
+## Explain differently
+
+- An explain or worked_example step offers lenses for another explanation: simpler, an analogy, step by step, example first (explain steps only, since a worked example is an example already) and more precise. `POST /api/steps/:stepId/alternatives` writes one with a `runJsonPrompt` call under the tutor role and stores it in `alternatives`; `LessonView.alternatives` returns them, and the step shows each as a dismissible card under its text. A lens already written opens its latest version without a call.
+- The prompt holds the step as the learner has seen it, the glossary terms marked in it, the workspace's `MISSION.md` (interests for analogies and examples, L16) and `NOTES.md`, earlier alternatives in the same lens, and `languageInstruction()`. A worked example stops at the first faded line the learner has not answered: its question goes in, its text and the lines after it do not. The step's items never enter the prompt, so the call cannot reveal a key (L7).
+- A one-shot call rather than a tutor turn: the context is the step alone, and the answer is checked before the learner sees it: at most 400 words (L4) and no headings; a term mark outside the topic glossary keeps only its surface. A failed check gets a second attempt that names the problem.
+- While the lesson's exit check is under way (some of its items answered, others not), the route answers 409 (L11).
+- The tutor context of a step names the lenses the learner asked for and carries the latest alternative (L17).
 
 ## Video lessons
 

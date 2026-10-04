@@ -256,6 +256,14 @@ CREATE TABLE IF NOT EXISTS video_clips (       -- A
   PRIMARY KEY (lesson_id, idx)
 );
 
+CREATE TABLE IF NOT EXISTS alternatives (      -- A
+  id TEXT PRIMARY KEY,
+  step_id TEXT NOT NULL REFERENCES steps(id) ON DELETE CASCADE,
+  lens TEXT NOT NULL,                           -- ExplainLens
+  body TEXT NOT NULL,                           -- Markdown; term marks name terms of the topic glossary
+  created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+);
+
 CREATE TABLE IF NOT EXISTS hint_views (        -- A
   item_id TEXT NOT NULL REFERENCES items(id) ON DELETE CASCADE,
   level INTEGER NOT NULL,                       -- 1-based rung of the item's hint ladder
@@ -314,3 +322,4 @@ CREATE INDEX IF NOT EXISTS idx_cards_due ON cards(status, due);
 CREATE INDEX IF NOT EXISTS idx_items_topic ON items(topic_id, status);
 CREATE INDEX IF NOT EXISTS idx_hint_views_item ON hint_views(item_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_worked_answers_step ON worked_answers(step_id);
+CREATE INDEX IF NOT EXISTS idx_alternatives_step ON alternatives(step_id, created_at);

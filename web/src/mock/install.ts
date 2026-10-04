@@ -1,4 +1,4 @@
-import { CLAUDE_ROLES, MATERIAL_EXTENSIONS, type Effort } from "@shared/api";
+import { CLAUDE_ROLES, type Effort, type ExplainLens, lensesFor, MATERIAL_EXTENSIONS } from "@shared/api";
 import type { AttemptRequest, AttemptResponse, ChatMessage, ItemState, LessonView, MaterialView, NarrationView, NoteRequest, PastedMaterial, ReviewSession, Settings, SettingsUpdate, TodayView, TopicDetail, TopicSummary, VideoExportView, VideoView, VoiceView } from "@shared/api";
 import type { TopicEvent } from "@shared/events";
 import type { OutfitRef, OutfitSlot } from "@shared/game";
@@ -199,6 +199,7 @@ function lessonView(id: string): LessonView | null {
       itemStates: { ...fx.itemStates },
       revealedLines: { ...fx.revealedLines },
       challengeIdx: 7,
+      alternatives: { ...fx.alternatives },
     };
   }
   if (id === "l-cond") {
@@ -212,6 +213,7 @@ function lessonView(id: string): LessonView | null {
       itemStates: { ...fx.itemStates },
       revealedLines: {},
       challengeIdx: 3,
+      alternatives: { ...fx.alternatives },
     };
   }
   if (id === "l-bayes-v1") {
@@ -225,6 +227,7 @@ function lessonView(id: string): LessonView | null {
       itemStates: {},
       revealedLines: {},
       challengeIdx: null,
+      alternatives: { ...fx.alternatives },
     };
   }
   if (id === "l-git-rebase") {
@@ -245,6 +248,7 @@ function lessonView(id: string): LessonView | null {
       itemStates: {},
       revealedLines: {},
       challengeIdx: null,
+      alternatives: { ...fx.alternatives },
     };
   }
   if (id === "l-git") {
@@ -258,6 +262,7 @@ function lessonView(id: string): LessonView | null {
       itemStates: {},
       revealedLines: {},
       challengeIdx: null,
+      alternatives: { ...fx.alternatives },
     };
   }
   return null;
@@ -582,6 +587,18 @@ async function route(method: string, path: string, body: Record<string, unknown>
     if (!view) return json({ error: "only explain steps are narrated" }, 400);
     await wait(1500);
     return json(view);
+  }
+  if ((m = p.match(/^\/api\/steps\/([^/]+)\/alternatives$/))) {
+    const step = [...fx.condSteps, ...fx.bayesSteps].find((st) => st?.id === m![1]);
+    if (step?.kind !== "explain" && step?.kind !== "worked_example") return json({ error: "only explain and worked_example steps are explained differently" }, 400);
+    const lens = body.lens as ExplainLens;
+    if (!lensesFor(step.kind).includes(lens)) return json({ error: `a ${step.kind} step has no ${String(lens)} lens` }, 400);
+    await wait(1800);
+    const list = (fx.alternatives[step.id] ??= []);
+    const variants = fx.alternativeBodies[lens];
+    const alt = { id: `alt-${++seq}`, lens, body: variants[list.filter((a) => a.lens === lens).length % variants.length]!, createdAt: new Date().toISOString() };
+    list.push(alt);
+    return json(alt);
   }
   if ((m = p.match(/^\/api\/steps\/([^/]+)\/narration\/audio$/))) {
     const view = narration(m[1]!);

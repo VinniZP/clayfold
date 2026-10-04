@@ -186,6 +186,8 @@ export type LessonView = {
   revealedLines: Record<string, { idx: number; text: string }[]>;
   /** Outline index of the lesson's challenge step, planned while gamification was on (G1). */
   challengeIdx: number | null;
+  /** Alternative explanations the learner asked for: stepId -> oldest first. */
+  alternatives: Record<string, AlternativeView[]>;
 };
 
 export type ItemState = {
@@ -468,6 +470,18 @@ export type GameView = {
 export type NarrationSegment = { block: number; start: number; end: number };
 
 export type NarrationView = { audioUrl: string; segments: NarrationSegment[] };
+
+// Explain differently: POST /api/steps/:stepId/alternatives { lens } -> AlternativeView (explain and worked_example
+// steps; 409 while the lesson's exit check is under way, L11). Claude writes it from the step text the learner has
+// seen, never from the step's items or unanswered lines (L7); each one is stored and returned in LessonView.alternatives.
+export const EXPLAIN_LENSES = ["simpler", "analogy", "steps", "example", "precise"] as const;
+export type ExplainLens = (typeof EXPLAIN_LENSES)[number];
+
+/** A worked example is a concrete case already, so it has no example-first lens. */
+export const lensesFor = (kind: "explain" | "worked_example"): readonly ExplainLens[] =>
+  kind === "explain" ? EXPLAIN_LENSES : EXPLAIN_LENSES.filter((lens) => lens !== "example");
+
+export type AlternativeView = { id: string; lens: ExplainLens; body: string; createdAt: string };
 
 // Video lessons: GET /api/lessons/:lessonId/video -> VideoView (404 when none was requested)
 // POST /api/lessons/:lessonId/video -> VideoView: starts a build, or a rebuild of a ready or failed video

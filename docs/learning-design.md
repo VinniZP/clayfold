@@ -98,5 +98,6 @@ The meerkat is optional and off by default (Settings). While it is on:
 | The same distractor chosen ≥ 2 times | misconception confirmed → keep the item |
 | Learner report | re-run blind solve and quote check, fix or retire |
 | Card with ≥ 8 lapses | `leech` → split or rewrite |
+| Explain differently on a step | stored with its lens; the tutor context of the step names the lenses and carries the latest alternative (L17). No regeneration entry: `regen_queue` and `item_replace` replace items and cards, not steps |
 
 Classical item discrimination needs many learners; these single-learner proxies follow Tarrant et al. 2009 (non-functional distractor < 5% choice) [S] and are thresholds of this project [D].
