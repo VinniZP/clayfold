@@ -8,7 +8,18 @@ import { publish } from "../hub";
 import { createWorkspace, syncTopicTitle } from "../workspace";
 import type { ConversationKind, Effort, TopicSummary } from "../../shared/api";
 import { childEnv } from "./env";
-import { interruptionMessage, interruptionNote, pendingInterruption, turnsToResume, withNote, type InterruptReason, type TurnInfo } from "./interruptions";
+import {
+  clearRunning,
+  interruptionMessage,
+  interruptionNote,
+  markRunning,
+  pendingInterruption,
+  takeLostTurns,
+  turnsToResume,
+  withNote,
+  type InterruptReason,
+  type TurnInfo,
+} from "./interruptions";
 import { effortArgs, roleRun } from "./roles";
 import { toolArgs, type Scope } from "./scope";
 import { StreamParser, type Effect, type StoredMessage } from "./stream";
@@ -208,11 +219,13 @@ function start(conversationId: string, turn: Turn, queue: Turn[]): void {
   const startedAt = now();
   const run: Run = { topicId: conv.topic_id, startedAt, ...role, activities: [], proc, turn, queue, cancelled: null, done: Promise.resolve() };
   runs.set(conversationId, run);
+  markRunning(conversationId, turn);
   db().query("UPDATE conversations SET last_active_at = ? WHERE id = ?").run(startedAt, conversationId);
   publish(conv.topic_id, { type: "conv.status", conversationId, running: true, startedAt });
   run.done = drive(conv, run).catch((e) => {
     console.error(`run ${conversationId} failed:`, e);
     runs.delete(conversationId);
+    clearRunning(conversationId);
     const error = e instanceof Error ? e.message : String(e);
     recordFinished({ conversationId, startedAt, finishedAt: now(), costUsd: null, error, cancelled: false });
     publish(conv.topic_id, { type: "conv.done", conversationId, costUsd: null, error });
@@ -293,6 +306,7 @@ async function drive(conv: ConversationRow, run: Run): Promise<void> {
   // The workspace watcher runs only while a topic stream is open; a run can rewrite MISSION.md without one.
   syncTopicTitle(conv.topic_id, conv.slug);
   runs.delete(conv.id);
+  clearRunning(conv.id);
   recordFinished({ conversationId: conv.id, startedAt: run.startedAt, finishedAt: now(), costUsd: final?.costUsd ?? null, error, cancelled: run.cancelled !== null });
   publish(conv.topic_id, { type: "conv.done", conversationId: conv.id, costUsd: final?.costUsd ?? null, error });
   publish(conv.topic_id, { type: "conv.status", conversationId: conv.id, running: false, startedAt: null });
@@ -322,8 +336,12 @@ function failGeneratingLesson(conversationId: string): void {
     .run(conversationId);
 }
 
-/** Re-runs, once, every turn a server shutdown cut off. Call after the server listens: the turn needs /mcp. */
+/**
+ * Re-runs, once, every turn a server shutdown cut off, and every turn an earlier process left running when it died
+ * without one (a watch reload, a crash). Call after the server listens: the turn needs /mcp.
+ */
 export function resumeInterruptedTurns(): number {
+  for (const { conversationId, turn } of takeLostTurns()) storeMessage(conversationId, interruptionMessage("shutdown", turn));
   const resumable = turnsToResume();
   for (const { conversationId, interruption } of resumable) {
     if (runs.has(conversationId)) continue;

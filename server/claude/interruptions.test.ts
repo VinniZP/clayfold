@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, test } from "bun:test";
 import type { Database } from "bun:sqlite";
 import { openDb } from "../db";
-import { interruptionMessage, interruptionNote, pendingInterruption, turnsToResume, withNote, type Interruption } from "./interruptions";
+import { clearRunning, interruptionMessage, interruptionNote, markRunning, pendingInterruption, takeLostTurns, turnsToResume, withNote, type Interruption } from "./interruptions";
 import type { StoredMessage } from "./stream";
 
 let database: Database;
@@ -71,5 +71,25 @@ describe("turns resumed after a restart", () => {
 
     interrupt("c2", "shutdown", true);
     expect(turnsToResume(database)).toEqual([]);
+  });
+});
+
+describe("turns lost with the server process", () => {
+  test("a recorded turn outlives the process; stored as a shutdown interruption it is resumed once", () => {
+    markRunning("c1", { text: "/clayfold:onboard Git", learnerText: "Git" }, database);
+    markRunning("c2", { text: "tutor turn", learnerText: "why?", rerun: true }, database);
+    markRunning("c2", { text: "tutor turn", learnerText: "why?", rerun: true }, database);
+    clearRunning("c1", database);
+    markRunning("c1", { text: "next turn", learnerText: null }, database);
+
+    const lost = takeLostTurns(database);
+    expect(lost).toEqual([
+      { conversationId: "c2", turn: { text: "tutor turn", learnerText: "why?", rerun: true } },
+      { conversationId: "c1", turn: { text: "next turn", learnerText: null, rerun: false } },
+    ]);
+    expect(takeLostTurns(database)).toEqual([]);
+    for (const { conversationId, turn } of lost) store(conversationId, interruptionMessage("shutdown", turn));
+    // c2's lost turn was itself a re-run, so it is not run a third time.
+    expect(turnsToResume(database).map((r) => r.conversationId)).toEqual(["c1"]);
   });
 });
