@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { openDb } from "../db";
-import { discussGoalNotes } from "./topics";
+import { discussGoalNotes, startSourceRefresh } from "./topics";
 
 test("discussGoalNotes sends the unseen notes to the goal's planning conversation once", () => {
   const database = openDb(":memory:");
@@ -17,4 +17,27 @@ test("discussGoalNotes sends the unseen notes to the goal's planning conversatio
   expect(sent[0]!.text).not.toContain("Already discussed");
   expect(database.query("SELECT count(*) AS n FROM goal_notes WHERE seen_at IS NULL").get()).toEqual({ n: 0 });
   expect(() => discussGoalNotes("goal", database, (turn) => sent.push(turn))).toThrow("no new notes");
+});
+
+test("startSourceRefresh opens a sources conversation with the focus, once a graph exists and no search runs", () => {
+  const database = openDb(":memory:");
+  database.query("INSERT INTO topics (id, slug, title, request) VALUES ('tp', 'tp', 'Meshes', 'r')").run();
+  database.query("INSERT INTO topics (id, slug, title, request, kind) VALUES ('goal', 'goal', 'Game', 'r', 'goal')").run();
+  const sent: { conversationId: string; text: string; display?: string | null }[] = [];
+  const run = (turn: (typeof sent)[number]) => void sent.push(turn);
+  const running = new Set<string>();
+
+  expect(() => startSourceRefresh("tp", undefined, database, run, (id) => running.has(id))).toThrow();
+  expect(() => startSourceRefresh("goal", undefined, database, run)).toThrow("no sources");
+  database.query("INSERT INTO nodes (topic_id, id, title, kind, summary, prereqs) VALUES ('tp', 'uv', 'UV', 'skill', 'Unwrap a mesh', '[]')").run();
+
+  const first = startSourceRefresh("tp", "more on UV unwrapping", database, run, (id) => running.has(id));
+  expect(sent).toEqual([{ conversationId: first.conversationId, text: "/clayfold:source-refresh more on UV unwrapping", display: "more on UV unwrapping" }]);
+  expect(database.query("SELECT kind FROM conversations WHERE id = ?").get(first.conversationId)).toEqual({ kind: "sources" });
+
+  running.add(first.conversationId);
+  expect(() => startSourceRefresh("tp", undefined, database, run, (id) => running.has(id))).toThrow();
+  running.clear();
+  const second = startSourceRefresh("tp", undefined, database, run, (id) => running.has(id));
+  expect(sent[1]).toEqual({ conversationId: second.conversationId, text: "/clayfold:source-refresh", display: null });
 });

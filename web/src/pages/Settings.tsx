@@ -1,5 +1,5 @@
 import * as stylex from "@stylexjs/stylex";
-import { AudioLines, BookOpen, Check, Clapperboard, Gauge, Keyboard, KeyRound, MessagesSquare, Play, RotateCcw, Sparkles, TriangleAlert } from "lucide-react";
+import { AudioLines, BookOpen, Check, Clapperboard, Gauge, Keyboard, KeyRound, Library, MessagesSquare, Play, RotateCcw, Sparkles, TriangleAlert } from "lucide-react";
 import { useId, useRef, useState } from "react";
 import { CLAUDE_MODELS, CLAUDE_ROLES, EFFORTS, TTS_MODELS, supportsEffort, type ClaudeModel, type Effort, type Settings, type SettingsUpdate } from "@shared/api";
 import { Segmented, Select, Switch } from "../components/controls";
@@ -30,6 +30,7 @@ const s = stylex.create({
   game: { backgroundImage: `linear-gradient(135deg, ${color.butter}, ${color.peachSoft})` },
   video: { backgroundImage: `linear-gradient(135deg, ${color.lilacSoft}, ${color.surface})` },
   narrationArt: { backgroundColor: color.peachSoft },
+  sourcesArt: { backgroundColor: color.lilacSoft },
   confidenceArt: { backgroundColor: color.pistachioSoft },
   keyboardArt: { backgroundColor: color.lilacSoft },
   teachbackArt: { backgroundColor: color.butter },
@@ -66,6 +67,7 @@ export function SettingsPage() {
       <GameSettings settings={settings.data} onChange={onChange} />
       <VideoSettings settings={settings.data} onChange={onChange} />
       <NarrationSettings settings={settings.data} onChange={onChange} />
+      <SourceSettings settings={settings.data} onChange={onChange} />
       <ConfidenceSettings settings={settings.data} onChange={onChange} />
       <KeyboardSettings settings={settings.data} onChange={onChange} />
       <TeachbackSettings settings={settings.data} onChange={onChange} />
@@ -442,6 +444,74 @@ function NarrationSettings({ settings, onChange }: { settings: Settings; onChang
         )}
       </div>
 
+      <SaveStatus error={error} saved={saved} />
+    </section>
+  );
+}
+
+function SourceSettings({ settings, onChange }: { settings: Settings; onChange: (next: Settings) => void }) {
+  useLang();
+  const { exaKeySet } = settings.sources;
+  const [key, setKey] = useState("");
+  const { busy, error, saved, save } = useSave(onChange);
+  const keyId = useId();
+
+  return (
+    <section aria-labelledby="settings-sources" {...stylex.props(card.base, s.card, s.wide)}>
+      <div {...stylex.props(s.feature)}>
+        <span {...stylex.props(s.featureArt, s.sourcesArt)}>
+          <Library size={34} aria-hidden="true" />
+        </span>
+        <CardHead id="settings-sources" title={t("settings.sources")}>
+          {exaKeySet && (
+            <span {...stylex.props(chip.base, chip.pistachio)}>
+              <KeyRound size={14} aria-hidden="true" /> {t("settings.keySet")}
+            </span>
+          )}
+        </CardHead>
+      </div>
+      <div {...stylex.props(s.split)}>
+        <div {...stylex.props(s.fill)}>
+          <p {...stylex.props(text.small, text.muted, s.intro)}>{t("settings.sourcesIntro")}</p>
+        </div>
+        {exaKeySet ? (
+          <div {...stylex.props(s.fill)}>
+            <p {...stylex.props(text.xs, text.muted, s.intro)}>{t("settings.exaCost")}</p>
+            <div>
+              <button type="button" disabled={busy} onClick={() => void save(() => api.removeExaKey())} {...stylex.props(btn.base, btn.ghost, btn.sm)}>
+                {t("settings.removeKey")}
+              </button>
+            </div>
+          </div>
+        ) : (
+          <form
+            {...stylex.props(field.stack)}
+            onSubmit={(e) => {
+              e.preventDefault();
+              void save(() => api.setExaKey(key.trim())).then(() => setKey(""));
+            }}
+          >
+            <label htmlFor={keyId} {...stylex.props(field.label)}>
+              {t("settings.exaKey")}
+            </label>
+            <div {...stylex.props(s.keyRow)}>
+              <input
+                id={keyId}
+                type="password"
+                autoComplete="off"
+                spellCheck={false}
+                value={key}
+                onChange={(e) => setKey(e.target.value)}
+                {...stylex.props(field.input, s.keyInput)}
+              />
+              <button type="submit" disabled={busy || key.trim().length < 10} {...stylex.props(btn.base, btn.primary)}>
+                {busy && <Spinner />} {t("settings.saveKey")}
+              </button>
+            </div>
+            <p {...stylex.props(text.muted, text.xs)}>{t("settings.exaKeyHint")}</p>
+          </form>
+        )}
+      </div>
       <SaveStatus error={error} saved={saved} />
     </section>
   );

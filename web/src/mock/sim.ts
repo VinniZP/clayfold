@@ -444,6 +444,7 @@ export function createPracticeSet(topicId: string, convId: string, nodes: { id: 
     stepsReady: 0,
     stepsTotal: size,
     sourcesStale: false,
+    newSources: 0,
     supersededBy: null,
     learnerStatus: "not_started",
     video: null,

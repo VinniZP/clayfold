@@ -10,6 +10,7 @@ import { useHeader } from "../components/header";
 import { GraphLegend, KnowledgeGraph } from "../components/KnowledgeGraph";
 import { LessonList } from "../components/LessonList";
 import { MaterialsSection } from "../components/Materials";
+import { FindSources } from "../components/FindSources";
 import { StaleSources, readyLine } from "../components/LessonStatus";
 import { CourseResident } from "../components/meerkat/CourseGame";
 import { OnboardingStepper } from "../components/OnboardingStepper";
@@ -91,6 +92,7 @@ const CONV_LABEL: Record<ConversationKind, MessageKey> = {
   tutor: "topic.conv.tutor",
   review: "topic.conv.review",
   teachback: "topic.conv.teachback",
+  sources: "topic.conv.sources",
 };
 
 const STATUS: Record<LessonSummary["status"], { label: MessageKey; tone: stylex.StyleXStyles | null }> = {
@@ -362,6 +364,15 @@ export function TopicPage() {
 
         <section aria-labelledby="sources-title" {...stylex.props(card.base)}>
           <CardHead title={t("topic.sources")} id="sources-title" />
+          {d.nodes.length > 0 && (
+            <FindSources
+              topicId={topicId}
+              onStarted={(conversationId) => {
+                setParams({ c: conversationId }, { replace: true });
+                void detail.reload();
+              }}
+            />
+          )}
           {d.sources.length === 0 ? (
             <Empty title={t("topic.noSourcesTitle")}>{t("topic.noSourcesBody")}</Empty>
           ) : (

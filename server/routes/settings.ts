@@ -8,7 +8,8 @@ import { db } from "../db";
 import { ElevenLabsError, elevenLabs } from "../elevenlabs";
 import { gameOn, setGameOn } from "../game/state";
 import { language, setLanguage, t } from "../i18n";
-import { elevenLabsKey } from "../secrets";
+import { exa, ExaError } from "../exa";
+import { elevenLabsKey, exaKey } from "../secrets";
 import { fail, readBody } from "./http";
 
 const readSetting = (key: string, database: Database): unknown => {
@@ -45,6 +46,7 @@ const settingsView = async (): Promise<Settings> => ({
   language: language(),
   narration: { keySet: Boolean(await elevenLabsKey.get()), ...narrationSettings() },
   video: { enabled: videoEnabled() },
+  sources: { exaKeySet: Boolean(await exaKey.get()) },
   confidence: { enabled: confidenceEnabled() },
   shortcuts: { hints: shortcutHints() },
   teachback: { enabled: teachbackEnabled() },
@@ -106,6 +108,21 @@ settings.put("/settings/elevenlabs-key", async (c) => {
 });
 settings.delete("/settings/elevenlabs-key", async (c) => {
   await elevenLabsKey.delete();
+  return c.json(await settingsView());
+});
+
+// The key is checked with the smallest search: one result, no contents (under a cent).
+settings.put("/settings/exa-key", async (c) => {
+  const { key } = await readBody(c, z.object({ key: z.string().trim().min(10).max(200) }));
+  await exa.search(key, { query: "an introduction to how search engines rank pages", numResults: 1 }).catch((e: unknown) => {
+    if (!(e instanceof ExaError)) throw e;
+    fail(e.status === 401 || e.status === 403 ? 400 : 502, t("settings.exaFailed", { error: e.message }));
+  });
+  await exaKey.set(key);
+  return c.json(await settingsView());
+});
+settings.delete("/settings/exa-key", async (c) => {
+  await exaKey.delete();
   return c.json(await settingsView());
 });
 

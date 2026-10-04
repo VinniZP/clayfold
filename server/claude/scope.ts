@@ -19,6 +19,11 @@ export type Scope = ConversationKind | "goal";
 export const SCOPES: Record<Scope, { builtin: string[]; plugin: ToolName[] }> = {
   lesson: { builtin: [...MEMORY, ...WEB], plugin: TOPIC_TOOLS },
   onboard: { builtin: [...MEMORY, ...WEB], plugin: TOPIC_TOOLS.filter((t) => !AUTHORING.includes(t)) },
+  // A source search adds and removes sources and proposes new nodes in its summary; the graph stays as it is.
+  sources: {
+    builtin: [...MEMORY, ...WEB],
+    plugin: ["get_learner_state", "source_add", "source_discover", "source_remove", "source_search", "material_list", "material_read"],
+  },
   tutor: { builtin: MEMORY, plugin: [...TUTORING, "worked_line_record"] },
   review: { builtin: MEMORY, plugin: [...TUTORING, "item_replace"] },
   goal: { builtin: [...MEMORY, ...WEB], plugin: ["ask_learner", "goal_plan_set"] },

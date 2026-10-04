@@ -13,13 +13,14 @@ import type {
   NoteView,
   SourceView,
   StartLessonResponse,
+  StartSourcesResponse,
   TopicDetail,
   TopicSummary,
 } from "../../shared/api";
 import type { TopicEvent } from "../../shared/events";
 import type { Card } from "../../shared/schemas";
 import { FINAL_PASS_SHARE } from "../../shared/api";
-import { isTopicRunning, runTurn } from "../claude/runner";
+import { isRunning, isTopicRunning, runTurn } from "../claude/runner";
 import { db, newId, now } from "../db";
 import { materialViews, storeMaterials, type Material } from "../gates/materials";
 import { t } from "../i18n";
@@ -268,6 +269,34 @@ topics.post("/:topicId/lessons", async (c) => {
   const conversationId = createConversation(t.id, "lesson");
   runTurn({ conversationId, text: `/clayfold:lesson-author ${nodeId ?? "next"}`, display: null });
   return c.json({ lessonId: null, conversationId } satisfies StartLessonResponse, 202);
+});
+
+/**
+ * Starts a source search for the graph's nodes, the learner's focus first, in a conversation of its own. A topic
+ * without a graph has nothing to search for, and one search runs at a time per topic.
+ */
+export function startSourceRefresh(
+  topicId: string,
+  focus: string | undefined,
+  database: Database = db(),
+  run: typeof runTurn = runTurn,
+  running: (conversationId: string) => boolean = isRunning,
+): StartSourcesResponse {
+  const topic = database.query<{ kind: TopicSummary["kind"] }, [string]>("SELECT kind FROM topics WHERE id = ?").get(topicId);
+  if (!topic) fail(404, "topic not found");
+  if (topic.kind === "goal") fail(400, "a goal has no sources of its own");
+  if (!database.query("SELECT 1 FROM nodes WHERE topic_id = ?").get(topicId)) fail(409, t("sources.refresh.noGraph"));
+  const searches = database.query<{ id: string }, [string]>("SELECT id FROM conversations WHERE topic_id = ? AND kind = 'sources'").all(topicId);
+  if (searches.some((cv) => running(cv.id))) fail(409, t("sources.refresh.running"));
+  const conversationId = newId("cv");
+  database.query("INSERT INTO conversations (id, topic_id, kind) VALUES (?, ?, 'sources')").run(conversationId, topicId);
+  run({ conversationId, text: `/clayfold:source-refresh ${focus ?? ""}`.trim(), display: focus || null });
+  return { conversationId };
+}
+
+topics.post("/:topicId/sources/refresh", async (c) => {
+  const { focus } = await readBody(c, z.object({ focus: z.string().trim().max(500).optional() }));
+  return c.json(startSourceRefresh(c.req.param("topicId"), focus || undefined), 202);
 });
 
 const HEARTBEAT_MS = 15_000;

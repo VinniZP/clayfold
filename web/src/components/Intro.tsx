@@ -12,6 +12,7 @@ import {
   FileUp,
   Headphones,
   Keyboard,
+  Library,
   Lightbulb,
   ListChecks,
   MessagesSquare,
@@ -77,6 +78,12 @@ const FLOWS: Record<IntroFeature, Flow> = {
     { icon: ListChecks, title: "intro.teachback.how3", body: "intro.teachback.how3Body" },
     { icon: RotateCcw, title: "intro.teachback.how4", body: "intro.teachback.how4Body" },
   ],
+  sources: [
+    { icon: Search, title: "intro.sources.how1", body: "intro.sources.how1Body" },
+    { icon: ListChecks, title: "intro.sources.how2", body: "intro.sources.how2Body" },
+    { icon: FileText, title: "intro.sources.how3", body: "intro.sources.how3Body" },
+    { icon: RotateCcw, title: "intro.sources.how4", body: "intro.sources.how4Body" },
+  ],
 };
 
 /** Optional features: their entry offers to turn them on. The other entries show what arrived and only move on. */
@@ -92,7 +99,13 @@ const ART: Record<Exclude<IntroFeature, "game">, { icon: LucideIcon; bg: string;
   lessons: { icon: Lightbulb, bg: "linear-gradient(160deg, #FFE0D3, #FFC9B4)", ink: "#A23F22" },
   comfort: { icon: Keyboard, bg: "linear-gradient(160deg, #FBE6C4, #F2D29B)", ink: "#865000" },
   teachback: { icon: MessagesSquare, bg: "linear-gradient(160deg, #E7E5FB, #FBE6C4)", ink: "#5640AE" },
+  sources: { icon: Library, bg: "linear-gradient(160deg, #ECF3D5, #E7E5FB)", ink: "#4A7419" },
 };
+
+const KEY_FORMS = {
+  video: { label: "intro.video.key", hint: "settings.keyHint", save: (key: string) => api.setElevenLabsKey(key) },
+  sources: { label: "intro.sources.key", hint: "settings.exaKeyHint", save: (key: string) => api.setExaKey(key) },
+} satisfies Record<string, { label: MessageKey; hint: MessageKey; save: (key: string) => Promise<Settings> }>;
 
 const TONES = [
   { bg: "#E7E5FB", ink: "#5640AE" },
@@ -218,11 +231,17 @@ export function Intro() {
     setAt(steps.length);
   };
 
+  // The video entry asks for the ElevenLabs key it needs; the sources entry offers the optional Exa key.
+  const keyFor = (f: IntroFeature | undefined, s: Settings) =>
+    f === "video" && !s.narration.keySet ? KEY_FORMS.video : f === "sources" && !s.sources.exaKeySet ? KEY_FORMS.sources : null;
+  const keyForm = feature && settings ? keyFor(feature, settings) : null;
+
   const saveKey = async () => {
+    if (!keyForm) return;
     setBusy(true);
     setError(null);
     try {
-      setSettings(await api.setElevenLabsKey(key.trim()));
+      setSettings(await keyForm.save(key.trim()));
       setKey("");
     } catch (err) {
       setError(errorText(err));
@@ -298,7 +317,7 @@ export function Intro() {
             <span>{t(`intro.${feature}.plan`)}</span>
           </p>
 
-          {feature === "video" && !settings.narration.keySet && (
+          {keyForm && (
             <form
               {...stylex.props(field.stack)}
               onSubmit={(e) => {
@@ -307,7 +326,7 @@ export function Intro() {
               }}
             >
               <label htmlFor={keyId} {...stylex.props(field.label)}>
-                {t("intro.video.key")}
+                {t(keyForm.label)}
               </label>
               <div {...stylex.props(s.keyRow)}>
                 <input id={keyId} type="password" autoComplete="off" spellCheck={false} value={key} onChange={(e) => setKey(e.target.value)} {...stylex.props(field.input, s.keyInput)} />
@@ -315,7 +334,7 @@ export function Intro() {
                   {t("settings.saveKey")}
                 </button>
               </div>
-              <p {...stylex.props(text.xs, text.muted)}>{t("settings.keyHint")}</p>
+              <p {...stylex.props(text.xs, text.muted)}>{t(keyForm.hint)}</p>
             </form>
           )}
 

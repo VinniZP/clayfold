@@ -20,6 +20,7 @@ const ADDED_COLUMNS = [
   ["sources", "headings", "TEXT"],
   ["attempts", "confidence", "TEXT CHECK (confidence IN ('guess','unsure','sure'))"],
   ["lessons", "practice", "TEXT"],
+  ["sources", "node_ids", "TEXT"],
 ] as const;
 
 // Queues every searchable row once, when the search tables are created on a database that predates them.

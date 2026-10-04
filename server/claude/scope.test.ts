@@ -13,7 +13,7 @@ test("tutor: memory tools, the tutoring tools and goal_note; every authoring too
   const t = parse("tutor");
   expect(t.tools).toEqual(["Edit", "Glob", "Grep", "Read", "Write"]);
   expect(t.allowed).toEqual(["Edit", "Glob", "Grep", "Read", "Write", "ask_learner", "get_learner_state", "goal_note", "source_search", "worked_line_record"]);
-  expect(t.denied).toEqual([...AUTHORING, "glossary_set", "goal_plan_set", "graph_set", "material_list", "material_read", "placement_record", "source_add", "teachback_finish"].sort());
+  expect(t.denied).toEqual([...AUTHORING, "glossary_set", "goal_plan_set", "graph_set", "material_list", "material_read", "placement_record", "source_add", "source_discover", "source_remove", "teachback_finish"].sort());
 });
 
 test("review adds item_replace; onboard has the web and graph tools but cannot author; lesson has everything", () => {
@@ -39,4 +39,13 @@ test("teachback: no built-in tools and only teachback_finish, so the persona can
   expect(teachback.tools).toEqual([""]);
   expect(teachback.allowed).toEqual(["teachback_finish"]);
   expect(teachback.denied).toEqual(expect.arrayContaining(["get_learner_state", "source_search", "ask_learner"]));
+});
+
+test("sources: the web, memory and the source tools; the graph and authoring stay out of reach", () => {
+  const sources = parse("sources");
+  expect(sources.tools).toEqual(expect.arrayContaining(["WebSearch", "WebFetch", "Read", "Write"]));
+  expect(sources.allowed.filter((t) => /^[a-z_]+$/.test(t))).toEqual(
+    ["get_learner_state", "material_list", "material_read", "source_add", "source_discover", "source_remove", "source_search"].sort(),
+  );
+  expect(sources.denied).toEqual(expect.arrayContaining([...AUTHORING, "graph_set", "placement_record", "ask_learner"]));
 });

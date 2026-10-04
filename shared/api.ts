@@ -7,7 +7,7 @@ import { COURSE_PRACTICE_SIZES, PRACTICE_SIZES, type Answer, type Card, type Goa
 
 export type ApiError = { error: string };
 
-export type ConversationKind = "onboard" | "lesson" | "tutor" | "review" | "teachback";
+export type ConversationKind = "onboard" | "lesson" | "tutor" | "review" | "teachback" | "sources";
 
 export type TopicSummary = {
   id: string;
@@ -57,6 +57,8 @@ export type LessonSummary = {
   stepsTotal: number;
   /** Sources were added to the topic after this lesson was planned; the lesson can be rebuilt. */
   sourcesStale: boolean;
+  /** Ok sources registered for this lesson's nodes after it was created that it does not cite; a rebuild can use them. */
+  newSources: number;
   /** A newer lesson covers the same nodes; this one is an earlier version. */
   supersededBy: string | null;
   /** The learner's progress, separate from the authoring `status`: completed once every exit-check item has an attempt. */
@@ -66,6 +68,11 @@ export type LessonSummary = {
   /** Set for a practice set: a lesson of practice steps only, with no exit check. */
   practice: { size: number; focus: PracticeFocus } | null;
 };
+
+// POST /api/topics/:topicId/sources/refresh { focus? } -> 202 StartSourcesResponse (a Claude run that finds sources for
+// the graph's nodes, the learner's focus first; 409 while the topic has no graph or another source search runs)
+
+export type StartSourcesResponse = { conversationId: string };
 
 // POST /api/lessons/:lessonId/resume -> StartLessonResponse (continues a failed lesson in its own authoring
 // session; 409 when the lesson is not failed or the session is gone)
@@ -641,6 +648,8 @@ export type TodayView = {
 // PUT /api/settings/elevenlabs-key { key } -> Settings (400 when ElevenLabs rejects the key) ; DELETE -> Settings
 // The key goes to the OS credential store and never leaves the server.
 // GET /api/settings/voices -> VoiceView[] (409 without a key)
+// PUT /api/settings/exa-key { key } -> Settings (400 when Exa rejects the key; checking it runs one search) ; DELETE -> Settings
+// Optional: with the key, source_discover also searches the web through Exa. Stored like the ElevenLabs key.
 
 export const TTS_MODELS = ["eleven_v4", "eleven_v4_turbo"] as const;
 export type TtsModel = (typeof TTS_MODELS)[number];
@@ -654,7 +663,7 @@ export type Effort = (typeof EFFORTS)[number];
 /** Haiku models take no effort parameter (supportedModels of the Claude API effort docs). */
 export const supportsEffort = (model: string): boolean => !model.includes("haiku");
 
-export const CLAUDE_ROLES = ["onboard", "lesson", "tutor", "review", "teachback", "critic", "grading", "narration", "video", "game"] as const satisfies readonly ClaudeInstanceKind[];
+export const CLAUDE_ROLES = ["onboard", "lesson", "sources", "tutor", "review", "teachback", "critic", "grading", "narration", "video", "game"] as const satisfies readonly ClaudeInstanceKind[];
 
 /** Null fields use the server defaults: CLAYFOLD_MODEL or CLAYFOLD_CRITIC_MODEL, and the role's default effort. */
 export type ClaudeRoleSetting = { model: ClaudeModel | null; effort: Effort | null };
@@ -665,6 +674,8 @@ export type Settings = {
   narration: { keySet: boolean; voiceId: string | null; model: TtsModel; prefetch: boolean };
   /** Video lessons; they use the narration key, voice and model. */
   video: { enabled: boolean };
+  /** Source search: an Exa key adds web search by meaning to source_discover. */
+  sources: { exaKeySet: boolean };
   /** Graded answers offer a confidence rating before they are checked (L23); on by default. */
   confidence: { enabled: boolean };
   /** Key badges on answer options and primary buttons, shown on devices with a fine pointer. */
@@ -682,7 +693,7 @@ export type Settings = {
  * Entries of the "What's new" tour, shown on entering the app like a changelog: each entry the learner has not
  * seen yet, oldest first. A new optional feature adds an entry here with its release date.
  */
-export const INTRO_FEATURES = ["video", "game", "practice", "lessons", "comfort", "teachback"] as const;
+export const INTRO_FEATURES = ["video", "game", "practice", "lessons", "comfort", "teachback", "sources"] as const;
 export type IntroFeature = (typeof INTRO_FEATURES)[number];
 export const INTRO_RELEASED: Record<IntroFeature, string> = {
   video: "2026-10-04",
@@ -691,6 +702,7 @@ export const INTRO_RELEASED: Record<IntroFeature, string> = {
   lessons: "2026-10-05",
   comfort: "2026-10-05",
   teachback: "2026-10-05",
+  sources: "2026-10-05",
 };
 
 export type SettingsUpdate = {

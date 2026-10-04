@@ -24,7 +24,7 @@ export type Effect =
 
 export type ActivityLabels = { label: string; doneLabel: string };
 
-type Activity = "webSearch" | "webFetch" | "readNotes" | "sourceAdd" | "sourceSearch" | "materialRead" | "graphSet" | "goalPlan" | "glossarySet" | "workedLine" | "teachbackFinish" | "lessonPlan" | "lessonFinish" | "practiceBrief" | "cardsPropose" | "learnerState" | "placement" | "itemReplace" | "recordWrite" | "recordEdit" | "mission" | "resources" | "glossary" | "notes" | "files";
+type Activity = "webSearch" | "webFetch" | "readNotes" | "sourceAdd" | "sourceDiscover" | "sourceRemove" | "sourceSearch" | "materialRead" | "graphSet" | "goalPlan" | "glossarySet" | "workedLine" | "teachbackFinish" | "lessonPlan" | "lessonFinish" | "practiceBrief" | "cardsPropose" | "learnerState" | "placement" | "itemReplace" | "recordWrite" | "recordEdit" | "mission" | "resources" | "glossary" | "notes" | "files";
 
 const ACTIVITIES: Record<string, Activity> = {
   WebSearch: "webSearch",
@@ -33,6 +33,8 @@ const ACTIVITIES: Record<string, Activity> = {
   Glob: "readNotes",
   Grep: "readNotes",
   source_add: "sourceAdd",
+  source_discover: "sourceDiscover",
+  source_remove: "sourceRemove",
   source_search: "sourceSearch",
   material_list: "materialRead",
   material_read: "materialRead",
@@ -91,7 +93,7 @@ function stepOutcomeText(stepNo: number, resultText: string): string | null {
 }
 
 /** Tools whose results change the onboarding phases (sources, graph, placement, goal plan). */
-const ONBOARDING_TOOLS = new Set(["source_add", "graph_set", "placement_record", "goal_plan_set"]);
+const ONBOARDING_TOOLS = new Set(["source_add", "source_remove", "graph_set", "placement_record", "goal_plan_set"]);
 
 type Json = Record<string, any>;
 

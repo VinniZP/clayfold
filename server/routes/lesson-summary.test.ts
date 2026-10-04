@@ -140,3 +140,28 @@ describe("learnerStatus", () => {
     expect(learnerStatus("ls1", database)).toBe("in_progress");
   });
 });
+
+test("newSources counts sources tied to the lesson's nodes that its author never knew of and it does not cite", () => {
+  const tie = (id: string, nodes: string[]) => database.query("UPDATE sources SET node_ids = ? WHERE id = ?").run(JSON.stringify(nodes), id);
+  database.query("UPDATE lessons SET status = 'finished', announced_sources = '[\"src1\"]' WHERE id = 'ls1'").run();
+  tie("src1", ["a"]);
+  addSource("src2", "https://second.example.com/a");
+  addSource("src3", "https://third.example.net/c");
+  addSource("src4", "https://fourth.example.edu/b");
+  tie("src2", ["a", "c"]);
+  tie("src3", ["c"]);
+  expect(summary().newSources).toBe(1); // src2: on node a; src1 was known at planning, src3 is on another node, src4 is tied to none
+
+  tie("src4", ["b"]);
+  expect(summary().newSources).toBe(2);
+  database
+    .query("INSERT INTO steps (id, lesson_id, idx, kind, content, status) VALUES ('st_e', 'ls1', 1, 'explain', ?, 'published')")
+    .run(JSON.stringify({ kind: "explain", title: "E", body: "Body", cites: [{ sourceId: "src4", quote: "quoted text" }], checks: [] }));
+  expect(summary().newSources).toBe(1);
+  database.query("UPDATE lessons SET announced_sources = '[\"src1\",\"src2\"]' WHERE id = 'ls1'").run();
+  expect(summary().newSources).toBe(0);
+
+  database.query("UPDATE lessons SET status = 'generating' WHERE id = 'ls1'").run();
+  database.query("UPDATE lessons SET announced_sources = '[]' WHERE id = 'ls1'").run();
+  expect(summary().newSources).toBe(0); // a lesson being written hears of new sources through step_submit
+});

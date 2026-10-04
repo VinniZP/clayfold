@@ -33,6 +33,9 @@ Data lives in `data/` (SQLite database and one workspace folder per topic with `
 | `CLAYFOLD_CRITIC_MODEL` | `sonnet` | Default model for the critic, answer grading and narration scripts; the Settings page overrides it per role |
 | `CLAYFOLD_MAX_BUDGET_USD` | `5` | Spend ceiling per Claude run |
 | `CLAYFOLD_CLAUDE_BIN` | `claude` | Claude Code executable |
+| `OPENALEX_API_KEY` | none | Free OpenAlex key for paper discovery; raises the daily free budget from $0.10 to $1 |
+
+An Exa key, added under Settings → Source search, lets Claude also search the web by meaning when it collects sources. It is optional and kept in the system keychain.
 
 ## Set up with an AI agent
 

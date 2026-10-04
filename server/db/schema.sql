@@ -29,7 +29,7 @@ CREATE TABLE IF NOT EXISTS goal_plan (         -- B writes entries; A sets topic
 CREATE TABLE IF NOT EXISTS conversations (     -- A
   id TEXT PRIMARY KEY,
   topic_id TEXT NOT NULL REFERENCES topics(id) ON DELETE CASCADE,
-  kind TEXT NOT NULL CHECK (kind IN ('onboard','lesson','tutor','review','teachback')),
+  kind TEXT NOT NULL CHECK (kind IN ('onboard','lesson','tutor','review','teachback','sources')),
   lesson_id TEXT,
   session_id TEXT,                              -- Claude Code session for --resume
   created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
@@ -74,6 +74,7 @@ CREATE TABLE IF NOT EXISTS sources (           -- B (A adds and removes learner 
   origin TEXT NOT NULL DEFAULT 'web' CHECK (origin IN ('web','learner')),
   bytes INTEGER,                                -- learner file or pasted text: its size
   headings TEXT,                                -- learner: JSON [{text, offset}] into text
+  node_ids TEXT,                                -- web: JSON graph node ids source_add said the source covers
   UNIQUE (topic_id, url)
 );
 
