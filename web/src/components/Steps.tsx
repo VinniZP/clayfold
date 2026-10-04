@@ -10,6 +10,7 @@ import { t, useLang } from "../lib/i18n";
 import { FigureView } from "./Figure";
 import { ItemView, restoredResponse, type ItemResult } from "./ItemView";
 import { NarratedBody } from "./Narration";
+import { clipQuote } from "./SelectionActions";
 import { bp, color, font, motion, radius } from "../theme/tokens.stylex";
 import { banner, btn, chip, field, layout, text } from "../theme/ui";
 import { Markdown, Spinner } from "./ui";
@@ -530,7 +531,7 @@ function StepTools({
   const captureSelection = () => {
     const sel = window.getSelection();
     const picked = sel?.toString().trim() ?? "";
-    if (picked && sel?.anchorNode && container.current?.contains(sel.anchorNode)) setQuote(picked.slice(0, 600));
+    if (picked && sel?.anchorNode && container.current?.contains(sel.anchorNode)) setQuote(clipQuote(picked));
   };
 
   const toggle = (which: "note" | "report") => {
@@ -612,7 +613,7 @@ function StepTools({
             </p>
           )}
           <div {...stylex.props(layout.actions)}>
-            <button type="submit" disabled={!note.trim() || busy} {...stylex.props(btn.base, btn.primary, btn.sm)}>
+            <button type="submit" disabled={!(note.trim() || (open === "note" && quote)) || busy} {...stylex.props(btn.base, btn.primary, btn.sm)}>
               {busy && <Spinner />} {t(open === "note" ? "steps.saveNote" : "cards.send")}
             </button>
             <button type="button" onClick={() => setOpen(null)} {...stylex.props(btn.base, btn.ghost, btn.sm)}>

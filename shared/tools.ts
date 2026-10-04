@@ -150,7 +150,7 @@ export type LearnerState = {
     at: string;
   }[];
   misconceptionsSeen: { misconception: string; count: number; nodeId: string }[];
-  notes: { text: string; lessonId: string | null; at: string }[];
+  notes: { text: string; quote: string | null; lessonId: string | null; at: string }[];
   regenQueue: { queueId: string; targetType: "item" | "card"; reason: RegenReason; content: unknown }[];
   lessonsDone: { lessonId: string; title: string; nodeIds: string[]; finishedAt: string }[];
   /** The topic glossary; text marks terms from it as [[surface|Term]]. */

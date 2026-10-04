@@ -183,7 +183,7 @@ export function MemoryPage() {
                   .map((n) => (
                     <li key={n.id} {...stylex.props(s.note)}>
                       {n.quote && <blockquote {...stylex.props(s.quote)}>{n.quote}</blockquote>}
-                      <p>{n.text}</p>
+                      {n.text && <p>{n.text}</p>}
                       <p {...stylex.props(text.xs, text.muted)}>{formatDateTime(n.createdAt)}</p>
                     </li>
                   ))}

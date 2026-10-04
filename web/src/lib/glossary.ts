@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import type { GlossaryEntry } from "@shared/api";
-import { termKey } from "@shared/terms";
+import { looseTermKey, termKey } from "@shared/terms";
 import { api } from "./api";
 
 // Every course's glossary, loaded on the first term the learner points at. A term a newer lesson added
@@ -26,19 +26,30 @@ function load(): Promise<void> {
   return pending;
 }
 
-function find(term: string): GlossaryEntry | null {
-  const key = termKey(term);
-  const matches = (entries ?? []).filter((e) => termKey(e.term) === key);
-  return matches.find((e) => e.topicId === scopeTopicId) ?? matches[0] ?? null;
+function find(matches: (e: GlossaryEntry) => boolean): GlossaryEntry | null {
+  const found = (entries ?? []).filter(matches);
+  return found.find((e) => e.topicId === scopeTopicId) ?? found[0] ?? null;
+}
+
+async function search(matches: (e: GlossaryEntry) => boolean): Promise<GlossaryEntry | null> {
+  if (!entries) await load();
+  const hit = find(matches);
+  if (hit || Date.now() - loadedAt < RELOAD_MS) return hit;
+  await load();
+  return find(matches);
 }
 
 /** The term's entry, from the current course's glossary first, then from any other course. */
-export async function lookupTerm(term: string): Promise<GlossaryEntry | null> {
-  if (!entries) await load();
-  const hit = find(term);
-  if (hit || Date.now() - loadedAt < RELOAD_MS) return hit;
-  await load();
-  return find(term);
+export function lookupTerm(term: string): Promise<GlossaryEntry | null> {
+  const key = termKey(term);
+  return search((e) => termKey(e.term) === key);
+}
+
+/** The entry whose term or original is the text the reader selected, looked up as lookupTerm does. */
+export function matchTerm(text: string): Promise<GlossaryEntry | null> {
+  const key = looseTermKey(text);
+  if (!key) return Promise.resolve(null);
+  return search((e) => looseTermKey(e.term) === key || (e.original !== null && looseTermKey(e.original) === key));
 }
 
 export const glossaryScope = () => scopeTopicId;

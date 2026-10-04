@@ -119,7 +119,8 @@ export const api = {
   editCard: (cardId: string, front: string, back: string) => request<unknown>("PATCH", `/api/cards/${e(cardId)}`, { front, back }),
 
   notes: (topicId: string) => get<NoteView[]>(`/api/topics/${e(topicId)}/notes`),
-  addNote: (body: NoteRequest) => post<unknown>("/api/notes", body),
+  addNote: (body: NoteRequest) => post<NoteView>("/api/notes", body),
+  editNote: (noteId: string, text: string) => request<unknown>("PATCH", `/api/notes/${e(noteId)}`, { text }),
   report: (body: ReportRequest) => post<unknown>("/api/reports", body),
 
   activity: (days: number, topicId?: string) =>

@@ -16,13 +16,14 @@ export function conversationView(id: string): ConversationView {
     .query<MessageRow, [string]>("SELECT id, role, text, meta, created_at FROM messages WHERE conversation_id = ? ORDER BY rowid")
     .all(id)
     .map((m): ChatMessage => {
-      const meta = parseJson<{ options?: ChatMessage["options"]; multi?: boolean; allowFree?: boolean; doneText?: string }>(m.meta);
+      const meta = parseJson<{ options?: ChatMessage["options"]; multi?: boolean; allowFree?: boolean; doneText?: string; quote?: string }>(m.meta);
       return {
         id: m.id,
         role: m.role,
         text: m.text,
         ...(m.role === "ask" && meta?.options ? { options: meta.options, multi: meta.multi ?? false, allowFree: meta.allowFree ?? true } : {}),
         ...(m.role === "activity" && meta?.doneText ? { doneText: meta.doneText } : {}),
+        ...(m.role === "user" && meta?.quote ? { quote: meta.quote } : {}),
         createdAt: m.created_at,
       };
     });

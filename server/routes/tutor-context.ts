@@ -86,10 +86,11 @@ function describeOpenLine(stepRow: StepRow, idx: number, database: Database): st
 
 /**
  * L17 context for a tutor turn: the item with its key, misconceptions, solution and hints; the learner's
- * attempts on it; unmastered prerequisites of its node; the step text; and the last 24 h of attempts.
+ * attempts on it; unmastered prerequisites of its node; the step text; the last 24 h of attempts; and the
+ * passage the learner selected on the page and asks about.
  */
 export function buildTutorContext(
-  opts: { lessonId: string; itemId?: string; stepId?: string; line?: number; at?: Date },
+  opts: { lessonId: string; itemId?: string; stepId?: string; line?: number; quote?: string; at?: Date },
   database: Database = db(),
 ): string {
   const at = opts.at ?? new Date();
@@ -161,5 +162,6 @@ export function buildTutorContext(
         .join("\n")}`,
     );
   }
+  if (opts.quote) parts.push(`The learner asks about this passage, selected on the page:\n"""\n${opts.quote}\n"""`);
   return parts.join("\n\n");
 }

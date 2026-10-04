@@ -14,6 +14,7 @@ import { StaleSources } from "../components/LessonStatus";
 import { useHeader } from "../components/header";
 import type { ItemResult } from "../components/ItemView";
 import { ProposedCards } from "../components/ProposedCards";
+import { SelectionActions, type SelectedText } from "../components/SelectionActions";
 import { StepView, type LineResults, type TutorHooks } from "../components/Steps";
 import { CardHead, Clay, Empty, ErrorBox, Markdown, PageLoading, Progress, Spinner } from "../components/ui";
 import { VideoLesson } from "../components/VideoLesson";
@@ -258,7 +259,11 @@ export function LessonPage() {
   const [tutorCtx, setTutorCtx] = useState<{ itemId?: string; stepId?: string; line?: number }>({});
   const [lineResults, setLineResults] = useState<Record<string, LineResults>>({});
   const [tutorConv, setTutorConv] = useState<string | null>(null);
-  const [autoSend, setAutoSend] = useState<{ text: string; nonce: number } | null>(null);
+  const [autoSend, setAutoSend] = useState<{ text: string; quote?: string; nonce: number } | null>(null);
+  const [tutorQuote, setTutorQuote] = useState<string | null>(null);
+  const [tutorFocus, setTutorFocus] = useState(0);
+  const mainRef = useRef<HTMLElement>(null);
+  const tutorRef = useRef<HTMLElement>(null);
   const offered = useRef(new Set<string>());
   const navigated = useRef(false);
   const v = view.data;
@@ -415,6 +420,20 @@ export function LessonPage() {
     [openOffer],
   );
 
+  const askAbout = (sel: SelectedText) => {
+    setOffer(null);
+    setTutorCtx({ stepId: current?.id, itemId: sel.itemId });
+    setTutorQuote(sel.quote);
+    setTutorOpen(true);
+    setTutorFocus((n) => n + 1);
+  };
+  const defineViaTutor = (sel: SelectedText & { term: string }) => {
+    setOffer(null);
+    setTutorCtx({ stepId: current?.id, itemId: sel.itemId });
+    setTutorOpen(true);
+    setAutoSend({ text: t("selection.defineMessage", { term: sel.term }), quote: sel.quote, nonce: Date.now() });
+  };
+
   useHeader({
     title: v?.lesson.title ?? t("lesson.title"),
     sub: v?.lesson.objective,
@@ -570,7 +589,7 @@ export function LessonPage() {
           </nav>
         </aside>
 
-        <section aria-label={t("lesson.step")} {...stylex.props(card.base, s.main)}>
+        <section ref={mainRef} aria-label={t("lesson.step")} {...stylex.props(card.base, s.main)}>
           {v.lesson.status === "failed" && (
             <div role="alert" {...stylex.props(banner.base, banner.danger, s.interrupted)}>
               <TriangleAlert size={16} aria-hidden="true" />
@@ -671,7 +690,7 @@ export function LessonPage() {
         )}
 
         {showTutor && topicId && (
-          <aside aria-label={t("lesson.aiTutor")} {...stylex.props(card.base, s.tutor, !docked && s.tutorFloating, !docked && shadow.pop)}>
+          <aside ref={tutorRef} aria-label={t("lesson.aiTutor")} {...stylex.props(card.base, s.tutor, !docked && s.tutorFloating, !docked && shadow.pop)}>
             <div {...stylex.props(s.tutorHead)}>
               <Clay name="tutor-avatar" size={56} xstyle={s.tutorAvatar} />
               <h2 {...stylex.props(s.tutorName)}>{t("lesson.aiTutor")}</h2>
@@ -712,6 +731,8 @@ export function LessonPage() {
               placeholder={t("lesson.tutorPlaceholder")}
               persona={{ avatar: "tutor-avatar", illustration: "tutor-reading" }}
               autoSend={autoSend}
+              quote={tutorQuote ? { text: tutorQuote, onRemove: () => setTutorQuote(null) } : null}
+              focusKey={tutorFocus}
               empty={
                 <div {...stylex.props(s.tutorIntro)}>
                   <p {...stylex.props(text.small)}>{t("lesson.tutorIntro")}</p>
@@ -722,8 +743,8 @@ export function LessonPage() {
                   </ul>
                 </div>
               }
-              onSend={async (msg) => {
-                const res = await api.tutor(lessonId, { ...tutorCtx, stepId: tutorCtx.stepId ?? current?.id, text: msg });
+              onSend={async (msg, quote) => {
+                const res = await api.tutor(lessonId, { ...tutorCtx, stepId: tutorCtx.stepId ?? current?.id, quote, text: msg });
                 setTutorConv(res.conversationId);
                 return res.conversationId;
               }}
@@ -732,6 +753,13 @@ export function LessonPage() {
         )}
       </div>
       <LessonCompanion topicId={topicId} step={pos} total={total} />
+      <SelectionActions
+        roots={[mainRef, tutorRef]}
+        tutorBlocked={inCheck ? t("selection.tutorOffCheck") : null}
+        noteTarget={topicId ? { topicId, lessonId, stepId: current?.id } : null}
+        onAsk={askAbout}
+        onDefine={defineViaTutor}
+      />
     </>
   );
 }
@@ -758,7 +786,7 @@ function LessonNotes({ topicId, lessonId }: { topicId: string; lessonId: string 
           {mine.map((n) => (
             <li key={n.id} {...stylex.props(s.note)}>
               {n.quote && <blockquote {...stylex.props(s.quote)}>{n.quote}</blockquote>}
-              <p>{n.text}</p>
+              {n.text && <p>{n.text}</p>}
               <p {...stylex.props(text.xs, text.muted)}>{formatDateTime(n.createdAt)}</p>
             </li>
           ))}

@@ -15,9 +15,9 @@ notes.post("/notes", async (c) => {
       topicId: z.string().min(1),
       lessonId: z.string().min(1).optional(),
       stepId: z.string().min(1).optional(),
-      quote: z.string().max(2000).optional(),
-      text: z.string().trim().min(1).max(8000),
-    }),
+      quote: z.string().trim().min(1).max(2000).optional(),
+      text: z.string().trim().max(8000),
+    }).refine((r) => r.text || r.quote, "a note needs text or a quote"),
   );
   if (!db().query("SELECT 1 FROM topics WHERE id = ?").get(req.topicId)) fail(404, "topic not found");
   const id = newId("nt");
@@ -26,6 +26,15 @@ notes.post("/notes", async (c) => {
     .query("INSERT INTO notes (id, topic_id, lesson_id, step_id, quote, text, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)")
     .run(id, req.topicId, req.lessonId ?? null, req.stepId ?? null, req.quote ?? null, req.text, createdAt);
   return c.json({ ...req, id, createdAt } satisfies NoteView, 201);
+});
+
+notes.patch("/notes/:noteId", async (c) => {
+  const { text } = await readBody(c, z.object({ text: z.string().trim().max(8000) }));
+  const note = db().query<{ quote: string | null }, [string]>("SELECT quote FROM notes WHERE id = ?").get(c.req.param("noteId"));
+  if (!note) fail(404, "note not found");
+  if (!text && !note.quote) fail(400, "a note needs text or a quote");
+  db().query("UPDATE notes SET text = ? WHERE id = ?").run(text, c.req.param("noteId"));
+  return c.body(null, 204);
 });
 
 notes.post("/reports", async (c) => {

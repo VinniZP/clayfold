@@ -373,7 +373,21 @@ async function route(method: string, path: string, body: Record<string, unknown>
   if ((m = p.match(/^\/api\/lessons\/([^/]+)\/tutor$/))) {
     const conversationId = "c-tutor";
     fx.conversations[conversationId] ??= { topicId: "t-bayes", kind: "tutor", messages: [] };
-    fx.conversations[conversationId].messages.push({ id: `tu-${++seq}`, role: "user", text: String(body.text), createdAt: new Date().toISOString() });
+    const quote = typeof body.quote === "string" ? body.quote : undefined;
+    fx.conversations[conversationId].messages.push({ id: `tu-${++seq}`, role: "user", text: String(body.text), quote, createdAt: new Date().toISOString() });
+    if (quote) {
+      setTimeout(
+        () =>
+          sim.reply(
+            "t-bayes",
+            conversationId,
+            `Let's read that passage slowly. The key move is **which group you count in**: “${quote.length > 80 ? `${quote.slice(0, 80)}…` : quote}” is about the people with a positive result, not about everyone who was tested. Which number in the problem describes that group?`,
+            ["Reading the passage"],
+          ),
+        400,
+      );
+      return json({ conversationId });
+    }
     const lessonId = m[1]!;
     const stepId = String(body.stepId ?? "");
     const lineIdx = typeof body.line === "number" ? body.line : null;
@@ -488,8 +502,14 @@ async function route(method: string, path: string, body: Record<string, unknown>
     return json(undefined, 202);
   }
   if (p === "/api/notes") {
-    fx.notes.push({ ...(body as unknown as NoteRequest), id: `n-${++seq}`, createdAt: new Date().toISOString() });
-    return json(undefined, 202);
+    const note = { ...(body as unknown as NoteRequest), id: `n-${++seq}`, createdAt: new Date().toISOString() };
+    fx.notes.push(note);
+    return json(note, 201);
+  }
+  if ((m = p.match(/^\/api\/notes\/([^/]+)$/)) && method === "PATCH") {
+    const note = fx.notes.find((n) => n.id === m![1]);
+    if (note) note.text = String(body.text ?? "");
+    return json(undefined, 204);
   }
   if (p === "/api/reports") return json(undefined, 202);
   if (p === "/api/stats/activity") return json(fx.activity(Number(url.searchParams.get("days") ?? 7)));

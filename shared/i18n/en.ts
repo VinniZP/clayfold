@@ -200,6 +200,8 @@ export const en = {
   "chat.message": "Message",
   "chat.pickOption": "Choose an option above",
   "chat.send": "Send",
+  "chat.aboutPassage": "About:",
+  "chat.askAboutPassage": "Ask about this passage",
   "chat.optionsAbove": { one: "{count} answer option above", other: "{count} answer options above" },
 
   // Web: day progress and streak
@@ -437,6 +439,27 @@ export const en = {
   "steps.noteText": "Note text",
   "steps.whatsWrong": "What is wrong with this step?",
   "steps.saveNote": "Save note",
+
+  // Web: actions on selected lesson text
+  "selection.toolbar": "Actions for the selected text",
+  "selection.hint": "{shortcut} moves here from the keyboard, Esc closes",
+  "selection.note": "Save as note",
+  "selection.define": "Define",
+  "selection.defineViaTutor": "Not in the glossary: the tutor explains it in context",
+  "selection.defineMessage": "What does “{term}” mean here?",
+  "selection.definition": "{term}: {definition}",
+  "selection.copy": "Copy",
+  "selection.copied": "Copied",
+  "selection.copyFailed": "The browser did not allow copying",
+  "selection.tutorOffCheck": "No tutor during the exit check",
+  "selection.saving": "Saving",
+  "selection.noteSaved": "Saved to notes",
+  "selection.addComment": "Add a comment",
+  "selection.comment": "Comment on the note",
+  "selection.commentPlaceholder": "Why it matters (optional)",
+  "selection.saveComment": "Save",
+  "selection.commentSaved": "Comment saved",
+  "selection.close": "Close",
 
   // Web: audit
   "audit.format": "format: {format}",
