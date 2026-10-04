@@ -30,6 +30,7 @@ import { fail, parseBody, readBody } from "./http";
 import { lessonSummary, type LessonRow } from "./lesson-summary";
 import { extractMaterials, materialsBodyLimit, readForm } from "./materials";
 import { deriveGoalPhases, derivePhases, onboardingFacts } from "./onboarding";
+import { teachbackSummaries } from "./teachback";
 
 type TopicRow = { id: string; slug: string; title: string; created_at: string; kind: TopicSummary["kind"]; goal_id: string | null };
 
@@ -195,7 +196,7 @@ topics.get("/:topicId", (c) => {
     .all(t.id);
   const conversations = db()
     .query<{ id: string; kind: ConversationKind; lessonId: string | null; createdAt: string }, [string]>(
-      "SELECT id, kind, lesson_id AS lessonId, created_at AS createdAt FROM conversations WHERE topic_id = ? ORDER BY created_at",
+      "SELECT id, kind, lesson_id AS lessonId, created_at AS createdAt FROM conversations WHERE topic_id = ? AND kind != 'teachback' ORDER BY created_at",
     )
     .all(t.id);
   const facts = onboardingFacts(t);
@@ -220,7 +221,8 @@ topics.get("/:topicId", (c) => {
     )
     .all(t.id);
   const materials = materialViews(db(), t.id);
-  return c.json({ topic: summary(t), nodes, lessons, sources, materials, conversations, onboarding, plan, goal, goalNotes } satisfies TopicDetail);
+  const teachbacks = teachbackSummaries(t.id);
+  return c.json({ topic: summary(t), nodes, lessons, sources, materials, conversations, onboarding, plan, goal, goalNotes, teachbacks } satisfies TopicDetail);
 });
 
 topics.get("/:topicId/memory", async (c) => {

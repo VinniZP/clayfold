@@ -21,6 +21,7 @@ import { ProposedCards } from "../components/ProposedCards";
 import { type SelectedText, SelectionActions } from "../components/SelectionActions";
 import { KeyHint } from "../components/Shortcuts";
 import { StepView, type LineResults, type TutorHooks } from "../components/Steps";
+import { TeachBackButton } from "../components/TeachBackButton";
 import { CardHead, Clay, Empty, ErrorBox, Markdown, PageLoading, Progress, Spinner } from "../components/ui";
 import { VideoLesson } from "../components/VideoLesson";
 import { api, errorText } from "../lib/api";
@@ -226,6 +227,7 @@ const s = stylex.create({
   score: { fontFamily: font.display, fontSize: 44, fontWeight: 800, lineHeight: 1, fontVariantNumeric: "tabular-nums" },
   scoreOf: { fontFamily: font.body, fontSize: 16, fontWeight: 600, color: color.textMuted },
   start: { justifySelf: "start" },
+  teachBack: { display: "grid", gap: 10, paddingBlock: 18, paddingInline: 22, borderRadius: radius.inner, backgroundColor: color.butter },
   notes: { display: "grid", gap: 12, margin: 0, padding: 0, listStyle: "none" },
   note: { display: "grid", gap: 6, paddingBlock: 14, paddingInline: 18, borderRadius: radius.inner, backgroundColor: color.surface2 },
   quote: { paddingBlock: 8, paddingInline: 12, borderRadius: 12, backgroundColor: color.surface, fontStyle: "italic", color: color.textMuted, fontSize: 14 },
@@ -834,7 +836,21 @@ export function LessonPage() {
                 (practice ? (
                   <PracticeEnd lessonId={lessonId} topicId={topicId} summary={summary} generating={v.lesson.status === "generating" && !summary} />
                 ) : (
-                  <LessonEnd lessonId={lessonId} summary={summary} generating={v.lesson.status === "generating" && !summary} checkResults={checkResults} topicId={topicId} />
+                  <LessonEnd
+                    lessonId={lessonId}
+                    summary={summary}
+                    generating={v.lesson.status === "generating" && !summary}
+                    checkResults={checkResults}
+                    topicId={topicId}
+                    teachBack={
+                      settings?.teachback.enabled &&
+                      (v.lesson.status === "ready" || v.lesson.status === "finished") &&
+                      v.lesson.nodeIds[0] &&
+                      (v.lesson.learnerStatus === "completed" || (checkResults?.length && checkResults.every((r) => r.result)))
+                        ? { lessonId, nodeId: v.lesson.nodeIds[0] }
+                        : null
+                    }
+                  />
                 ))}
 
               <nav aria-label={t("lesson.stepNav")} data-print="hide" {...stylex.props(s.nav)}>
@@ -995,12 +1011,15 @@ function LessonEnd({
   generating,
   checkResults,
   topicId,
+  teachBack,
 }: {
   lessonId: string;
   summary: string | null;
   generating: boolean;
   checkResults: { item: PublicItem; result: ItemResult | undefined }[] | null;
   topicId: string | null;
+  /** Offered once the learner has completed the lesson (L24). */
+  teachBack: { lessonId: string; nodeId: string } | null;
 }) {
   useLang();
   const correct = checkResults?.filter((r) => r.result?.response.correct === true).length ?? 0;
@@ -1028,6 +1047,15 @@ function LessonEnd({
           <Spinner /> {t("lesson.stillWriting")}
         </p>
       ) : null}
+      {teachBack && topicId && (
+        <section aria-labelledby="teachback-title" {...stylex.props(s.teachBack)}>
+          <h3 id="teachback-title" {...stylex.props(text.h3)}>
+            {t("teachback.title")}
+          </h3>
+          <p>{t("teachback.lessonEnd", { name: t("teachback.persona") })}</p>
+          <TeachBackButton topicId={topicId} nodeId={teachBack.nodeId} lessonId={teachBack.lessonId} primary />
+        </section>
+      )}
       <section aria-labelledby="cards-title">
         <CardHead title={t("lesson.reviewCards")} id="cards-title" />
         <p {...stylex.props(text.small, text.muted)}>{t("lesson.reviewCardsHint")}</p>

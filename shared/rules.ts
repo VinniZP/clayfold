@@ -23,6 +23,7 @@ export const RULES = {
   L21: "A topic closes with a final exam once every node passed its exit check; a retake waits until the weak nodes are practised again",
   L22: "Mistakes come back as unaided retries; a correct retry a day or more after the last error resolves one",
   L23: "Graded answers take an optional confidence rating; a confident error is corrected, retested a day later and flagged to the tutor",
+  L24: "After a completed lesson the learner explains the node to a novice who probes and never teaches; a checklist per key idea, grounded in the lesson, debriefs it",
   V1: "No decorative visuals; each figure states what it teaches",
   V2: "Labels sit inside the figure next to the parts they name; no legend",
   V3: "A caption does not repeat the body text",

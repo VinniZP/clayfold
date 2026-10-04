@@ -1,6 +1,7 @@
 import type { Database } from "bun:sqlite";
 import type { AskLearnerResult, LearnerState, RegenReason } from "../../../shared/tools";
 import type { Item } from "../../../shared/schemas";
+import { teachbackGaps } from "../../routes/teachback";
 import { defineTool, ToolError } from "../context";
 
 export const askLearner = defineTool({
@@ -106,7 +107,8 @@ export function learnerState(db: Database, topicId: string, nodeIds?: string[]):
   const glossary = db
     .query<{ term: string; definition: string; original: string | null }, [string]>("SELECT term, definition, original FROM glossary_terms WHERE topic_id = ? ORDER BY term COLLATE NOCASE")
     .all(topicId);
-  return { topic: { ...topic, goal }, nodes, sources, recentAttempts: attempts, misconceptionsSeen, notes, regenQueue, lessonsDone, glossary };
+  const gaps = teachbackGaps(topicId, db).filter((g) => inScope(g.nodeId));
+  return { topic: { ...topic, goal }, nodes, sources, recentAttempts: attempts, misconceptionsSeen, teachbackGaps: gaps, notes, regenQueue, lessonsDone, glossary };
 }
 
 /** Topological order (every node after its prerequisites), stable by insertion order; the graph is a DAG (graph_set rejects cycles). */
@@ -129,7 +131,7 @@ export function prerequisiteOrder<T extends { id: string; prereqs: string }>(row
 
 export const getLearnerState = defineTool({
   name: "get_learner_state",
-  description: `Read what the platform knows about the learner in this topic: graph nodes in prerequisite order (every node after its prerequisites) with placement, mastery, prerequisites and unmastered prerequisites; the topic's sources with their sourceIds, origin "learner" marking the learner's own materials; the last 30 graded attempts (item prompt, correct, misconception picked, hints used); misconceptions seen with counts; the learner's notes; open regeneration-queue entries with their current content (fix them with item_replace); finished lessons.
+  description: `Read what the platform knows about the learner in this topic: graph nodes in prerequisite order (every node after its prerequisites) with placement, mastery, prerequisites and unmastered prerequisites; the topic's sources with their sourceIds, origin "learner" marking the learner's own materials; the last 30 graded attempts (item prompt, correct, misconception picked, hints used); misconceptions seen with counts; teachbackGaps (key ideas the learner left out or got wrong when explaining a node, from the latest teach-back on it); the learner's notes; open regeneration-queue entries with their current content (fix them with item_replace); finished lessons.
 Call it before planning a lesson or a review session, and when tutoring. Pass nodeIds to narrow nodes, attempts, misconceptions and lessons to those nodes. Returns LearnerState JSON.`,
   handler(ctx, { nodeIds }) {
     return { result: learnerState(ctx.db, ctx.topicId, nodeIds) };

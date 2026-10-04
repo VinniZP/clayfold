@@ -1,4 +1,4 @@
-import type { ActivityDay, AlternativeView, AuditEntry, CalibrationView, CardView, ChatMessage, ExplainLens, GlossaryEntry, ItemState, LessonSummary, MaterialView, MemoryFile, MistakeEntry, MistakePattern, NodeView, NoteView, SourceView, SystemView, TodayView, TopicDetail, UpdateView, VideoTimeline, WeakSpot } from "@shared/api";
+import type { ActivityDay, AlternativeView, AuditEntry, CalibrationView, CardView, ChatMessage, ExplainLens, GlossaryEntry, ItemState, LessonSummary, MaterialView, MemoryFile, MistakeEntry, MistakePattern, NodeView, NoteView, SourceView, SystemView, TeachbackDebrief, TeachbackView, TodayView, TopicDetail, UpdateView, VideoTimeline, WeakSpot } from "@shared/api";
 import type { PublicCite, PublicFigure, PublicItem, PublicStep } from "@shared/schemas";
 
 // Development fixtures for VITE_MOCK=1. Content is illustrative.
@@ -671,7 +671,7 @@ const gitNodes: NodeView[] = [
 ];
 
 const bayesLessons: LessonSummary[] = [
-  { id: "l-cond", topicId: "t-bayes", title: "Conditional probability", objective: "Tell P(A | B) apart from P(A and B) and compute conditional probability from a table.", level: "novice", nodeIds: ["cond-prob"], status: "finished", createdAt: iso(9), stepsReady: 4, stepsTotal: 4, sourcesStale: true, supersededBy: null, learnerStatus: "in_progress", video: "ready", practice: null },
+  { id: "l-cond", topicId: "t-bayes", title: "Conditional probability", objective: "Tell P(A | B) apart from P(A and B) and compute conditional probability from a table.", level: "novice", nodeIds: ["cond-prob"], status: "finished", createdAt: iso(9), stepsReady: 4, stepsTotal: 4, sourcesStale: true, supersededBy: null, learnerStatus: "completed", video: "ready", practice: null },
   { id: "l-bayes", topicId: "t-bayes", title: "Bayes' theorem through a medical test", objective: "Compute the probability of disease after a positive test using natural frequencies.", level: "novice", nodeIds: ["bayes-theorem"], status: "generating", createdAt: iso(0, 9), stepsReady: 3, stepsTotal: 10, sourcesStale: false, supersededBy: null, learnerStatus: "in_progress", video: null, practice: null },
   { id: "l-bayes-v1", topicId: "t-bayes", title: "Bayes' theorem through a medical test", objective: "Compute the probability of disease after a positive test using natural frequencies.", level: "novice", nodeIds: ["bayes-theorem"], status: "finished", createdAt: iso(5), stepsReady: 8, stepsTotal: 8, sourcesStale: false, supersededBy: "l-bayes", learnerStatus: "completed", video: null, practice: null },
 ];
@@ -703,6 +703,7 @@ export const topicDetails: Record<string, TopicDetail> = {
     plan: [],
     goal: null,
     goalNotes: [],
+    teachbacks: [],
     lessons: bayesLessons,
     sources: bayesSources,
     materials: bayesMaterials,
@@ -721,6 +722,7 @@ export const topicDetails: Record<string, TopicDetail> = {
     plan: [],
     goal: { id: "t-goal", title: "Workout tracking app", why: "Keep every version of the app and roll back a change that broke it." },
     goalNotes: [],
+    teachbacks: [],
     lessons: [{ id: "l-git", topicId: "t-git", title: "Branching and merging", objective: "Create branches, merge them and resolve a simple conflict.", level: "intermediate", nodeIds: ["merge"], status: "ready", createdAt: iso(3), stepsReady: 1, stepsTotal: 1, sourcesStale: false, supersededBy: null, learnerStatus: "not_started", video: null, practice: null },
       { id: "l-git-rebase", topicId: "t-git", title: "Rebase", objective: "Move a branch onto a new base and resolve conflicts along the way.", level: "intermediate", nodeIds: ["rebase"], status: "failed", createdAt: iso(1), stepsReady: 1, stepsTotal: 4, sourcesStale: false, supersededBy: null, learnerStatus: "not_started", video: null, practice: null },
     ],
@@ -741,6 +743,7 @@ export const topicDetails: Record<string, TopicDetail> = {
     plan: [],
     goal: null,
     goalNotes: [],
+    teachbacks: [],
     lessons: [],
     sources: [],
     materials: [],
@@ -759,6 +762,7 @@ export const topicDetails: Record<string, TopicDetail> = {
     plan: [],
     goal: null,
     goalNotes: [],
+    teachbacks: [],
     lessons: [],
     sources: [],
     materials: [],
@@ -1383,3 +1387,82 @@ export const condVideo: VideoTimeline = (() => {
     ],
   };
 })();
+
+// ---------- Teach-back ----------
+
+/** The novice's lines in order: the opening, the follow-ups, then the closing that ends the teach-back. */
+export const teachbackScript = [
+  "Hi, I'm Sam! I've never studied probability. Could you explain to me what **conditional probability** is, as if I were hearing it for the first time?",
+  "Oh, so we only look at some of the cases? Why do we divide by P(B), though? What would go wrong if we didn't?",
+  "I think I get it. Is P(A | B) the same as P(B | A)? They look almost the same to me.",
+  "Thank you, that really helped me see it! Let's look at how your explanation went.",
+];
+
+export function teachbackDebrief(): TeachbackDebrief {
+  return {
+    summary: "You explained clearly why the condition narrows the group of cases. Revisit how the order inside P(A | B) changes its meaning.",
+    ideas: [
+      {
+        stepId: "cs-1",
+        stepIdx: 1,
+        title: "Joint and conditional probability",
+        verdict: "covered",
+        evidence: "you only count the cases where B happened and divide by how likely B is",
+        correction: null,
+      },
+      {
+        stepId: "cs-1-order",
+        stepIdx: 1,
+        title: "P(A | B) and P(B | A) differ",
+        verdict: "wrong",
+        evidence: "they are basically the same thing",
+        correction: "P(A | B) counts A within the cases of B; P(B | A) counts B within the cases of A. The two groups differ in size, so the probabilities usually differ.",
+      },
+      {
+        stepId: "cs-1-table",
+        stepIdx: 1,
+        title: "Reading conditional probability from a table",
+        verdict: "missing",
+        evidence: null,
+        correction: "In a table, take the row or column of the condition and divide the cell where both happen by that row's or column's total.",
+      },
+    ],
+    next: [
+      { kind: "reread", stepId: "cs-1-order", stepIdx: 1, title: "P(A | B) and P(B | A) differ" },
+      { kind: "reread", stepId: "cs-1-table", stepIdx: 1, title: "Reading conditional probability from a table" },
+      { kind: "practice", stepId: "cs-2", stepIdx: 2, title: "Choosing a pattern (dense text)" },
+    ],
+  };
+}
+
+export const teachbacks: Record<string, TeachbackView> = {
+  "tb-1": {
+    id: "tb-1",
+    topicId: "t-bayes",
+    nodeId: "cond-prob",
+    nodeTitle: "Conditional probability",
+    lessonId: "l-cond",
+    lessonTitle: "Conditional probability",
+    conversationId: "c-tb-1",
+    status: "done",
+    createdAt: iso(2, 18),
+    finishedAt: iso(2, 18),
+    score: { covered: 1, total: 3 },
+    debrief: teachbackDebrief(),
+    error: null,
+  },
+};
+
+conversations["c-tb-1"] = {
+  topicId: "t-bayes",
+  kind: "teachback",
+  messages: [
+    { id: "tb1-0", role: "assistant", text: teachbackScript[0]!, createdAt: iso(2, 18) },
+    { id: "tb1-1", role: "user", text: "It's the probability of A when you already know B happened: you only count the cases where B happened and divide by how likely B is.", createdAt: iso(2, 18) },
+    { id: "tb1-2", role: "assistant", text: teachbackScript[1]!, createdAt: iso(2, 18) },
+    { id: "tb1-3", role: "user", text: "Without dividing you'd get the joint probability, which is smaller because it counts everyone.", createdAt: iso(2, 18) },
+    { id: "tb1-4", role: "assistant", text: teachbackScript[2]!, createdAt: iso(2, 18) },
+    { id: "tb1-5", role: "user", text: "I think they are basically the same thing, just written the other way round.", createdAt: iso(2, 18) },
+    { id: "tb1-6", role: "assistant", text: teachbackScript[3]!, createdAt: iso(2, 18) },
+  ],
+};

@@ -1,5 +1,5 @@
 import * as stylex from "@stylexjs/stylex";
-import { AudioLines, BookOpen, Check, Clapperboard, Gauge, Keyboard, KeyRound, Play, RotateCcw, Sparkles, TriangleAlert } from "lucide-react";
+import { AudioLines, BookOpen, Check, Clapperboard, Gauge, Keyboard, KeyRound, MessagesSquare, Play, RotateCcw, Sparkles, TriangleAlert } from "lucide-react";
 import { useId, useRef, useState } from "react";
 import { CLAUDE_MODELS, CLAUDE_ROLES, EFFORTS, TTS_MODELS, supportsEffort, type ClaudeModel, type Effort, type Settings, type SettingsUpdate } from "@shared/api";
 import { Segmented, Select, Switch } from "../components/controls";
@@ -32,6 +32,7 @@ const s = stylex.create({
   narrationArt: { backgroundColor: color.peachSoft },
   confidenceArt: { backgroundColor: color.pistachioSoft },
   keyboardArt: { backgroundColor: color.lilacSoft },
+  teachbackArt: { backgroundColor: color.butter },
   whatsNew: { display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: 16 },
   keyRow: { display: "flex", gap: 8, flexWrap: "wrap" },
   keyInput: { flex: "1 1 200px" },
@@ -67,6 +68,7 @@ export function SettingsPage() {
       <NarrationSettings settings={settings.data} onChange={onChange} />
       <ConfidenceSettings settings={settings.data} onChange={onChange} />
       <KeyboardSettings settings={settings.data} onChange={onChange} />
+      <TeachbackSettings settings={settings.data} onChange={onChange} />
       <ClaudeSettings settings={settings.data} onChange={onChange} />
       <WhatsNew onChange={onChange} />
     </div>
@@ -268,6 +270,29 @@ function GameSettings({ settings, onChange }: { settings: Settings; onChange: (n
         disabled={busy}
         onChange={(on) => void save(() => api.setSettings({ gamification: on }))}
         label={t(settings.gamification ? "settings.gameOn" : "settings.gameOff")}
+      />
+      <SaveStatus error={error} saved={saved} />
+    </section>
+  );
+}
+
+function TeachbackSettings({ settings, onChange }: { settings: Settings; onChange: (next: Settings) => void }) {
+  useLang();
+  const { busy, error, saved, save } = useSave(onChange);
+  return (
+    <section aria-labelledby="settings-teachback" {...stylex.props(card.base, s.card, s.wide)}>
+      <div {...stylex.props(s.feature)}>
+        <span {...stylex.props(s.featureArt, s.teachbackArt)}>
+          <MessagesSquare size={34} aria-hidden="true" />
+        </span>
+        <CardHead id="settings-teachback" title={t("settings.teachback")} />
+      </div>
+      <p {...stylex.props(text.small, s.intro)}>{t("settings.teachbackIntro")}</p>
+      <Switch
+        checked={settings.teachback.enabled}
+        disabled={busy}
+        onChange={(on) => void save(() => api.setSettings({ teachbackEnabled: on }))}
+        label={t("settings.teachbackToggle")}
       />
       <SaveStatus error={error} saved={saved} />
     </section>

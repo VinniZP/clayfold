@@ -2,7 +2,7 @@ import * as stylex from "@stylexjs/stylex";
 import { ArrowRight, BookOpen, BookText, Download, ExternalLink, Sparkles, TriangleAlert } from "lucide-react";
 import { useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router";
-import type { ConversationKind, LessonSummary, TopicDetail } from "@shared/api";
+import type { ConversationKind, LessonSummary, TeachbackSummary, TopicDetail } from "@shared/api";
 import type { MessageKey } from "@shared/i18n";
 import { Chat } from "../components/Chat";
 import { FinalExamCard } from "../components/FinalExamCard";
@@ -14,6 +14,7 @@ import { StaleSources, readyLine } from "../components/LessonStatus";
 import { CourseResident } from "../components/meerkat/CourseGame";
 import { OnboardingStepper } from "../components/OnboardingStepper";
 import { PracticeButton } from "../components/Practice";
+import { TeachBackButton } from "../components/TeachBackButton";
 import { GoalBanner, GoalView } from "./Goal";
 import { NewTopicForm, TopicCard, toneAt, topicObject } from "../components/Topics";
 import { TrainingCard } from "../components/TrainingCard";
@@ -48,6 +49,7 @@ const s = stylex.create({
   detail: { display: "grid", gap: 10, marginTop: 14, paddingBlock: 18, paddingInline: 20, borderRadius: radius.inner, backgroundColor: color.surface2 },
   detailHead: { display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 },
   nodeActions: { display: "flex", flexWrap: "wrap", gap: 8 },
+  teachbacks: { display: "flex", flexWrap: "wrap", gap: "6px 16px", marginTop: 4 },
   mLearning: { backgroundColor: color.lilacSoft, color: color.accentText },
   mExit: { backgroundColor: color.warningSoft, color: color.warning },
   mMastered: { backgroundColor: color.primary, color: color.onPrimary },
@@ -88,6 +90,7 @@ const CONV_LABEL: Record<ConversationKind, MessageKey> = {
   lesson: "topic.conv.lesson",
   tutor: "topic.conv.tutor",
   review: "topic.conv.review",
+  teachback: "topic.conv.teachback",
 };
 
 const STATUS: Record<LessonSummary["status"], { label: MessageKey; tone: stylex.StyleXStyles | null }> = {
@@ -133,6 +136,38 @@ export function TopicsPage() {
   );
 }
 
+/** The server starts a teach-back only after a completed lesson on the node (L20). */
+const explainable = (detail: TopicDetail, nodeId: string) =>
+  detail.lessons.some((l) => l.nodeIds.includes(nodeId) && (l.status === "ready" || l.status === "finished") && l.learnerStatus === "completed");
+
+const TEACHBACK_STATUS: Record<Exclude<TeachbackSummary["status"], "done">, MessageKey> = {
+  talking: "teachback.status.talking",
+  debriefing: "teachback.status.debriefing",
+  failed: "teachback.status.failed",
+};
+
+function NodeTeachbacks({ teachbacks }: { teachbacks: TeachbackSummary[] }) {
+  useLang();
+  if (teachbacks.length === 0) return null;
+  return (
+    <section aria-label={t("teachback.history")}>
+      <p {...stylex.props(text.small, text.strong)}>{t("teachback.history")}</p>
+      <ul {...stylex.props(layout.plainList, s.teachbacks)}>
+        {teachbacks.map((tb) => (
+          <li key={tb.id}>
+            <Link to={`/teach-back/${encodeURIComponent(tb.id)}`} {...stylex.props(text.link, text.small)}>
+              {formatDate(tb.createdAt)}
+            </Link>{" "}
+            <span {...stylex.props(chip.base, chip.xs, tb.score ? chip.pistachio : chip.lilac)}>
+              {tb.score ? t("teachback.historyScore", { covered: tb.score.covered, total: tb.score.total }) : t(TEACHBACK_STATUS[tb.status as keyof typeof TEACHBACK_STATUS])}
+            </span>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
 function pickConversation(detail: TopicDetail, requested: string | null) {
   if (requested && detail.conversations.some((c) => c.id === requested)) return requested;
   const sorted = [...detail.conversations].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
@@ -153,6 +188,7 @@ export function TopicPage() {
   const [params, setParams] = useSearchParams();
   const navigate = useNavigate();
   const detail = useResource(() => api.topic(topicId), topicId);
+  const teachbackOn = useResource(() => api.settings(), "settings").data?.teachback.enabled ?? false;
   const [selected, setSelected] = useState<string | null>(null);
   const [starting, setStarting] = useState<{ nodeId?: string; waiting: boolean } | null>(null);
   const [startError, setStartError] = useState<string | null>(null);
@@ -169,7 +205,8 @@ export function TopicPage() {
         e.type === "onboarding.updated" ||
         e.type === "memory.updated" ||
         e.type === "lesson.finished" ||
-        e.type === "conv.done"
+        e.type === "conv.done" ||
+        e.type === "teachback.updated"
       )
         void detail.reload();
       if (e.type === "lesson.planned") {
@@ -280,6 +317,13 @@ export function TopicPage() {
                     </button>
                     <PracticeButton from={{ topicId, nodeId: node.id }} label={t("topic.practiceNode")} small />
                   </div>
+                  <div {...stylex.props(layout.actions)}>
+                    <button type="button" disabled={busy} onClick={() => startLesson(node.id)} {...stylex.props(btn.base, btn.primary, btn.sm)}>
+                      {starting?.nodeId === node.id ? <Spinner /> : <BookOpen size={14} aria-hidden="true" />} {t("topic.nodeLesson")}
+                    </button>
+                    {teachbackOn && explainable(d, node.id) && <TeachBackButton key={node.id} topicId={topicId} nodeId={node.id} />}
+                  </div>
+                  {teachbackOn && <NodeTeachbacks teachbacks={d.teachbacks.filter((tb) => tb.nodeId === node.id)} />}
                 </div>
               ) : (
                 <p {...stylex.props(text.small, text.muted)}>{t("topic.pickNode")}</p>

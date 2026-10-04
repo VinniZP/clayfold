@@ -3,7 +3,9 @@ import { z } from "zod";
 import type { ChatMessage, ConversationKind, ConversationView } from "../../shared/api";
 import { cancel, isRunning, runInfo, runTurn } from "../claude/runner";
 import { db } from "../db";
+import { t } from "../i18n";
 import { fail, parseJson, readBody } from "./http";
+import { teachbackOpen } from "./teachback";
 
 type MessageRow = { id: string; role: ChatMessage["role"]; text: string; meta: string | null; created_at: string };
 
@@ -38,6 +40,7 @@ conversations.post("/:id/messages", async (c) => {
   const id = c.req.param("id");
   if (!db().query("SELECT 1 FROM conversations WHERE id = ?").get(id)) fail(404, "conversation not found");
   const { text } = await readBody(c, z.object({ text: z.string().trim().min(1).max(8000) }));
+  if (!teachbackOpen(id)) fail(409, t("teachback.closed"));
   runTurn({ conversationId: id, text });
   return c.json({ accepted: true }, 202);
 });

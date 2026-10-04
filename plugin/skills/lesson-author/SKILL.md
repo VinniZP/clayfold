@@ -14,7 +14,7 @@ Read `MISSION.md`, `NOTES.md`, `RESOURCES.md` and every file in `learning-record
 ## 2. Choose the node and level
 
 - **Node**: the given nodeId; for `next`, the earliest node with mastery `new` or `learning`, placement not `known`, and no `unmasteredPrereqs` other than nodes placed `known` (zone of proximal development). A lesson covers this node, plus at most one tightly coupled neighbour. A requested node with unmastered prerequisites gets a short refresher on them in its first explain step.
-- **Level** (L5), first match wins, evidence before placement: `advanced` when learning records or recent attempts show them solving this node's problems unaided (correct, no hints); `intermediate` for placement `partial` on this node, or attempts on it that succeed only with hints; `novice` otherwise, including a new node whose prerequisites are mastered. Misconceptions in `misconceptionsSeen` for this node become distractors and worked-example targets.
+- **Level** (L5), first match wins, evidence before placement: `advanced` when learning records or recent attempts show them solving this node's problems unaided (correct, no hints); `intermediate` for placement `partial` on this node, or attempts on it that succeed only with hints; `novice` otherwise, including a new node whose prerequisites are mastered. Misconceptions in `misconceptionsSeen` for this node become distractors and worked-example targets; `teachbackGaps` for this node (ideas the learner left out or got wrong when explaining it) each get a retrieval check of their own.
 
 ## 3. Gather evidence
 

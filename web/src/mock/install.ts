@@ -409,6 +409,7 @@ function createTopic(request: string, kind: TopicSummary["kind"], goal: TopicDet
     plan: [],
     goal,
     goalNotes: [],
+    teachbacks: [],
   };
   fx.conversations[conversationId] = { topicId: id, kind: "onboard", messages: [{ id: `u-${seq}`, role: "user", text: request, createdAt }] };
   fx.memoryFiles[id] = [];
@@ -623,6 +624,8 @@ let settings: Settings = {
   video: { enabled: true },
   confidence: { enabled: true },
   shortcuts: { hints: true },
+  // On in the mock as well, so teach-back can be looked at; the server default is off.
+  teachback: { enabled: true },
   claude: Object.fromEntries(
     CLAUDE_ROLES.map((role) => [role, { model: null, effort: null, defaultModel: ["critic", "grading", "narration", "video", "game"].includes(role) ? "sonnet" : "opus", defaultEffort: ({ onboard: "medium", lesson: "high", critic: "high", video: "medium", game: "medium" } as Record<string, Effort>)[role] ?? "low" }]),
   ) as Settings["claude"],
@@ -856,7 +859,35 @@ async function route(method: string, path: string, body: Record<string, unknown>
     if (m[1] === "t-bayes") syncBayesLesson();
     for (const set of sim.practiceSets.values()) syncPractice(set);
     const d = fx.topicDetails[m[1]!];
+    if (d) d.teachbacks = Object.values(fx.teachbacks).filter((tb) => tb.topicId === m![1]).sort((a, b) => b.createdAt.localeCompare(a.createdAt)).map(({ debrief: _, error: __, ...summary }) => summary);
     return d ? json(d) : json({ error: "Topic not found" }, 404);
+  }
+  if ((m = p.match(/^\/api\/topics\/([^/]+)\/teachbacks$/))) {
+    const d = fx.topicDetails[m[1]!];
+    const node = d?.nodes.find((n) => n.id === body.nodeId);
+    const lesson = d?.lessons.find((l) => (!body.lessonId || l.id === body.lessonId) && node && l.nodeIds.includes(node.id) && l.learnerStatus === "completed");
+    if (!settings.teachback.enabled) return json({ error: t("teachback.disabled") }, 409);
+    if (!d || !node) return json({ error: t("teachback.nodeNotFound") }, 404);
+    if (!lesson) return json({ error: t("teachback.lessonNotCompleted") }, 409);
+    const id = `tb-new-${++seq}`;
+    const conversationId = `c-tb-new-${seq}`;
+    fx.conversations[conversationId] = { topicId: d.topic.id, kind: "teachback", messages: [] };
+    fx.teachbacks[id] = { id, topicId: d.topic.id, nodeId: node.id, nodeTitle: node.title, lessonId: lesson.id, lessonTitle: lesson.title, conversationId, status: "talking", createdAt: new Date().toISOString(), finishedAt: null, score: null, debrief: null, error: null };
+    setTimeout(() => sim.teachbackTurn(d.topic.id, conversationId, id), 300);
+    return json(fx.teachbacks[id], 202);
+  }
+  if ((m = p.match(/^\/api\/teachbacks\/([^/]+)$/))) {
+    const tb = fx.teachbacks[m[1]!];
+    return tb ? json(tb) : json({ error: t("teachback.notFound") }, 404);
+  }
+  if ((m = p.match(/^\/api\/teachbacks\/([^/]+)\/finish$/))) {
+    const tb = fx.teachbacks[m[1]!];
+    if (!tb) return json({ error: t("teachback.notFound") }, 404);
+    if (tb.status !== "talking" && tb.status !== "failed") return json({ error: t("teachback.alreadyFinished") }, 409);
+    if (sim.runs.has(tb.conversationId)) return json({ error: t("teachback.personaReplying") }, 409);
+    if (!fx.conversations[tb.conversationId]?.messages.some((msg) => msg.role === "user")) return json({ error: t("teachback.nothingSaid") }, 409);
+    sim.finishTeachback(tb.id);
+    return json(tb, 202);
   }
   if ((m = p.match(/^\/api\/topics\/([^/]+)\/memory$/))) return json(fx.memoryFiles[m[1]!] ?? []);
   if ((m = p.match(/^\/api\/topics\/([^/]+)\/book$/))) return sampleBook(m[1]!);
@@ -962,13 +993,16 @@ async function route(method: string, path: string, body: Record<string, unknown>
   if ((m = p.match(/^\/api\/conversations\/([^/]+)\/messages$/))) {
     const id = m[1]!;
     const c = fx.conversations[id];
+    const teachback = Object.values(fx.teachbacks).find((tb) => tb.conversationId === id);
+    if (teachback && teachback.status !== "talking") return json({ error: t("teachback.closed") }, 409);
     const msg: ChatMessage = { id: `u-${++seq}`, role: "user", text: String(body.text), createdAt: new Date().toISOString() };
     c?.messages.push(msg);
     const topicId = c?.topicId ?? "t-bayes";
     const text = String(body.text);
     const phase = c?.kind === "onboard" ? sim.activePhase(topicId) : null;
     setTimeout(() => {
-      if (phase === "interview" && fx.topicDetails[topicId]?.topic.kind === "goal") sim.finishGoalPlan(topicId, id, text);
+      if (teachback) sim.teachbackTurn(topicId, id, teachback.id);
+      else if (phase === "interview" && fx.topicDetails[topicId]?.topic.kind === "goal") sim.finishGoalPlan(topicId, id, text);
       else if (phase === "interview") sim.runOnboarding(topicId, id, "mission", text);
       else if (phase === "placement") sim.runPlacementAnswer(topicId, id, text);
       else sim.reply(topicId, id, "Noted. If you want to change anything in the plan, tell me and I'll adjust the map and the upcoming lessons.", ["Reading the message"]);
@@ -1056,7 +1090,7 @@ async function route(method: string, path: string, body: Record<string, unknown>
   }
   if (p === "/api/settings") {
     if (method === "PUT") {
-      const { language, voiceId, ttsModel, videoEnabled, claudeRole, confidenceEnabled, gamification, introSeen, shortcutHints, narrationPrefetch } = body as SettingsUpdate;
+      const { language, voiceId, ttsModel, videoEnabled, claudeRole, confidenceEnabled, gamification, introSeen, shortcutHints, narrationPrefetch, teachbackEnabled } = body as SettingsUpdate;
       if (gamification !== undefined) setMockGameOn(gamification);
       settings = {
         gamification: gamification ?? settings.gamification,
@@ -1071,6 +1105,7 @@ async function route(method: string, path: string, body: Record<string, unknown>
         video: { enabled: videoEnabled ?? settings.video.enabled },
         confidence: { enabled: confidenceEnabled ?? settings.confidence.enabled },
         shortcuts: { hints: shortcutHints ?? settings.shortcuts.hints },
+        teachback: { enabled: teachbackEnabled ?? settings.teachback.enabled },
         claude: claudeRole
           ? { ...settings.claude, [claudeRole.role]: { ...settings.claude[claudeRole.role], model: claudeRole.model, effort: claudeRole.effort } }
           : settings.claude,

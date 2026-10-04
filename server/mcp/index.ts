@@ -19,6 +19,7 @@ import { practiceBriefTool } from "./tools/practice";
 import { itemReplace } from "./tools/replace";
 import { materialList, materialRead } from "./tools/materials";
 import { sourceAdd, sourceSearch } from "./tools/sources";
+import { teachbackFinish } from "./tools/teachback";
 
 export const TOOLS: ToolDef<any>[] = [
   askLearner,
@@ -36,6 +37,7 @@ export const TOOLS: ToolDef<any>[] = [
   goalNote,
   glossarySet,
   workedLineRecord,
+  teachbackFinish,
   getLearnerState,
   itemReplace,
   practiceBriefTool,

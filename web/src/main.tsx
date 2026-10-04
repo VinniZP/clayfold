@@ -18,6 +18,7 @@ import { MistakesPage } from "./pages/Mistakes";
 import { PracticeTestPage } from "./pages/PracticeTest";
 import { ReviewPage } from "./pages/Review";
 import { SettingsPage } from "./pages/Settings";
+import { TeachBackPage } from "./pages/TeachBack";
 import { TopicPage, TopicsPage } from "./pages/Topic";
 import "@fontsource/andika/400.css";
 import "@fontsource/andika/400-italic.css";
@@ -76,6 +77,7 @@ const router = createBrowserRouter([
       { path: "/topics/:topicId", element: <TopicPage /> },
       { path: "/topics/:topicId/book", element: <BookPage /> },
       { path: "/lessons/:lessonId", element: <LessonPage /> },
+      { path: "/teach-back/:teachbackId", element: <TeachBackPage /> },
       { path: "/review", element: <ReviewPage /> },
       { path: "/mistakes", element: <MistakesPage /> },
       { path: "/tests/:testId", element: <PracticeTestPage /> },

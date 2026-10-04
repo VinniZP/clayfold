@@ -64,6 +64,7 @@ const PAST: [RegExp, string][] = [
   [/^Choosing /, "Chose "],
   [/^Planning /, "Planned "],
   [/^Looking /, "Looked "],
+  [/^Ending /, "Ended "],
 ];
 
 /** Past-tense form of a mock activity label; labels already in the past stay as they are. */
@@ -121,6 +122,36 @@ export function reply(topicId: string, convId: string, text: string, activities:
     }
     await say(topicId, convId, text);
   });
+}
+
+// ---------- Teach-back ----------
+
+/** The novice's next line by how many times the learner has written; after the last follow-up it ends the teach-back. */
+export function teachbackTurn(topicId: string, convId: string, teachbackId: string) {
+  const said = conv(convId, topicId, "teachback").messages.filter((m) => m.role === "user").length;
+  const last = fx.teachbackScript.length - 1;
+  startRun(topicId, convId);
+  script(topicId, convId, async () => {
+    await pause(convId, 900);
+    await say(topicId, convId, fx.teachbackScript[Math.min(said, last)]!);
+    if (said >= last) {
+      activity(topicId, convId, "Ending the conversation");
+      finishTeachback(teachbackId);
+    }
+  });
+}
+
+/** Writes the mock debrief after a pause, as the server's judge would. */
+export function finishTeachback(teachbackId: string) {
+  const tb = fx.teachbacks[teachbackId];
+  if (!tb) return;
+  tb.status = "debriefing";
+  emit(tb.topicId, { type: "teachback.updated", teachbackId, status: "debriefing" });
+  setTimeout(() => {
+    const debrief = fx.teachbackDebrief();
+    Object.assign(tb, { status: "done", debrief, finishedAt: now(), score: { covered: debrief.ideas.filter((i) => i.verdict === "covered").length, total: debrief.ideas.length } });
+    emit(tb.topicId, { type: "teachback.updated", teachbackId, status: "done" });
+  }, 2500);
 }
 
 // ---------- Onboarding ----------

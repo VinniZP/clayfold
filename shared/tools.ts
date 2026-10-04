@@ -75,6 +75,7 @@ export const TOOL_INPUTS = {
     answer: z.string().min(1).max(1000),
     outcome: z.enum(["correct", "gave_up"]),
   },
+  teachback_finish: { teachbackId: z.string().min(1) },
   get_learner_state: { nodeIds: z.array(Slug).max(20).optional() },
   practice_brief: { lessonId: z.string().min(1) },
   item_replace: {
@@ -151,6 +152,7 @@ export type GoalPlanSetResult = { ok: true; total: number; trophiesMissing?: str
 export type GoalNoteResult = { ok: true };
 export type GlossarySetResult = { ok: true; total: number };
 export type WorkedLineRecordResult = { ok: true };
+export type TeachbackFinishResult = { ok: true; instruction: string };
 export type GraphSetResult = { ok: true; total: number; added: number; updated: number };
 export type PlacementRecordResult = { ok: true };
 export type LessonPlanResult = { lessonId: string };
@@ -184,6 +186,8 @@ export type LearnerState = {
     at: string;
   }[];
   misconceptionsSeen: { misconception: string; count: number; nodeId: string }[];
+  /** Key ideas the learner left out or got wrong in the latest debriefed teach-back on each node (L24). */
+  teachbackGaps: { nodeId: string; idea: string; verdict: "missing" | "wrong"; correction: string; at: string }[];
   notes: { text: string; quote: string | null; lessonId: string | null; at: string }[];
   regenQueue: { queueId: string; targetType: "item" | "card"; reason: RegenReason; content: unknown }[];
   lessonsDone: { lessonId: string; title: string; nodeIds: string[]; finishedAt: string }[];

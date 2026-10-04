@@ -13,7 +13,7 @@ test("tutor: memory tools, the tutoring tools and goal_note; every authoring too
   const t = parse("tutor");
   expect(t.tools).toEqual(["Edit", "Glob", "Grep", "Read", "Write"]);
   expect(t.allowed).toEqual(["Edit", "Glob", "Grep", "Read", "Write", "ask_learner", "get_learner_state", "goal_note", "source_search", "worked_line_record"]);
-  expect(t.denied).toEqual([...AUTHORING, "glossary_set", "goal_plan_set", "graph_set", "material_list", "material_read", "placement_record", "source_add"].sort());
+  expect(t.denied).toEqual([...AUTHORING, "glossary_set", "goal_plan_set", "graph_set", "material_list", "material_read", "placement_record", "source_add", "teachback_finish"].sort());
 });
 
 test("review adds item_replace; onboard has the web and graph tools but cannot author; lesson has everything", () => {
@@ -22,8 +22,8 @@ test("review adds item_replace; onboard has the web and graph tools but cannot a
   const onboard = parse("onboard");
   expect(onboard.tools).toContain("WebSearch");
   expect(onboard.allowed).toEqual(expect.arrayContaining(["graph_set", "source_add", "placement_record", "ask_learner"]));
-  expect(onboard.denied).toEqual([...AUTHORING, "goal_plan_set", "worked_line_record"].sort());
-  expect(parse("lesson").denied).toEqual(["goal_plan_set", "worked_line_record"]);
+  expect(onboard.denied).toEqual([...AUTHORING, "goal_plan_set", "teachback_finish", "worked_line_record"].sort());
+  expect(parse("lesson").denied).toEqual(["goal_plan_set", "teachback_finish", "worked_line_record"]);
   expect(parse("lesson").allowed).toEqual(expect.arrayContaining([...AUTHORING, "source_add", "WebFetch"]));
 });
 
@@ -32,4 +32,11 @@ test("goal: the web, memory, ask_learner and goal_plan_set; no topic tools", () 
   expect(goal.tools).toContain("WebSearch");
   expect(goal.allowed.filter((t) => /^[a-z_]+$/.test(t))).toEqual(["ask_learner", "goal_plan_set"]);
   expect(goal.denied).toEqual(expect.arrayContaining(["graph_set", "source_add", "lesson_plan", "goal_note"]));
+});
+
+test("teachback: no built-in tools and only teachback_finish, so the persona cannot look answers up", () => {
+  const teachback = parse("teachback");
+  expect(teachback.tools).toEqual([""]);
+  expect(teachback.allowed).toEqual(["teachback_finish"]);
+  expect(teachback.denied).toEqual(expect.arrayContaining(["get_learner_state", "source_search", "ask_learner"]));
 });

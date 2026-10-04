@@ -29,7 +29,7 @@ CREATE TABLE IF NOT EXISTS goal_plan (         -- B writes entries; A sets topic
 CREATE TABLE IF NOT EXISTS conversations (     -- A
   id TEXT PRIMARY KEY,
   topic_id TEXT NOT NULL REFERENCES topics(id) ON DELETE CASCADE,
-  kind TEXT NOT NULL CHECK (kind IN ('onboard','lesson','tutor','review')),
+  kind TEXT NOT NULL CHECK (kind IN ('onboard','lesson','tutor','review','teachback')),
   lesson_id TEXT,
   session_id TEXT,                              -- Claude Code session for --resume
   created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
@@ -402,6 +402,19 @@ CREATE TRIGGER IF NOT EXISTS search_card_ins AFTER INSERT ON cards BEGIN INSERT 
 CREATE TRIGGER IF NOT EXISTS search_card_upd AFTER UPDATE OF content, status ON cards BEGIN INSERT INTO search_queue VALUES ('card', new.id); END;
 CREATE TRIGGER IF NOT EXISTS search_card_del AFTER DELETE ON cards BEGIN INSERT INTO search_queue VALUES ('card', old.id); END;
 
+CREATE TABLE IF NOT EXISTS teachbacks (        -- A
+  id TEXT PRIMARY KEY,
+  topic_id TEXT NOT NULL REFERENCES topics(id) ON DELETE CASCADE,
+  node_id TEXT NOT NULL,
+  lesson_id TEXT NOT NULL REFERENCES lessons(id) ON DELETE CASCADE,  -- the lesson whose steps are the key ideas
+  conversation_id TEXT NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+  status TEXT NOT NULL DEFAULT 'talking' CHECK (status IN ('talking','debriefing','done','failed')),
+  debrief TEXT,                                 -- JSON TeachbackDebrief when done
+  error TEXT,
+  created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+  finished_at TEXT
+);
+
 CREATE INDEX IF NOT EXISTS idx_messages_conv ON messages(conversation_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_attempts_item ON attempts(item_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_cards_due ON cards(status, due);
@@ -412,3 +425,4 @@ CREATE INDEX IF NOT EXISTS idx_alternatives_step ON alternatives(step_id, create
 CREATE INDEX IF NOT EXISTS idx_retries_item ON retries(item_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_practice_tests_topic ON practice_tests(topic_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_practice_test_items_item ON practice_test_items(item_id);
+CREATE INDEX IF NOT EXISTS idx_teachbacks_topic ON teachbacks(topic_id, created_at);

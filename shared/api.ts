@@ -7,7 +7,7 @@ import { COURSE_PRACTICE_SIZES, PRACTICE_SIZES, type Answer, type Card, type Goa
 
 export type ApiError = { error: string };
 
-export type ConversationKind = "onboard" | "lesson" | "tutor" | "review";
+export type ConversationKind = "onboard" | "lesson" | "tutor" | "review" | "teachback";
 
 export type TopicSummary = {
   id: string;
@@ -136,6 +136,8 @@ export type TopicDetail = {
   goal: { id: string; title: string; why: string } | null;
   /** Goals only: facts the goal's courses recorded that the goal conversation has not received yet. */
   goalNotes: GoalNoteView[];
+  /** Teach-back sessions, newest first; their conversations are not in `conversations`. */
+  teachbacks: TeachbackSummary[];
 };
 
 // GET /api/glossary -> GlossaryEntry[]  (every topic's terms, by term)
@@ -316,6 +318,51 @@ export type WorkedLineResponse = { correct: boolean; text: string };
  * quote: text the learner selected on the page and asks about.
  */
 export type TutorRequest = { itemId?: string; stepId?: string; line?: number; quote?: string; text: string };
+
+// Teach-back (L20): after completing a lesson the learner explains a node to a novice persona.
+// POST /api/topics/:topicId/teachbacks StartTeachbackRequest -> TeachbackView (starts the conversation; without lessonId
+// the newest lesson on the node the learner completed; 409 when there is none)
+// GET /api/teachbacks/:id -> TeachbackView
+// POST /api/teachbacks/:id/finish -> TeachbackView (starts the debrief; 409 while the persona is replying, before the
+// learner has written anything, or once the debrief is running or done)
+// A teach-back unlocks nothing (L12).
+export type StartTeachbackRequest = { nodeId: string; lessonId?: string };
+
+export type TeachbackStatus = "talking" | "debriefing" | "done" | "failed";
+
+export type TeachbackSummary = {
+  id: string;
+  topicId: string;
+  nodeId: string;
+  nodeTitle: string;
+  lessonId: string;
+  lessonTitle: string;
+  conversationId: string;
+  status: TeachbackStatus;
+  createdAt: string;
+  finishedAt: string | null;
+  /** Key ideas covered; null until the debrief is done. */
+  score: { covered: number; total: number } | null;
+};
+
+/** A key idea: one published explain or worked_example step of the lesson, checked against the learner's words. */
+export type TeachbackIdea = {
+  stepId: string;
+  /** Position of the step in the lesson, for a link to it. */
+  stepIdx: number;
+  title: string;
+  verdict: "covered" | "missing" | "wrong";
+  /** The learner's words the verdict rests on, verbatim; null for a missing idea. */
+  evidence: string | null;
+  /** The idea as the lesson states it; null for a covered idea. */
+  correction: string | null;
+};
+
+export type TeachbackAction = { kind: "reread" | "practice"; stepId: string; stepIdx: number; title: string };
+
+export type TeachbackDebrief = { summary: string; ideas: TeachbackIdea[]; next: TeachbackAction[] };
+
+export type TeachbackView = TeachbackSummary & { debrief: TeachbackDebrief | null; error: string | null };
 
 // Review
 // GET /api/review?topicId= -> ReviewSession
@@ -607,7 +654,7 @@ export type Effort = (typeof EFFORTS)[number];
 /** Haiku models take no effort parameter (supportedModels of the Claude API effort docs). */
 export const supportsEffort = (model: string): boolean => !model.includes("haiku");
 
-export const CLAUDE_ROLES = ["onboard", "lesson", "tutor", "review", "critic", "grading", "narration", "video", "game"] as const satisfies readonly ClaudeInstanceKind[];
+export const CLAUDE_ROLES = ["onboard", "lesson", "tutor", "review", "teachback", "critic", "grading", "narration", "video", "game"] as const satisfies readonly ClaudeInstanceKind[];
 
 /** Null fields use the server defaults: CLAYFOLD_MODEL or CLAYFOLD_CRITIC_MODEL, and the role's default effort. */
 export type ClaudeRoleSetting = { model: ClaudeModel | null; effort: Effort | null };
@@ -622,6 +669,8 @@ export type Settings = {
   confidence: { enabled: boolean };
   /** Key badges on answer options and primary buttons, shown on devices with a fine pointer. */
   shortcuts: { hints: boolean };
+  /** Teach-back (L24) is offered only while on; off by default. */
+  teachback: { enabled: boolean };
   claude: Record<ClaudeInstanceKind, ClaudeRoleSetting & { defaultModel: string; defaultEffort: Effort }>;
   /** The meerkat; off by default. While on, goal plans carry trophies and lessons a challenge step. */
   gamification: boolean;
@@ -648,6 +697,7 @@ export type SettingsUpdate = {
   videoEnabled?: boolean;
   confidenceEnabled?: boolean;
   shortcutHints?: boolean;
+  teachbackEnabled?: boolean;
   claudeRole?: ClaudeRoleSetting & { role: ClaudeInstanceKind };
 };
 

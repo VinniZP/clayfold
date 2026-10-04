@@ -46,6 +46,7 @@ import type {
   SettingsUpdate,
   StartLessonResponse,
   SystemView,
+  TeachbackView,
   TodayView,
   TopicDetail,
   TopicSummary,
@@ -199,6 +200,10 @@ export const api = {
     post<WorkedLineResponse>(`/api/worked/${e(stepId)}/lines/${idx}`, { answer }),
   reflect: (stepId: string, text: string) => post<unknown>(`/api/steps/${e(stepId)}/reflect`, { text }),
   tutor: (lessonId: string, body: TutorRequest) => post<{ conversationId: string }>(`/api/lessons/${e(lessonId)}/tutor`, body),
+  startTeachback: (topicId: string, nodeId: string, lessonId?: string) =>
+    post<TeachbackView>(`/api/topics/${e(topicId)}/teachbacks`, lessonId ? { nodeId, lessonId } : { nodeId }),
+  teachback: (id: string) => get<TeachbackView>(`/api/teachbacks/${e(id)}`),
+  finishTeachback: (id: string) => post<TeachbackView>(`/api/teachbacks/${e(id)}/finish`),
 
   review: (topicId?: string) => get<ReviewSession>(`/api/review${topicId ? `?topicId=${e(topicId)}` : ""}`),
   reviewCard: (cardId: string, rating: ReviewRating, durationMs?: number) =>
