@@ -476,7 +476,7 @@ export const condSteps: PublicStep[] = [
 
 // ---------- Practice sets: items the simulated practice-set run publishes, in turn ----------
 
-export const practicePool: { nodeId: string; title: string; item: PublicItem }[] = [
+export const practiceSetPool: { nodeId: string; title: string; item: PublicItem }[] = [
   {
     nodeId: "bayes-theorem",
     title: "A flagged bike brake",

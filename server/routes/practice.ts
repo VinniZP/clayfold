@@ -1,8 +1,8 @@
 import type { Database } from "bun:sqlite";
 import { Hono } from "hono";
 import { z } from "zod";
-import type { PracticeFrom, PracticeRequest, PracticeResults, PracticeScope, StartLessonResponse } from "../../shared/api";
-import { PRACTICE_SIZES, PracticeFocus, type Level } from "../../shared/schemas";
+import { practiceSizes, type PracticeFrom, type PracticeRequest, type PracticeResults, type PracticeScope, type StartLessonResponse } from "../../shared/api";
+import { COURSE_PRACTICE_SIZES, PRACTICE_SIZES, PracticeFocus, type Level } from "../../shared/schemas";
 import { runTurn } from "../claude/runner";
 import { db, newId } from "../db";
 import { okSources } from "../gates/diversity";
@@ -10,22 +10,24 @@ import { publish } from "../hub";
 import { t } from "../i18n";
 import { practiceTargets, type PracticeSpec } from "../mcp/tools/practice";
 import { fail, readBody } from "./http";
+import { finalView } from "./practice-tests";
 
-type Resolved = { topicId: string; nodeIds: string[]; seedItemId: string | null };
+type Resolved = { topicId: string; nodeIds: string[]; seedItemId: string | null; weakNodeIds: string[]; course: string | null };
 
 /** The topic and graph nodes a practice set started from `from` covers. */
 export function resolvePractice(from: PracticeFrom, database: Database = db()): Resolved {
   let resolved: Resolved;
+  if ("courseId" in from) return resolveCourse(from.courseId, database);
   if ("itemId" in from) {
     const item = database.query<{ topic_id: string; node_id: string }, [string]>("SELECT topic_id, node_id FROM items WHERE id = ?").get(from.itemId);
     if (!item) fail(404, "item not found");
-    resolved = { topicId: item.topic_id, nodeIds: [item.node_id], seedItemId: from.itemId };
+    resolved = { topicId: item.topic_id, nodeIds: [item.node_id], seedItemId: from.itemId, weakNodeIds: [], course: null };
   } else if ("lessonId" in from) {
     const lesson = database.query<{ topic_id: string; node_ids: string }, [string]>("SELECT topic_id, node_ids FROM lessons WHERE id = ?").get(from.lessonId);
     if (!lesson) fail(404, "lesson not found");
-    resolved = { topicId: lesson.topic_id, nodeIds: JSON.parse(lesson.node_ids) as string[], seedItemId: null };
+    resolved = { topicId: lesson.topic_id, nodeIds: JSON.parse(lesson.node_ids) as string[], seedItemId: null, weakNodeIds: [], course: null };
   } else {
-    resolved = { topicId: from.topicId, nodeIds: [from.nodeId], seedItemId: null };
+    resolved = { topicId: from.topicId, nodeIds: [from.nodeId], seedItemId: null, weakNodeIds: [], course: null };
   }
   const known = new Set(
     database
@@ -38,15 +40,30 @@ export function resolvePractice(from: PracticeFrom, database: Database = db()): 
   return { ...resolved, nodeIds };
 }
 
+/** Every node of the course that passed its exit check, and the weak nodes of its latest final among them. */
+function resolveCourse(topicId: string, database: Database): Resolved {
+  const topic = database.query<{ title: string; kind: string }, [string]>("SELECT title, kind FROM topics WHERE id = ?").get(topicId);
+  if (!topic || topic.kind !== "topic") fail(404, "course not found");
+  const passed = database
+    .query<{ id: string }, [string]>("SELECT id FROM nodes WHERE topic_id = ? AND mastery IN ('exit_passed','mastered') ORDER BY rowid")
+    .all(topicId)
+    .map((n) => n.id);
+  if (passed.length === 0) fail(409, t("practiceSet.courseEmpty"));
+  const weak = finalView(topicId, { database })
+    .weakNodes.map((n) => n.nodeId)
+    .filter((id) => passed.includes(id));
+  return { topicId, nodeIds: passed, seedItemId: null, weakNodeIds: weak, course: topic.title };
+}
+
 export function practiceScope(from: PracticeFrom, database: Database = db()): PracticeScope {
   return scopeOf(resolvePractice(from, database), database);
 }
 
-function scopeOf({ topicId, nodeIds }: Resolved, database: Database): PracticeScope {
+function scopeOf({ topicId, nodeIds, weakNodeIds }: Resolved, database: Database): PracticeScope {
   const nodes = database
     .query<{ id: string; title: string }, [string, string]>("SELECT id, title FROM nodes WHERE topic_id = ? AND id IN (SELECT value FROM json_each(?)) ORDER BY rowid")
     .all(topicId, JSON.stringify(nodeIds));
-  return { topicId, nodes, mistakes: practiceTargets(database, topicId, nodeIds).missed.length };
+  return { topicId, nodes, mistakes: practiceTargets(database, topicId, nodeIds).missed.length, weakNodeIds };
 }
 
 /** The level of the newest lesson on these nodes; without one, the placement of the first node. */
@@ -68,17 +85,18 @@ function levelFor(database: Database, topicId: string, nodeIds: string[]): Level
  * exists before Claude writes anything, so the learner can open the set and watch its items pass the gates.
  */
 export function startPractice(req: PracticeRequest, database: Database = db(), run: typeof runTurn = runTurn): StartLessonResponse & { lessonId: string } {
+  if (!practiceSizes(req.from).includes(req.size)) fail(400, `size ${req.size} does not fit this practice set`);
   const resolved = resolvePractice(req.from, database);
   const scope = scopeOf(resolved, database);
-  if (req.focus === "mistakes" && scope.mistakes === 0) fail(409, t("practice.noMistakes"));
+  if (req.focus === "mistakes" && scope.mistakes === 0) fail(409, t("practiceSet.noMistakes"));
   const sources = okSources(database, scope.topicId);
-  if (sources.length === 0) fail(409, t("practice.noSources"));
+  if (sources.length === 0) fail(409, t("practiceSet.noSources"));
 
   const nodeIds = scope.nodes.map((n) => n.id);
-  const title = t("practice.setTitle", { nodes: scope.nodes.map((n) => n.title).join(", ") }).slice(0, 120);
-  const objective = t(`practice.objective.${req.focus}`, { count: req.size });
-  const outline = Array.from({ length: req.size }, (_, i) => ({ kind: "practice", title: t("practice.itemTitle", { n: i + 1 }) }));
-  const spec: PracticeSpec = { focus: req.focus, seedItemId: resolved.seedItemId };
+  const title = (resolved.course ? t("practiceSet.courseTitle", { course: resolved.course }) : t("practiceSet.setTitle", { nodes: scope.nodes.map((n) => n.title).join(", ") })).slice(0, 120);
+  const objective = t(`practiceSet.objective.${req.focus}`, { count: req.size });
+  const outline = Array.from({ length: req.size }, (_, i) => ({ kind: "practice", title: t("practiceSet.itemTitle", { n: i + 1 }) }));
+  const spec: PracticeSpec = { focus: req.focus, seedItemId: resolved.seedItemId, ...(resolved.course ? { weakNodeIds: resolved.weakNodeIds } : {}) };
   const lessonId = newId("les");
   const conversationId = newId("cv");
   database.transaction(() => {
@@ -137,13 +155,14 @@ const FromQuery = z.union([
   z.object({ itemId: z.string().min(1) }),
   z.object({ lessonId: z.string().min(1) }),
   z.object({ topicId: z.string().min(1), nodeId: z.string().min(1) }),
+  z.object({ courseId: z.string().min(1) }),
 ]);
 
 export const practice = new Hono();
 
 practice.get("/practice/scope", (c) => {
   const parsed = FromQuery.safeParse(c.req.query());
-  if (!parsed.success) fail(400, "pass itemId, lessonId, or topicId and nodeId");
+  if (!parsed.success) fail(400, "pass itemId, lessonId, courseId, or topicId and nodeId");
   return c.json(practiceScope(parsed.data) satisfies PracticeScope);
 });
 
@@ -152,7 +171,7 @@ practice.post("/practice", async (c) => {
     c,
     z.object({
       from: FromQuery,
-      size: z.literal([...PRACTICE_SIZES]),
+      size: z.literal([...PRACTICE_SIZES, ...COURSE_PRACTICE_SIZES]),
       focus: PracticeFocus,
     }),
   );

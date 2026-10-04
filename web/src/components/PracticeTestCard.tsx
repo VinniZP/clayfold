@@ -253,9 +253,9 @@ function History({ tests, embedded }: { tests: PracticeTestSummary[]; embedded: 
 
 /**
  * Starts, resumes and lists practice tests of a topic or a goal (L20). `embedded` sits inside another card, as on
- * the goal page, and stays hidden until the goal has a finished lesson.
+ * the goal page, and stays hidden until the goal has a finished lesson; `section` is a part of another card.
  */
-export function PracticeTestCard({ scopeId, embedded = false }: { scopeId: string; embedded?: boolean }) {
+export function PracticeTestCard({ scopeId, embedded = false, section = false }: { scopeId: string; embedded?: boolean; section?: boolean }) {
   useLang();
   const res = useResource(() => api.practiceTests(scopeId), `practice:${scopeId}`);
   const o = res.data;
@@ -272,7 +272,7 @@ export function PracticeTestCard({ scopeId, embedded = false }: { scopeId: strin
         {o.open ? (
           <OpenTest test={o.open} onDiscarded={() => void res.reload()} />
         ) : o.eligible === 0 ? (
-          <Empty title={t("practice.lockedTitle")} art={embedded ? null : "empty-seedling"}>
+          <Empty title={t("practice.lockedTitle")} art={embedded || section ? null : "empty-seedling"}>
             {t("practice.lockedBody")}
           </Empty>
         ) : (
@@ -282,6 +282,15 @@ export function PracticeTestCard({ scopeId, embedded = false }: { scopeId: strin
       </div>
     ) : null;
 
+  if (section)
+    return (
+      <section aria-labelledby={`practice-${scopeId}`} {...stylex.props(layout.stack)}>
+        <h3 id={`practice-${scopeId}`} {...stylex.props(text.h3)}>
+          {t("practice.title")}
+        </h3>
+        {body}
+      </section>
+    );
   if (embedded)
     return (
       <section aria-labelledby={`practice-${scopeId}`} {...stylex.props(s.embedded)}>

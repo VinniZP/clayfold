@@ -16,14 +16,14 @@ export function scopeTopics(scopeId: string, database: Database = db()): string[
   return database.query<{ id: string }, [string]>("SELECT id FROM topics WHERE goal_id = ? ORDER BY created_at").all(scopeId).map((r) => r.id);
 }
 
-/** Lessons of the scope the learner has completed: every exit-check item answered. */
+/** Lessons of the scope the learner has completed (every exit-check item answered), and completed practice sets. */
 export function finishedLessons(scopeId: string, database: Database = db()): string[] {
   const topics = scopeTopics(scopeId, database);
   return database
-    .query<{ id: string }, [string]>("SELECT id FROM lessons WHERE topic_id IN (SELECT value FROM json_each(?)) ORDER BY created_at")
+    .query<{ id: string; practice: string | null }, [string]>("SELECT id, practice FROM lessons WHERE topic_id IN (SELECT value FROM json_each(?)) ORDER BY created_at")
     .all(JSON.stringify(topics))
-    .map((l) => l.id)
-    .filter((id) => learnerStatus(id, database) === "completed");
+    .filter((l) => learnerStatus(l.id, database, l.practice !== null) === "completed")
+    .map((l) => l.id);
 }
 
 /** Graded, active items of the finished lessons, each with the time it was last answered anywhere ('' when never). */

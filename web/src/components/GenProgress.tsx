@@ -54,7 +54,7 @@ export function GenProgress({
         </p>
         {practice && (
           <button type="button" disabled={practice.stopping} onClick={practice.onStop} {...stylex.props(btn.base, btn.ghost, btn.sm, s.stop)}>
-            {practice.stopping ? <Spinner /> : <CircleStop size={14} aria-hidden="true" />} {t("practice.stop")}
+            {practice.stopping ? <Spinner /> : <CircleStop size={14} aria-hidden="true" />} {t("practiceSet.stop")}
           </button>
         )}
       </div>
@@ -78,7 +78,7 @@ export function GenProgress({
         </p>
       )}
       <p {...stylex.props(text.small, text.muted)}>
-        {practice && <>{t("practice.writing")} </>}
+        {practice && <>{t("practiceSet.writing")} </>}
         {t("gen.readyStepsOpen")}
       </p>
     </div>

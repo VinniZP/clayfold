@@ -117,3 +117,22 @@ test("the browser views of a practice set carry no keys (L7)", () => {
   ]);
   for (const secret of ["SECRET-", "9137.25", '"correct"', '"solution"', '"hints"', '"misconception"', "seedItemId"]) expect(json).not.toContain(secret);
 });
+
+test("a course set covers the nodes past their exit check and names the weak nodes of the latest final (L21)", () => {
+  expect(() => practiceScope({ courseId: "tp1" }, database)).toThrow("No topic of this course");
+  database.query("UPDATE nodes SET mastery = CASE id WHEN 'b' THEN 'new' WHEN 'd' THEN 'mastered' ELSE 'exit_passed' END WHERE topic_id = 'tp1'").run();
+  database.query("INSERT INTO practice_tests (id, topic_id, kind, status, submitted_at) VALUES ('f1', 'tp1', 'final', 'done', '2026-01-10T10:00:00.000Z')").run();
+  const question = database.query(
+    "INSERT INTO practice_test_items (test_id, idx, item_id, topic_id, node_id, content, answer, answered_at, correct) VALUES ('f1', ?, ?, 'tp1', ?, ?, '{}', '2026-01-10T10:00:00.000Z', ?)",
+  );
+  question.run(0, "q-a", "a", JSON.stringify(items.single("qa", "a")), 1);
+  question.run(1, "q-c", "c", JSON.stringify(items.single("qc", "c")), 0);
+
+  expect(practiceScope({ courseId: "tp1" }, database)).toMatchObject({ nodes: [{ id: "a" }, { id: "c" }, { id: "d" }], weakNodeIds: ["c"] });
+  expect(() => startPractice({ from: { courseId: "tp1" }, size: 5, focus: "same" }, database, run)).toThrow("does not fit");
+  const { lessonId } = startPractice({ from: { courseId: "tp1" }, size: 15, focus: "same" }, database, run);
+  const row = lessonRow(lessonId);
+  expect(row.title).toBe("Practice across the course: Topic");
+  expect(JSON.parse(row.practice!)).toEqual({ focus: "same", seedItemId: null, weakNodeIds: ["c"] });
+  expect(JSON.parse(row.outline)).toHaveLength(15);
+});

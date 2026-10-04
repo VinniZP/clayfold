@@ -2,9 +2,9 @@ import * as stylex from "@stylexjs/stylex";
 import { ArrowRight, Dumbbell, Sparkles } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router";
-import type { PracticeFrom } from "@shared/api";
+import { practiceSizes, type PracticeFrom } from "@shared/api";
 import type { MessageKey } from "@shared/i18n";
-import { PRACTICE_SIZES, type PracticeFocus, type PracticeSize } from "@shared/schemas";
+import type { PracticeFocus, PracticeSize } from "@shared/schemas";
 import { api, errorText } from "../lib/api";
 import { t, useLang } from "../lib/i18n";
 import { useResource } from "../lib/useResource";
@@ -78,14 +78,14 @@ const s = stylex.create({
 const FOCUSES = ["same", "harder", "mistakes"] as const satisfies readonly PracticeFocus[];
 
 export const FOCUS_LABEL: Record<PracticeFocus, MessageKey> = {
-  same: "practice.focus.same",
-  harder: "practice.focus.harder",
-  mistakes: "practice.focus.mistakes",
+  same: "practiceSet.focus.same",
+  harder: "practiceSet.focus.harder",
+  mistakes: "practiceSet.focus.mistakes",
 };
 
 const FOCUS_HINT: Record<Exclude<PracticeFocus, "mistakes">, MessageKey> = {
-  same: "practice.focus.sameHint",
-  harder: "practice.focus.harderHint",
+  same: "practiceSet.focus.sameHint",
+  harder: "practiceSet.focus.harderHint",
 };
 
 /**
@@ -99,6 +99,7 @@ export function PracticeDialog({ from, defaultFocus = "same", onClose }: { from:
   const navigate = useNavigate();
   const key = from ? JSON.stringify(from) : null;
   const scope = useResource(() => api.practiceScope(from!), key);
+  const sizes = from ? practiceSizes(from) : [];
   const [size, setSize] = useState<PracticeSize>(5);
   const [focus, setFocus] = useState<PracticeFocus>(defaultFocus);
   const [busy, setBusy] = useState(false);
@@ -107,6 +108,7 @@ export function PracticeDialog({ from, defaultFocus = "same", onClose }: { from:
   useEffect(() => {
     if (!key) return;
     setFocus(defaultFocus);
+    setSize(practiceSizes(JSON.parse(key) as PracticeFrom)[1]!);
     setError(null);
     if (!dialog.current?.open) dialog.current?.showModal();
   }, [key, defaultFocus]);
@@ -134,9 +136,20 @@ export function PracticeDialog({ from, defaultFocus = "same", onClose }: { from:
       <div {...stylex.props(s.body)}>
         <div>
           <h2 id={titleId} {...stylex.props(s.title)}>
-            {t("practice.dialogTitle")}
+            {t("practiceSet.dialogTitle")}
           </h2>
-          {scope.data && <p {...stylex.props(text.muted)}>{t("practice.dialogOn", { nodes: scope.data.nodes.map((n) => n.title).join(", ") })}</p>}
+          {scope.data && from && "courseId" in from ? (
+            <>
+              <p {...stylex.props(text.muted)}>{t("practiceSet.dialogCourse", { count: scope.data.nodes.length })}</p>
+              {scope.data.weakNodeIds.length > 0 && (
+                <p {...stylex.props(text.small, text.muted)}>
+                  {t("practiceSet.dialogWeak", { nodes: scope.data.nodes.filter((n) => scope.data!.weakNodeIds.includes(n.id)).map((n) => n.title).join(", ") })}
+                </p>
+              )}
+            </>
+          ) : (
+            scope.data && <p {...stylex.props(text.muted)}>{t("practiceSet.dialogOn", { nodes: scope.data.nodes.map((n) => n.title).join(", ") })}</p>
+          )}
         </div>
         {scope.error ? (
           <ErrorBox error={scope.error} onRetry={scope.reload} />
@@ -145,9 +158,9 @@ export function PracticeDialog({ from, defaultFocus = "same", onClose }: { from:
         ) : (
           <>
             <fieldset {...stylex.props(s.group)}>
-              <legend {...stylex.props(field.label)}>{t("practice.size")}</legend>
+              <legend {...stylex.props(field.label)}>{t("practiceSet.size")}</legend>
               <div {...stylex.props(s.sizes)}>
-                {PRACTICE_SIZES.map((n) => (
+                {sizes.map((n) => (
                   <button key={n} type="button" aria-pressed={size === n} onClick={() => setSize(n)} {...stylex.props(s.size, size === n && s.sizeOn)}>
                     {t("count.items", { count: n })}
                   </button>
@@ -155,7 +168,7 @@ export function PracticeDialog({ from, defaultFocus = "same", onClose }: { from:
               </div>
             </fieldset>
             <fieldset {...stylex.props(s.group)}>
-              <legend {...stylex.props(field.label)}>{t("practice.focus")}</legend>
+              <legend {...stylex.props(field.label)}>{t("practiceSet.focus")}</legend>
               {FOCUSES.map((f) => {
                 const off = f === "mistakes" && mistakes === 0;
                 return (
@@ -164,7 +177,7 @@ export function PracticeDialog({ from, defaultFocus = "same", onClose }: { from:
                     <span {...stylex.props(s.focusText)}>
                       <span {...stylex.props(s.focusName)}>{t(FOCUS_LABEL[f])}</span>
                       <span {...stylex.props(text.small, text.muted)}>
-                        {f === "mistakes" ? (off ? t("practice.focus.noMistakes") : t("practice.focus.mistakesHint", { count: mistakes })) : t(FOCUS_HINT[f])}
+                        {f === "mistakes" ? (off ? t("practiceSet.focus.noMistakes") : t("practiceSet.focus.mistakesHint", { count: mistakes })) : t(FOCUS_HINT[f])}
                       </span>
                     </span>
                   </label>
@@ -175,16 +188,16 @@ export function PracticeDialog({ from, defaultFocus = "same", onClose }: { from:
         )}
         <p {...stylex.props(banner.base, banner.lilac, s.note)}>
           <Sparkles size={16} aria-hidden="true" {...stylex.props(s.noteIcon)} />
-          <span {...stylex.props(text.small)}>{t("practice.usesClaude")}</span>
+          <span {...stylex.props(text.small)}>{t("practiceSet.usesClaude")}</span>
         </p>
         {error && (
           <p role="alert" {...stylex.props(text.error)}>
-            {t("practice.startFailed", { error })}
+            {t("practiceSet.startFailed", { error })}
           </p>
         )}
         <div {...stylex.props(layout.actions)}>
           <button type="button" disabled={busy || !scope.data} onClick={start} {...stylex.props(btn.base, btn.primary)}>
-            {busy ? <Spinner /> : <Dumbbell size={16} aria-hidden="true" />} {t("practice.start")}
+            {busy ? <Spinner /> : <Dumbbell size={16} aria-hidden="true" />} {t("practiceSet.start")}
           </button>
           <button type="button" onClick={() => dialog.current?.close()} {...stylex.props(btn.base, btn.ghost)}>
             {t("common.cancel")}
@@ -198,7 +211,7 @@ export function PracticeDialog({ from, defaultFocus = "same", onClose }: { from:
 /** A button that opens the practice dialog for `from`. */
 export function PracticeButton({
   from,
-  label = t("practice.more"),
+  label = t("practiceSet.more"),
   defaultFocus,
   primary,
   small,
@@ -228,7 +241,7 @@ export function PracticeOffer({ lessonId, belowCrown }: { lessonId: string; belo
   useLang();
   return (
     <div {...stylex.props(s.offer, belowCrown && s.offerUrgent)}>
-      <p>{t(belowCrown ? "practice.belowCrown" : "practice.afterLesson")}</p>
+      <p>{t(belowCrown ? "practiceSet.belowCrown" : "practiceSet.afterLesson")}</p>
       <PracticeButton from={{ lessonId }} defaultFocus={belowCrown ? "mistakes" : "same"} primary={belowCrown} small xstyle={s.start} />
     </div>
   );
@@ -242,7 +255,7 @@ export function PracticeEnd({ lessonId, topicId, summary, generating }: { lesson
   return (
     <div {...stylex.props(s.end)}>
       <h2 id="step-placeholder" tabIndex={-1} {...stylex.props(s.endTitle)}>
-        {t("practice.results")}
+        {t("practiceSet.results")}
       </h2>
       {results.error ? (
         <ErrorBox error={results.error} onRetry={results.reload} />
@@ -254,21 +267,21 @@ export function PracticeEnd({ lessonId, topicId, summary, generating }: { lesson
             <p {...stylex.props(s.scoreNum)}>
               {r.firstTry} <span {...stylex.props(s.scoreOf)}>{t("steps.scoreOf", { total: r.total })}</span>
             </p>
-            <p>{t("practice.score")}</p>
+            <p>{t("practiceSet.score")}</p>
           </div>
           <ul {...stylex.props(s.nodes)}>
             {r.nodes.map((n) => (
               <li key={n.nodeId} {...stylex.props(s.node)}>
                 <div {...stylex.props(s.nodeHead)}>
                   <span {...stylex.props(text.strong)}>{n.title}</span>
-                  <span {...stylex.props(text.small, text.muted, text.tnum)}>{t("practice.nodeScore", { firstTry: n.firstTry, total: n.total })}</span>
+                  <span {...stylex.props(text.small, text.muted, text.tnum)}>{t("practiceSet.nodeScore", { firstTry: n.firstTry, total: n.total })}</span>
                 </div>
-                <Progress value={n.firstTry} max={n.total} label={t("practice.nodeAccuracy", { title: n.title })} />
-                {n.solved > n.firstTry && <p {...stylex.props(text.small, text.muted)}>{t("practice.nodeSolved", { count: n.solved - n.firstTry })}</p>}
+                <Progress value={n.firstTry} max={n.total} label={t("practiceSet.nodeAccuracy", { title: n.title })} />
+                {n.solved > n.firstTry && <p {...stylex.props(text.small, text.muted)}>{t("practiceSet.nodeSolved", { count: n.solved - n.firstTry })}</p>}
               </li>
             ))}
           </ul>
-          {r.total > r.solved && <p {...stylex.props(text.muted)}>{t("practice.open", { count: r.total - r.solved })}</p>}
+          {r.total > r.solved && <p {...stylex.props(text.muted)}>{t("practiceSet.open", { count: r.total - r.solved })}</p>}
         </>
       )}
       <DayProgress />
@@ -276,7 +289,7 @@ export function PracticeEnd({ lessonId, topicId, summary, generating }: { lesson
         <Markdown src={summary} />
       ) : generating ? (
         <p {...stylex.props(text.muted)}>
-          <Spinner /> {t("practice.stillWriting")}
+          <Spinner /> {t("practiceSet.stillWriting")}
         </p>
       ) : null}
       <div {...stylex.props(layout.actions)}>

@@ -407,8 +407,15 @@ function practiceScope(from: Record<string, unknown>): PracticeScope | null {
     const d = fx.topicDetails[topicId];
     const nodes = (d?.nodes ?? []).filter((n) => ids.includes(n.id)).map((n) => ({ id: n.id, title: n.title }));
     const mistakes = Object.values(fx.itemStates).filter((st) => st.wrongAttempts > 0 || st.gaveUp).length;
-    return nodes.length ? { topicId, nodes, mistakes } : null;
+    return nodes.length ? { topicId, nodes, mistakes, weakNodeIds: [] } : null;
   };
+  if (typeof from.courseId === "string") {
+    const d = fx.topicDetails[from.courseId];
+    if (!d) return null;
+    const weak = finalView(from.courseId).weakNodes.map((n) => n.nodeId);
+    const all = nodesOf(from.courseId, d.nodes.map((n) => n.id));
+    return all && { ...all, weakNodeIds: weak };
+  }
   if (typeof from.lessonId === "string") {
     const lesson = Object.values(fx.topicDetails).flatMap((d) => d.lessons).find((l) => l.id === from.lessonId);
     return lesson ? nodesOf(lesson.topicId, lesson.nodeIds) : null;
@@ -416,7 +423,7 @@ function practiceScope(from: Record<string, unknown>): PracticeScope | null {
   if (typeof from.itemId === "string") {
     const set = [...sim.practiceSets.values()].find((x) => (from.itemId as string).startsWith(`${x.lesson.id}-i`));
     const idx = set ? Number((from.itemId as string).slice(`${set.lesson.id}-i`.length)) : -1;
-    const entry = set ? fx.practicePool[(set.offset + idx) % fx.practicePool.length] : undefined;
+    const entry = set ? fx.practiceSetPool[(set.offset + idx) % fx.practiceSetPool.length] : undefined;
     return set && entry ? nodesOf(set.lesson.topicId, [entry.nodeId]) : nodesOf("t-bayes", ["bayes-theorem"]);
   }
   return typeof from.topicId === "string" && typeof from.nodeId === "string" ? nodesOf(from.topicId, [from.nodeId]) : null;
@@ -425,7 +432,7 @@ function practiceScope(from: Record<string, unknown>): PracticeScope | null {
 function practiceItemState(set: sim.PracticeSim, step: PublicStep) {
   const st = step.kind === "practice" ? fx.itemStates[step.item.id] : undefined;
   return {
-    nodeId: fx.practicePool[(set.offset + step.idx) % fx.practicePool.length]!.nodeId,
+    nodeId: fx.practiceSetPool[(set.offset + step.idx) % fx.practiceSetPool.length]!.nodeId,
     answered: !!st && (st.attempts > 0 || st.gaveUp),
     firstTry: !!st && st.solved && st.wrongAttempts === 0 && st.hints.length === 0 && !st.gaveUp,
     done: !!st && (st.solved || st.gaveUp),
@@ -467,6 +474,7 @@ function lessonView(id: string): LessonView | null {
       tutorConversationId: null,
       itemStates: { ...fx.itemStates },
       revealedLines: {},
+      challengeIdx: null,
     };
   }
   if (id === "l-bayes") {
@@ -703,10 +711,12 @@ async function route(method: string, path: string, body: Record<string, unknown>
     const scope = practiceScope((body.from ?? {}) as Record<string, unknown>);
     if (!scope) return json({ error: "node not found" }, 404);
     const focus = body.focus as PracticeFocus;
-    if (focus === "mistakes" && scope.mistakes === 0) return json({ error: t("practice.noMistakes") }, 409);
+    if (focus === "mistakes" && scope.mistakes === 0) return json({ error: t("practiceSet.noMistakes") }, 409);
     const conversationId = `c-practice-${++seq}`;
     fx.conversations[conversationId] = { topicId: scope.topicId, kind: "lesson", messages: [] };
-    const set = sim.createPracticeSet(scope.topicId, conversationId, scope.nodes, Number(body.size), focus);
+    const course = (body.from as Record<string, unknown> | undefined)?.courseId ? fx.topicDetails[scope.topicId]!.topic.title : null;
+    const title = course ? t("practiceSet.courseTitle", { course }) : undefined;
+    const set = sim.createPracticeSet(scope.topicId, conversationId, scope.nodes, Number(body.size), focus, title);
     fx.topicDetails[scope.topicId]?.conversations.push({ id: conversationId, kind: "lesson", lessonId: set.lesson.id, createdAt: new Date().toISOString() });
     setTimeout(() => sim.runPracticeGeneration(set), 400);
     return json({ lessonId: set.lesson.id, conversationId }, 202);

@@ -166,6 +166,8 @@ export type PracticeBrief = {
   focus: PracticeFocus;
   level: Level;
   nodes: { id: string; title: string; summary: string; mastery: LearnerState["nodes"][number]["mastery"] }[];
+  /** Nodes under 80% in the course's latest final exam (L21); they get about twice the items of the others. */
+  weakNodeIds: string[];
   /** The item the learner asked for more practice like; write new cases of the same skill, never a variant of it. */
   seed: { itemId: string; nodeId: string; format: string; bloom: string; prompt: string; misconceptions: string[] } | null;
   /** Misconceptions the learner chose on these nodes, most frequent and most recent first. */

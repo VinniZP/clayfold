@@ -397,15 +397,15 @@ export const practiceSets = new Map<string, PracticeSim>();
 let poolCursor = 0;
 
 /** A practice set as POST /api/practice creates it: an outline of placeholder items, all pending. */
-export function createPracticeSet(topicId: string, convId: string, nodes: { id: string; title: string }[], size: number, focus: PracticeFocus): PracticeSim {
+export function createPracticeSet(topicId: string, convId: string, nodes: { id: string; title: string }[], size: number, focus: PracticeFocus, title?: string): PracticeSim {
   const id = `l-practice-${++seq}`;
   const offset = poolCursor;
-  poolCursor = (poolCursor + size) % fx.practicePool.length;
+  poolCursor = (poolCursor + size) % fx.practiceSetPool.length;
   const lesson: LessonSummary = {
     id,
     topicId,
-    title: t("practice.setTitle", { nodes: nodes.map((n) => n.title).join(", ") }),
-    objective: t(`practice.objective.${focus}`, { count: size }),
+    title: title ?? t("practiceSet.setTitle", { nodes: nodes.map((n) => n.title).join(", ") }),
+    objective: t(`practiceSet.objective.${focus}`, { count: size }),
     level: "novice",
     nodeIds: nodes.map((n) => n.id),
     status: "generating",
@@ -421,7 +421,7 @@ export function createPracticeSet(topicId: string, convId: string, nodes: { id: 
   const set: PracticeSim = {
     lesson,
     convId,
-    outline: Array.from({ length: size }, (_, i) => ({ kind: "practice", title: t("practice.itemTitle", { n: i + 1 }) })),
+    outline: Array.from({ length: size }, (_, i) => ({ kind: "practice", title: t("practiceSet.itemTitle", { n: i + 1 }) })),
     status: Array.from({ length: size }, () => "pending"),
     steps: Array.from({ length: size }, () => null),
     summary: null,
@@ -434,7 +434,7 @@ export function createPracticeSet(topicId: string, convId: string, nodes: { id: 
 
 /** The pool item for index `idx`, under ids of its own so every set keeps separate progress. */
 function practiceStep(set: PracticeSim, idx: number): PublicStep {
-  const entry = fx.practicePool[(set.offset + idx) % fx.practicePool.length]!;
+  const entry = fx.practiceSetPool[(set.offset + idx) % fx.practiceSetPool.length]!;
   const itemId = `${set.lesson.id}-i${idx}`;
   fx.keys[itemId] = fx.keys[entry.item.id]!;
   return { id: `${set.lesson.id}-s${idx}`, idx, kind: "practice", title: entry.title, item: { ...entry.item, id: itemId } };

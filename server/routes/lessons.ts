@@ -93,7 +93,7 @@ export function resumeLesson(
       "SELECT id, session_id FROM conversations WHERE lesson_id = ? AND kind = 'lesson' ORDER BY created_at DESC, rowid DESC LIMIT 1",
     )
     .get(lesson.id);
-  if (!conv?.session_id) fail(409, lesson.practice ? t("practice.sessionGone") : "the lesson's authoring session is gone; rebuild the lesson instead");
+  if (!conv?.session_id) fail(409, lesson.practice ? t("practiceSet.sessionGone") : "the lesson's authoring session is gone; rebuild the lesson instead");
   database.transaction(() => {
     database.query("UPDATE steps SET status = 'rejected' WHERE lesson_id = ? AND status = 'checking'").run(lesson.id);
     database.query("UPDATE lessons SET status = 'generating' WHERE id = ?").run(lesson.id);

@@ -1,5 +1,5 @@
 import * as stylex from "@stylexjs/stylex";
-import { ArrowLeft, ArrowRight, BookOpen, Check, CircleCheck, Clock, Flag, GraduationCap, RefreshCw, Repeat, ShieldCheck, TriangleAlert, X } from "lucide-react";
+import { ArrowLeft, ArrowRight, BookOpen, Check, CircleCheck, Clock, Dumbbell, Flag, GraduationCap, RefreshCw, Repeat, ShieldCheck, TriangleAlert, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useParams } from "react-router";
 import { FINAL_PASS_SHARE, type PracticeAnswerUpdate, type PracticeQuestion, type PracticeTestView } from "@shared/api";
@@ -7,6 +7,7 @@ import type { Answer, PublicItem } from "@shared/schemas";
 import { useHeader } from "../components/header";
 import { AnswerInput, draftFromAnswer, toAnswer, type Draft } from "../components/ItemView";
 import { ItemPrompt } from "../components/ItemPrompt";
+import { PracticeButton } from "../components/Practice";
 import { CardHead, ErrorBox, Markdown, PageLoading, Progress, Spinner } from "../components/ui";
 import { api, ApiFailure, errorText } from "../lib/api";
 import { formatDateTime } from "../lib/format";
@@ -22,6 +23,7 @@ const POLL_MS = 2000;
 const WEAK_SHARE = 0.8;
 
 const s = stylex.create({
+  actionButton: { justifySelf: "start" },
   passed: { backgroundColor: color.successSoft, fontWeight: 650 },
   page: { display: "grid", gridTemplateColumns: "repeat(12, minmax(0, 1fr))", gap: 24, alignItems: "start" },
   main: { gridColumn: { default: "span 8", [bp.tablet]: "1 / -1" }, display: "grid", gap: 20, alignContent: "start", minWidth: 0 },
@@ -750,6 +752,22 @@ function Results({ view, timedOut, onChange }: { view: PracticeTestView; timedOu
                   {t("practice.retryInReview", { count: missed.length })}
                 </Link>
                 <span {...stylex.props(text.xs, text.muted)}>{t("practice.retryFrom", { date: formatDateTime(view.reviewFrom) })}</span>
+              </span>
+            </li>
+          )}
+          {!goal && (
+            <li {...stylex.props(s.action)}>
+              <span aria-hidden="true" {...stylex.props(s.actionIcon)}>
+                <Dumbbell size={16} />
+              </span>
+              <span {...stylex.props(s.actionBody)}>
+                <PracticeButton
+                  from={{ courseId: view.scope.id }}
+                  label={t(missed.length > 0 && view.test.kind === "final" ? "practiceSet.courseWeak" : "practiceSet.course")}
+                  small
+                  xstyle={s.actionButton}
+                />
+                <span {...stylex.props(text.xs, text.muted)}>{t("practiceSet.courseOffer")}</span>
               </span>
             </li>
           )}

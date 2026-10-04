@@ -7,7 +7,7 @@ const BRIEF_LIMIT = 10;
 const EXISTING_LIMIT = 30;
 const PROMPT_CHARS = 400;
 
-export type PracticeSpec = { focus: PracticeFocus; seedItemId: string | null };
+export type PracticeSpec = { focus: PracticeFocus; seedItemId: string | null; weakNodeIds?: string[] };
 
 const clip = (text: string) => (text.length > PROMPT_CHARS ? `${text.slice(0, PROMPT_CHARS)}…` : text);
 
@@ -87,6 +87,7 @@ export function practiceBrief(db: Database, topicId: string, lessonId: string): 
     focus: spec.focus,
     level: row.level,
     nodes,
+    weakNodeIds: spec.weakNodeIds ?? [],
     seed:
       seedRow && seedItem
         ? {
@@ -106,7 +107,7 @@ export function practiceBrief(db: Database, topicId: string, lessonId: string): 
 
 export const practiceBriefTool = defineTool({
   name: "practice_brief",
-  description: `Read what a practice set asks for: its size (one practice step per outline index 0..size-1), focus ("same" level, "harder": every item apply or higher, "mistakes": target the learner's own errors), learner level and graph nodes; the item the learner asked for more practice like (seed), if any; the misconceptions the learner chose on these nodes with counts (targets); items they answered wrongly or gave up on (missed); and prompts of the topic's active items on these nodes, which the new items must not repeat (Q7).
+  description: `Read what a practice set asks for: its size (one practice step per outline index 0..size-1), focus ("same" level, "harder": every item apply or higher, "mistakes": target the learner's own errors), learner level and graph nodes, with the nodes the course's latest final exam found weak (weakNodeIds: give them about twice the items); the item the learner asked for more practice like (seed), if any; the misconceptions the learner chose on these nodes with counts (targets); items they answered wrongly or gave up on (missed); and prompts of the topic's active items on these nodes, which the new items must not repeat (Q7).
 Call it first in a practice-set run. Then submit the items with step_submit (kind "practice", one item per index) and close the set with lesson_finish. Returns PracticeBrief JSON.`,
   handler(ctx, { lessonId }) {
     return { result: practiceBrief(ctx.db, ctx.topicId, lessonId) };

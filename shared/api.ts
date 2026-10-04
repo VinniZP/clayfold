@@ -1,6 +1,6 @@
 import type { HabitId, Outfit, OutfitItemId, OutfitSlot, RewardCondition, Tier } from "./game";
 import type { Lang } from "./i18n";
-import type { Answer, Card, GoalPlanEntry, GraphNode, Level, PracticeFocus, PracticeSize, PublicFigure, PublicItem, PublicStep, Resident } from "./schemas";
+import { COURSE_PRACTICE_SIZES, PRACTICE_SIZES, type Answer, type Card, type GoalPlanEntry, type GraphNode, type Level, type PracticeFocus, type PracticeSize, type PublicFigure, type PublicItem, type PublicStep, type Resident } from "./schemas";
 
 // REST contract. All routes are under /api and exchange JSON.
 // Errors: non-2xx with body ApiError.
@@ -124,17 +124,26 @@ export type StartLessonRequest = { nodeId?: string };
 export type StartLessonResponse = { lessonId: string | null; conversationId: string };
 
 // Practice sets: fresh practice items on demand, written by a practice-set run and gated like lesson steps.
-// GET  /api/practice/scope?topicId=&nodeId= | ?lessonId= | ?itemId= -> PracticeScope (the nodes a set from there covers)
+// GET  /api/practice/scope?topicId=&nodeId= | ?lessonId= | ?itemId= | ?courseId= -> PracticeScope (the nodes a set from there covers)
 // POST /api/practice PracticeRequest -> StartLessonResponse (lessonId set: the set exists at once, its steps follow)
 // GET  /api/lessons/:lessonId/practice -> PracticeResults (practice sets only)
-/** Where the learner asked for practice: a graph node, a lesson's nodes, or the node of an item ("more like this"). */
-export type PracticeFrom = { topicId: string; nodeId: string } | { lessonId: string } | { itemId: string };
+/**
+ * Where the learner asked for practice: a graph node, a lesson's nodes, the node of an item ("more like this"),
+ * or every node of a course that passed its exit check.
+ */
+export type PracticeFrom = { topicId: string; nodeId: string } | { lessonId: string } | { itemId: string } | { courseId: string };
+
+export function practiceSizes(from: PracticeFrom): readonly PracticeSize[] {
+  return "courseId" in from ? COURSE_PRACTICE_SIZES : PRACTICE_SIZES;
+}
 export type PracticeRequest = { from: PracticeFrom; size: PracticeSize; focus: PracticeFocus };
 export type PracticeScope = {
   topicId: string;
   nodes: { id: string; title: string }[];
   /** Items on these nodes the learner answered wrongly or gave up on; the "mistakes" focus needs at least one. */
   mistakes: number;
+  /** A course set only: nodes its latest final exam found weak, which get more items. */
+  weakNodeIds: string[];
 };
 /** First try: correct on the first attempt, without hints. */
 export type PracticeResults = {

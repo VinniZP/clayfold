@@ -12,10 +12,10 @@ import { LessonList } from "../components/LessonList";
 import { StaleSources, readyLine } from "../components/LessonStatus";
 import { CourseResident } from "../components/meerkat/CourseGame";
 import { OnboardingStepper } from "../components/OnboardingStepper";
-import { PracticeTestCard } from "../components/PracticeTestCard";
 import { PracticeButton } from "../components/Practice";
 import { GoalBanner, GoalView } from "./Goal";
 import { NewTopicForm, TopicCard, toneAt, topicObject } from "../components/Topics";
+import { TrainingCard } from "../components/TrainingCard";
 import { CardHead, Empty, ErrorBox, PageLoading, Spinner } from "../components/ui";
 import { api, errorText } from "../lib/api";
 import { formatDate, masteryLabel } from "../lib/format";
@@ -292,16 +292,10 @@ export function TopicPage() {
           )}
         </section>
 
-        {practiceSets.length > 0 && (
-          <section aria-labelledby="practice-title" {...stylex.props(card.base)}>
-            <CardHead title={t("topic.practiceSets")} id="practice-title" />
-            <LessonList lessons={practiceSets} />
-          </section>
-        )}
 
         {d.nodes.length > 0 && <FinalExamCard key={`final-${topicId}`} topicId={topicId} />}
 
-        {d.lessons.length > 0 && <PracticeTestCard key={topicId} scopeId={topicId} />}
+        {d.lessons.length > 0 && <TrainingCard key={`training-${topicId}`} topicId={topicId} sets={practiceSets} />}
 
         <section aria-labelledby="sources-title" {...stylex.props(card.base)}>
           <CardHead title={t("topic.sources")} id="sources-title" />

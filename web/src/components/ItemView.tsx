@@ -447,7 +447,7 @@ export function ItemView({ item, mode, context, active = true, onResult, onOffer
 
       {onPractiseMore && mode === "practice" && (wrongCount > 0 || gaveUp) && (
         <button type="button" onClick={() => onPractiseMore(item.id)} {...stylex.props(btn.base, btn.ghost, btn.sm, s.more)}>
-          <Dumbbell size={14} aria-hidden="true" /> {t("practice.thisMore")}
+          <Dumbbell size={14} aria-hidden="true" /> {t("practiceSet.thisMore")}
         </button>
       )}
     </div>

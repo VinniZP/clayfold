@@ -9,6 +9,7 @@ import { t, useLang } from "../lib/i18n";
 import { useResource } from "../lib/useResource";
 import { color, radius } from "../theme/tokens.stylex";
 import { banner, btn, card, layout, text } from "../theme/ui";
+import { PracticeButton } from "./Practice";
 import { CardHead, ErrorBox, Progress, Skeleton, Spinner } from "./ui";
 
 const s = stylex.create({
@@ -22,6 +23,7 @@ const s = stylex.create({
   done: { color: color.success },
   todo: { color: color.textMuted },
   start: { justifySelf: "start" },
+  invite: { display: "grid", gap: 12, paddingBlock: 16, paddingInline: 18, borderRadius: radius.inner, backgroundColor: color.pistachioSoft },
 });
 
 const PASS_PERCENT = Math.round(FINAL_PASS_SHARE * 100);
@@ -57,7 +59,7 @@ function StartButton({ topicId, label, primary, disabled }: { topicId: string; l
   );
 }
 
-function WeakNodes({ nodes }: { nodes: FinalExamView["weakNodes"] }) {
+function WeakNodes({ topicId, nodes }: { topicId: string; nodes: FinalExamView["weakNodes"] }) {
   useLang();
   return (
     <section aria-labelledby="final-weak" {...stylex.props(layout.stack)}>
@@ -82,6 +84,7 @@ function WeakNodes({ nodes }: { nodes: FinalExamView["weakNodes"] }) {
           </li>
         ))}
       </ul>
+      <PracticeButton from={{ courseId: topicId }} label={t("practiceSet.courseWeak")} small xstyle={s.start} />
     </section>
   );
 }
@@ -134,7 +137,7 @@ function Body({ topicId, f }: { topicId: string; f: FinalExamView }) {
         </p>
       ) : (
         <>
-          {!f.passed && f.weakNodes.length > 0 && <WeakNodes nodes={f.weakNodes} />}
+          {!f.passed && f.weakNodes.length > 0 && <WeakNodes topicId={topicId} nodes={f.weakNodes} />}
           {(f.canStart || !f.passed) && (
             <StartButton topicId={topicId} label={t(!f.best ? "final.start" : f.passed ? "final.improve" : "final.retake")} primary={!f.passed} disabled={!f.canStart} />
           )}
@@ -165,7 +168,7 @@ export function FinalInvite({ topicId }: { topicId: string }) {
   const f = res.data;
   if (!f || f.nodesTotal === 0 || f.nodesPassed < f.nodesTotal || f.latest || !f.canStart) return null;
   return (
-    <section aria-labelledby="final-invite" {...stylex.props(s.locked)}>
+    <section aria-labelledby="final-invite" {...stylex.props(s.invite)}>
       <h3 id="final-invite" {...stylex.props(s.lockedHead)}>
         <GraduationCap size={18} aria-hidden="true" /> {t("final.readyTitle")}
       </h3>

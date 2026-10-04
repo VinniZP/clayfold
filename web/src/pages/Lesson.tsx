@@ -492,7 +492,7 @@ export function LessonPage() {
           <button type="button" aria-current={isEnd ? "step" : undefined} onClick={() => go(total)} {...stylex.props(s.item, isEnd && s.itemCurrent)}>
             <Marker n={null} st="published" done={false} current={isEnd} />
             <span {...stylex.props(s.itemText)}>
-              <span {...stylex.props(s.itemTitle)}>{t(practice ? "practice.results" : "lesson.summaryAndCards")}</span>
+              <span {...stylex.props(s.itemTitle)}>{t(practice ? "practiceSet.results" : "lesson.summaryAndCards")}</span>
             </span>
           </button>
         </li>
@@ -579,7 +579,7 @@ export function LessonPage() {
           <p {...stylex.props(s.outlineTitle)}>{topicTitle ?? t("lesson.plan")}</p>
           <p {...stylex.props(s.outlineMeta, text.small, text.muted, text.tnum)}>
             {practice
-              ? t("practice.outlineMeta", { focus: t(FOCUS_LABEL[practice.focus]), ready: published, total })
+              ? t("practiceSet.outlineMeta", { focus: t(FOCUS_LABEL[practice.focus]), ready: published, total })
               : t("lesson.outlineMeta", { level: levelLabel(v.lesson.level), ready: published, total })}
           </p>
           <p {...stylex.props(s.outlineMeta)}>
@@ -587,7 +587,7 @@ export function LessonPage() {
             {streamStatus === "reconnecting" && <span {...stylex.props(chip.base, chip.xs, chip.butter)}> {t("lesson.reconnecting")}</span>}
           </p>
           <details {...stylex.props(s.mobileOnly)}>
-            <summary {...stylex.props(s.mobileSummary)}>{isEnd ? t(practice ? "practice.results" : "lesson.summaryTitle") : t("lesson.stepOf", { n: pos + 1, total })} · {t("lesson.contents")}</summary>
+            <summary {...stylex.props(s.mobileSummary)}>{isEnd ? t(practice ? "practiceSet.results" : "lesson.summaryTitle") : t("lesson.stepOf", { n: pos + 1, total })} · {t("lesson.contents")}</summary>
             {outlineList}
           </details>
           <nav aria-label={t("lesson.steps")} {...stylex.props(s.desktopOnly)}>
@@ -600,7 +600,7 @@ export function LessonPage() {
             <div role="alert" {...stylex.props(banner.base, banner.danger, s.interrupted)}>
               <TriangleAlert size={16} aria-hidden="true" />
               <span {...stylex.props(s.interruptedText)}>
-                {resumeError ? t("lesson.resumeFailed", { error: resumeError }) : t(practice ? "practice.interrupted" : "lesson.interrupted")}
+                {resumeError ? t("lesson.resumeFailed", { error: resumeError }) : t(practice ? "practiceSet.interrupted" : "lesson.interrupted")}
               </span>
               <button type="button" disabled={resuming} onClick={resume} {...stylex.props(btn.base, btn.danger, btn.sm)}>
                 {resuming ? <Spinner /> : <RotateCcw size={14} aria-hidden="true" />} {t("lesson.resume")}
@@ -624,7 +624,7 @@ export function LessonPage() {
                 />
               )}
               <div {...stylex.props(s.progressRow)}>
-                <span {...stylex.props(text.small, text.muted, text.tnum)}>{isEnd ? t(practice ? "practice.results" : "lesson.summaryShort") : t("lesson.stepOf", { n: pos + 1, total })}</span>
+                <span {...stylex.props(text.small, text.muted, text.tnum)}>{isEnd ? t(practice ? "practiceSet.results" : "lesson.summaryShort") : t("lesson.stepOf", { n: pos + 1, total })}</span>
                 <div {...stylex.props(s.progressBar)}>
                   <Progress value={done} max={total} label={t("lesson.stepsDone")} />
                 </div>
@@ -813,14 +813,12 @@ function LessonEnd({
   generating,
   checkResults,
   topicId,
-  lessonId,
 }: {
   lessonId: string;
   summary: string | null;
   generating: boolean;
   checkResults: { item: PublicItem; result: ItemResult | undefined }[] | null;
   topicId: string | null;
-  lessonId: string;
 }) {
   useLang();
   const correct = checkResults?.filter((r) => r.result?.response.correct === true).length ?? 0;
@@ -839,6 +837,7 @@ function LessonEnd({
       )}
       <LessonReward lessonId={lessonId} end />
       <PracticeOffer lessonId={lessonId} belowCrown={!!checkResults && checkResults.length > 0 && correct / checkResults.length < CROWN_SHARE} />
+      {topicId && <FinalInvite topicId={topicId} />}
       <DayProgress />
       {summary ? (
         <Markdown src={summary} />
@@ -852,7 +851,6 @@ function LessonEnd({
         <p {...stylex.props(text.small, text.muted)}>{t("lesson.reviewCardsHint")}</p>
         {topicId ? <ProposedCards topicId={topicId} /> : <Empty title={t("lesson.findingTopic")} />}
       </section>
-      {topicId && <FinalInvite topicId={topicId} />}
       {topicId && (
         <Link to={`/topics/${topicId}`} {...stylex.props(btn.base, btn.primary, s.start)}>
           {t("lesson.toCourseMap")} <ArrowRight size={16} aria-hidden="true" />

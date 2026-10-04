@@ -9,7 +9,7 @@ Write practice set `$ARGUMENTS`: fresh practice items on graph nodes the learner
 
 ## 1. Load the brief
 
-Call `practice_brief` with the lessonId. It fixes the set: `size` items (outline indices 0..size-1), the `focus`, the learner's `level`, the `nodes`, the `seed` item the learner asked for more of (or null), the misconceptions they chose (`targets`), the items they missed (`missed`), and `existingPrompts`. Then call `get_learner_state` with the brief's node ids: its `sources` are what you cite and its `glossary` the terms you use. Read `MISSION.md` for the learner's interests and `RESOURCES.md` for what each source covers.
+Call `practice_brief` with the lessonId. It fixes the set: `size` items (outline indices 0..size-1), the `focus`, the learner's `level`, the `nodes` and the weak ones among them (`weakNodeIds`), the `seed` item the learner asked for more of (or null), the misconceptions they chose (`targets`), the items they missed (`missed`), and `existingPrompts`. Then call `get_learner_state` with the brief's node ids: its `sources` are what you cite and its `glossary` the terms you use. Read `MISSION.md` for the learner's interests and `RESOURCES.md` for what each source covers.
 
 ## 2. Plan every item
 
@@ -17,7 +17,7 @@ Read [items.md](${CLAUDE_SKILL_DIR}/../lesson-author/items.md) and the item form
 
 - **Fresh** (Q7): each item tests a scenario of its own, absent from `existingPrompts` and from the `seed`: another situation, not new numbers or names in an old one. With a `seed`, every item exercises the seed's skill on its node.
 - **Mixed** (L13): recall (`cloze`, `number`, `short`, `order`) and choice (`single`, `multi`) items, at least one of each. The gate checks the mix at the last index.
-- **The learner's world** (L16): scenarios from the interests in `MISSION.md`, realistic, the logic unchanged. With several nodes, spread the items across them.
+- **The learner's world** (L16): scenarios from the interests in `MISSION.md`, realistic, the logic unchanged. With several nodes, spread the items across them, about twice as many on each node of `weakNodeIds` as on the others.
 - **Focus**:
 
 | `focus` | The items |

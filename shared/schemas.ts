@@ -323,9 +323,10 @@ export type Level = z.infer<typeof Level>;
 export const PracticeFocus = z.enum(["same", "harder", "mistakes"]);
 export type PracticeFocus = z.infer<typeof PracticeFocus>;
 
-/** Items in a practice set, one practice step each. */
+/** Items in a practice set, one practice step each; a set across a whole course is larger. */
 export const PRACTICE_SIZES = [3, 5, 8] as const;
-export type PracticeSize = (typeof PRACTICE_SIZES)[number];
+export const COURSE_PRACTICE_SIZES = [10, 15, 20] as const;
+export type PracticeSize = (typeof PRACTICE_SIZES)[number] | (typeof COURSE_PRACTICE_SIZES)[number];
 
 export const LessonPlan = z
   .object({
