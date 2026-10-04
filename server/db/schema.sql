@@ -357,6 +357,51 @@ CREATE TABLE IF NOT EXISTS practice_test_items ( -- A
   PRIMARY KEY (test_id, idx)
 );
 
+-- Search (GET /api/search): server/search.ts.
+
+-- No constraints: a conflict clause inside a trigger gives way to the outer statement's, so an upsert would fail on a
+-- queued duplicate. syncSearch reads the rows distinct.
+CREATE TABLE IF NOT EXISTS search_queue (      -- the triggers below; A empties it when it indexes
+  kind TEXT NOT NULL,                           -- SearchKind
+  ref TEXT NOT NULL                             -- row id; for a term, topic_id || '/' || key
+);
+
+CREATE TABLE IF NOT EXISTS search_entries (    -- A: what a hit shows, only text the browser may see (L7)
+  id INTEGER PRIMARY KEY,                       -- rowid of search_index
+  kind TEXT NOT NULL,
+  ref TEXT NOT NULL,
+  topic_id TEXT NOT NULL,
+  lesson_id TEXT,
+  step_id TEXT,
+  title TEXT NOT NULL,
+  body TEXT NOT NULL,
+  UNIQUE (kind, ref)
+);
+
+-- A: title and body of search_entries, folded by foldForSearch (shared/search.ts); trigrams match inside words.
+CREATE VIRTUAL TABLE IF NOT EXISTS search_index USING fts5(title, body, tokenize = 'trigram');
+
+CREATE TRIGGER IF NOT EXISTS search_topic_ins AFTER INSERT ON topics BEGIN INSERT INTO search_queue VALUES ('topic', new.id); END;
+CREATE TRIGGER IF NOT EXISTS search_topic_upd AFTER UPDATE OF title, request ON topics BEGIN INSERT INTO search_queue VALUES ('topic', new.id); END;
+CREATE TRIGGER IF NOT EXISTS search_topic_del AFTER DELETE ON topics BEGIN INSERT INTO search_queue VALUES ('topic', old.id); END;
+CREATE TRIGGER IF NOT EXISTS search_lesson_ins AFTER INSERT ON lessons BEGIN INSERT INTO search_queue VALUES ('lesson', new.id); END;
+CREATE TRIGGER IF NOT EXISTS search_lesson_upd AFTER UPDATE OF title, objective ON lessons BEGIN INSERT INTO search_queue VALUES ('lesson', new.id); END;
+CREATE TRIGGER IF NOT EXISTS search_lesson_del AFTER DELETE ON lessons BEGIN INSERT INTO search_queue VALUES ('lesson', old.id); END;
+CREATE TRIGGER IF NOT EXISTS search_step_ins AFTER INSERT ON steps BEGIN INSERT INTO search_queue VALUES ('step', new.id); END;
+CREATE TRIGGER IF NOT EXISTS search_step_upd AFTER UPDATE OF content, status ON steps BEGIN INSERT INTO search_queue VALUES ('step', new.id); END;
+CREATE TRIGGER IF NOT EXISTS search_step_del AFTER DELETE ON steps BEGIN INSERT INTO search_queue VALUES ('step', old.id); END;
+CREATE TRIGGER IF NOT EXISTS search_term_ins AFTER INSERT ON glossary_terms BEGIN INSERT INTO search_queue VALUES ('term', new.topic_id || '/' || new.key); END;
+CREATE TRIGGER IF NOT EXISTS search_term_upd AFTER UPDATE ON glossary_terms BEGIN
+  INSERT INTO search_queue VALUES ('term', old.topic_id || '/' || old.key), ('term', new.topic_id || '/' || new.key);
+END;
+CREATE TRIGGER IF NOT EXISTS search_term_del AFTER DELETE ON glossary_terms BEGIN INSERT INTO search_queue VALUES ('term', old.topic_id || '/' || old.key); END;
+CREATE TRIGGER IF NOT EXISTS search_note_ins AFTER INSERT ON notes BEGIN INSERT INTO search_queue VALUES ('note', new.id); END;
+CREATE TRIGGER IF NOT EXISTS search_note_upd AFTER UPDATE ON notes BEGIN INSERT INTO search_queue VALUES ('note', new.id); END;
+CREATE TRIGGER IF NOT EXISTS search_note_del AFTER DELETE ON notes BEGIN INSERT INTO search_queue VALUES ('note', old.id); END;
+CREATE TRIGGER IF NOT EXISTS search_card_ins AFTER INSERT ON cards BEGIN INSERT INTO search_queue VALUES ('card', new.id); END;
+CREATE TRIGGER IF NOT EXISTS search_card_upd AFTER UPDATE OF content, status ON cards BEGIN INSERT INTO search_queue VALUES ('card', new.id); END;
+CREATE TRIGGER IF NOT EXISTS search_card_del AFTER DELETE ON cards BEGIN INSERT INTO search_queue VALUES ('card', old.id); END;
+
 CREATE INDEX IF NOT EXISTS idx_messages_conv ON messages(conversation_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_attempts_item ON attempts(item_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_cards_due ON cards(status, due);

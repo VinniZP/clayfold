@@ -1,7 +1,7 @@
 import * as stylex from "@stylexjs/stylex";
 import { Search } from "lucide-react";
 import { useId, useState } from "react";
-import { Link } from "react-router";
+import { Link, useSearchParams } from "react-router";
 import type { GlossaryEntry } from "@shared/api";
 import { useHeader } from "../components/header";
 import { Empty, ErrorBox, PageLoading } from "../components/ui";
@@ -43,7 +43,10 @@ export function GlossaryPage() {
   useLang();
   useHeader({ title: t("glossary.title"), sub: t("glossary.sub") });
   const res = useResource(api.glossary, "glossary");
-  const [query, setQuery] = useState("");
+  // The query lives in the URL, so a search result can open the glossary filtered to its term.
+  const [params, setParams] = useSearchParams();
+  const query = params.get("q") ?? "";
+  const setQuery = (q: string) => setParams(q ? { q } : {}, { replace: true });
   const [course, setCourse] = useState("");
   const searchId = useId();
   const courseId = useId();

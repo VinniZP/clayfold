@@ -41,6 +41,8 @@ A change to a contract file changes every module that uses it; make it there fir
 | `server/claude/stream.ts` | stream-json lines to `TopicEvent`s and stored chat messages |
 | `server/routes/*` | REST handlers; server-side grading; review; notes; reports; audit |
 | `server/review/*` | FSRS scheduling (ts-fsrs, retention 0.90), mastery (L12), learner signals to `regen_queue`, practice-test assembly (L20) |
+| `server/review/*` | FSRS scheduling (ts-fsrs, retention 0.90), mastery (L12), learner signals to `regen_queue` |
+| `server/search.ts` | Search index and `GET /api/search` |
 | `server/mcp/index.ts` | `handleMcp(req: Request, topicId: string): Promise<Response>`; one stateless MCP server per request |
 | `server/gates/*` | Deterministic checks, source fetching, learner materials and quote verification, critic |
 | `plugin/` | Tutor output style, skills, eval suite |
@@ -91,6 +93,15 @@ While an update runs, the UI polls `/api/update` every 2 seconds and reloads the
 3. `lesson_finish` closes the lesson; `cards_propose` sends cards through the same gates and on to the learner for acceptance.
 
 Published items are copied to `items` with a shuffled `display_order`; a match item's holds the permutation of its left entries followed by that of its right entries. The browser receives only `PublicStep`/`PublicItem`; grading runs in `server/routes`. A match or sort answer is correct only when every entry is placed right, which is what mastery and first-try statistics count; the response marks each entry (`AttemptResponse.marks`) and its feedback counts the right ones and adds the feedback of each wrong placement the author anticipated.
+
+## Search
+
+- `GET /api/search?q=` (`server/search.ts`) reads an SQLite FTS5 table with the trigram tokenizer, so a word matches inside longer words in any language.
+- Triggers in `schema.sql` add every insert, update and delete of topics, lessons, steps, glossary terms, notes and cards to `search_queue`, cascaded deletes included. A search first indexes the queued rows (`syncSearch`), so no write path calls the index. `openDb` queues every row once when it creates the search tables in an older database.
+- An entry holds only text the browser may show (L7): a topic's title and request, a lesson's title and objective, the title and body of a published explain step, the title, problem and unfaded lines of a published worked example, a term with its original and definition, a note's text and quote, the front of an active or suspended card. Items, keys, hints, feedback, faded lines and card backs are not indexed.
+- `search_index` holds the text folded by `foldForSearch` (`shared/search.ts`): lowercase, with the letter folding of every language's content rules. Folding keeps the length, so a match found in the folded text marks the same range of the text in `search_entries`, which a hit shows.
+- Ranking is bm25 with the title weighted ten times the body, at most five hits of a kind; a lesson that a newer version supersedes and its steps are left out. Words under three characters make no trigram: a query that has a longer word ignores them, and a query of short words matches titles that contain it.
+- The web app opens the command palette (`web/src/components/CommandPalette.tsx`) from the top bar or with Cmd+K / Ctrl+K: hits, quick actions, and the lessons and topics opened last, which `web/src/lib/recent.ts` keeps in `localStorage`.
 
 ## Meerkat
 

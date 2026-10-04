@@ -22,10 +22,21 @@ const ADDED_COLUMNS = [
   ["lessons", "practice", "TEXT"],
 ] as const;
 
+// Queues every searchable row once, when the search tables are created on a database that predates them.
+const SEARCH_BACKFILL = `INSERT INTO search_queue (kind, ref)
+  SELECT 'topic', id FROM topics
+  UNION ALL SELECT 'lesson', id FROM lessons
+  UNION ALL SELECT 'step', id FROM steps
+  UNION ALL SELECT 'term', topic_id || '/' || key FROM glossary_terms
+  UNION ALL SELECT 'note', id FROM notes
+  UNION ALL SELECT 'card', id FROM cards`;
+
 export function openDb(file: string = paths.db): Database {
   if (file !== ":memory:") mkdirSync(dirname(file), { recursive: true });
   const db = new Database(file, { create: true, strict: true });
+  const searchNew = !db.query("SELECT 1 FROM sqlite_master WHERE name = 'search_entries'").get();
   db.exec(schema);
+  if (searchNew) db.exec(SEARCH_BACKFILL);
   for (const [table, column, type] of ADDED_COLUMNS) {
     if (!db.query(`SELECT 1 FROM pragma_table_info('${table}') WHERE name = ?`).get(column)) {
       db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${type}`);

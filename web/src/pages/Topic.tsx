@@ -23,6 +23,7 @@ import { formatDate, masteryLabel } from "../lib/format";
 import { t, useLang } from "../lib/i18n";
 import { useStreamStatus, useTopicStream } from "../lib/stream";
 import { useGlossaryScope } from "../lib/glossary";
+import { useRecentVisit } from "../lib/recent";
 import { useResource } from "../lib/useResource";
 import { bp, color, radius } from "../theme/tokens.stylex";
 import { banner, btn, card, chip, field, layout, text } from "../theme/ui";
@@ -178,6 +179,7 @@ export function TopicPage() {
   );
 
   const d = detail.data;
+  useRecentVisit(d ? { kind: "topic", id: d.topic.id, title: d.topic.title, context: null, goal: d.topic.kind === "goal" } : null);
   useHeader({
     title: d?.topic.title ?? t("topic.title"),
     sub: d

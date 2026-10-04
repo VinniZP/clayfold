@@ -40,6 +40,7 @@ import type {
   RetryRequest,
   RetryResponse,
   ReviewSession,
+  SearchResults,
   Settings,
   SettingsUpdate,
   StartLessonResponse,
@@ -174,6 +175,8 @@ export const api = {
   discardPracticeTest: (testId: string) => request<unknown>("DELETE", `/api/tests/${e(testId)}`),
   finalExam: (topicId: string) => get<FinalExamView>(`/api/topics/${e(topicId)}/final`),
   startFinal: (topicId: string) => post<PracticeTestView>(`/api/topics/${e(topicId)}/final`),
+
+  search: (q: string) => get<SearchResults>(`/api/search?q=${e(q)}`),
 
   notes: (topicId: string) => get<NoteView[]>(`/api/topics/${e(topicId)}/notes`),
   addNote: (body: NoteRequest) => post<NoteView>("/api/notes", body),
