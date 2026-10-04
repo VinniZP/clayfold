@@ -6,7 +6,7 @@ import type { PublicStep } from "@shared/schemas";
 import { marked } from "marked";
 import { lang, t } from "../lib/i18n";
 import * as fx from "./fixtures";
-import { mockBackfill, mockCrowns, mockGameOn, mockGameView, mockSeen, mockWear, setMockGameOn, startMockBackfill } from "./game";
+import { mockBackfill, mockCrowns, mockGameOn, mockGameView, mockIntroSeen, mockSeen, mockWear, setMockGameOn, setMockIntroSeen, startMockBackfill } from "./game";
 import * as sim from "./sim";
 
 // Dev-only stand-in for the server: answers /api/* from fixtures and drives the topic
@@ -227,6 +227,7 @@ function lessonView(id: string): LessonView | null {
 // The language survives the reload that follows a switch through the web app's stored copy.
 let settings: Settings = {
   gamification: mockGameOn(),
+  introSeen: mockIntroSeen(),
   language: lang(),
   narration: { keySet: false, voiceId: null, model: "eleven_v4" },
   // On in the mock so the Video tab can be looked at; the server default is off.
@@ -495,10 +496,11 @@ async function route(method: string, path: string, body: Record<string, unknown>
   if (p === "/api/today") return json(fx.today);
   if (p === "/api/settings") {
     if (method === "PUT") {
-      const { language, voiceId, ttsModel, videoEnabled, claudeRole, gamification } = body as SettingsUpdate;
+      const { language, voiceId, ttsModel, videoEnabled, claudeRole, gamification, introSeen } = body as SettingsUpdate;
       if (gamification !== undefined) setMockGameOn(gamification);
       settings = {
         gamification: gamification ?? settings.gamification,
+        introSeen: introSeen ? setMockIntroSeen([...settings.introSeen, ...introSeen]) : settings.introSeen,
         language: language ?? settings.language,
         narration: { ...settings.narration, voiceId: voiceId ?? settings.narration.voiceId, model: ttsModel ?? settings.narration.model },
         video: { enabled: videoEnabled ?? settings.video.enabled },

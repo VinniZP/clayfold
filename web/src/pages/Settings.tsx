@@ -1,7 +1,8 @@
 import * as stylex from "@stylexjs/stylex";
-import { Check, KeyRound, Play, TriangleAlert } from "lucide-react";
+import { AudioLines, Check, Clapperboard, KeyRound, Play, TriangleAlert } from "lucide-react";
 import { useId, useRef, useState } from "react";
 import { CLAUDE_MODELS, CLAUDE_ROLES, EFFORTS, TTS_MODELS, supportsEffort, type ClaudeModel, type Effort, type Settings, type SettingsUpdate } from "@shared/api";
+import { Segmented, Select, Switch } from "../components/controls";
 import { useHeader } from "../components/header";
 import { Meerkat } from "../components/meerkat/Meerkat";
 import { CardHead, ErrorBox, PageLoading, Spinner } from "../components/ui";
@@ -9,21 +10,29 @@ import { api, errorText } from "../lib/api";
 import { setGameOn } from "../lib/game";
 import { t, useLang } from "../lib/i18n";
 import { useResource } from "../lib/useResource";
-import { color } from "../theme/tokens.stylex";
-import { card, banner, btn, chip, field, layout, text } from "../theme/ui";
+import { bp, color, radius } from "../theme/tokens.stylex";
+import { banner, btn, card, chip, field, layout, text } from "../theme/ui";
 
 const s = stylex.create({
-  card: { display: "grid", gap: 20, maxWidth: 760 },
-  intro: { maxWidth: "62ch" },
-  keyRow: { display: "flex", gap: 8, flexWrap: "wrap", maxWidth: 560 },
-  keyInput: { flex: "1 1 260px" },
-  voiceRow: { display: "flex", gap: 8, alignItems: "center", maxWidth: 560 },
-  radios: { display: "grid", gap: 8, margin: 0, padding: 0, borderWidth: 0 },
-  page: { display: "grid", gap: 24 },
+  page: { display: "grid", gridTemplateColumns: { default: "repeat(2, minmax(0, 1fr))", [bp.mobile]: "minmax(0, 1fr)" }, gap: 20, alignItems: "stretch" },
+  split: { display: "grid", gridTemplateColumns: { default: "repeat(2, minmax(0, 1fr))", [bp.mobile]: "minmax(0, 1fr)" }, gap: 24 },
+  card: { display: "flex", flexDirection: "column", gap: 16 },
+  fill: { flexGrow: 1, display: "grid", gap: 10, alignContent: "start" },
+  wide: { gridColumn: "1 / -1" },
+  intro: { maxWidth: "70ch" },
+  feature: { display: "flex", alignItems: "center", gap: 14 },
+  featureArt: { flexShrink: 0, display: "grid", placeItems: "center", width: 72, height: 72, borderRadius: radius.inner, backgroundColor: "rgb(255 255 255 / 0.55)" },
   game: { backgroundImage: `linear-gradient(135deg, ${color.butter}, ${color.peachSoft})` },
-  gameHead: { display: "flex", alignItems: "center", gap: 16 },
-  switch: { width: 22, height: 22, accentColor: color.primary, cursor: "pointer" },
-  roles: { display: "grid", gridTemplateColumns: "minmax(90px, auto) minmax(0, 1fr) minmax(0, 1fr)", gap: 8, alignItems: "center", maxWidth: 700 },
+  video: { backgroundImage: `linear-gradient(135deg, ${color.lilacSoft}, ${color.surface})` },
+  narrationArt: { backgroundColor: color.peachSoft },
+  keyRow: { display: "flex", gap: 8, flexWrap: "wrap" },
+  keyInput: { flex: "1 1 200px" },
+  voiceRow: { display: "flex", gap: 8, alignItems: "center" },
+  grow: { flex: 1, minWidth: 0 },
+  roles: { display: "grid", gridTemplateColumns: { default: "repeat(3, minmax(0, 1fr))", [bp.mobile]: "minmax(0, 1fr)" }, gap: 12 },
+  role: { display: "grid", gap: 8, padding: 14, borderRadius: radius.inner, backgroundColor: color.surface2 },
+  roleName: { fontWeight: 700, fontSize: 14.5 },
+  roleRow: { display: "grid", gap: 8 },
 });
 
 export function SettingsPage() {
@@ -36,9 +45,9 @@ export function SettingsPage() {
   return (
     <div {...stylex.props(s.page)}>
       <GameSettings settings={settings.data} onChange={onChange} />
-      <ClaudeSettings settings={settings.data} onChange={onChange} />
-      <NarrationSettings settings={settings.data} onChange={onChange} />
       <VideoSettings settings={settings.data} onChange={onChange} />
+      <NarrationSettings settings={settings.data} onChange={onChange} />
+      <ClaudeSettings settings={settings.data} onChange={onChange} />
     </div>
   );
 }
@@ -86,29 +95,168 @@ function GameSettings({ settings, onChange }: { settings: Settings; onChange: (n
     onChange(next);
     setGameOn(next.gamification);
   });
-  const id = useId();
   return (
     <section aria-labelledby="settings-game" {...stylex.props(card.base, s.card, s.game)}>
-      <div {...stylex.props(s.gameHead)}>
-        <Meerkat pose={settings.gamification ? "cheer" : "idle"} size={92} />
-        <div {...stylex.props(field.stack)}>
-          <CardHead id="settings-game" title={t("settings.game")} />
-          <label htmlFor={id} {...stylex.props(field.inline, text.strong)}>
-            <input
-              id={id}
-              type="checkbox"
-              role="switch"
-              checked={settings.gamification}
-              disabled={busy}
-              onChange={(e) => void save(() => api.setSettings({ gamification: e.target.checked }))}
-              {...stylex.props(s.switch)}
-            />
-            {t(settings.gamification ? "settings.gameOn" : "settings.gameOff")}
-          </label>
-        </div>
+      <div {...stylex.props(s.feature)}>
+        <span {...stylex.props(s.featureArt)}>
+          <Meerkat pose={settings.gamification ? "cheer" : "idle"} size={52} />
+        </span>
+        <CardHead id="settings-game" title={t("settings.game")} />
       </div>
-      <p {...stylex.props(text.muted, s.intro)}>{t("settings.gameIntro")}</p>
-      <p {...stylex.props(text.small, text.muted, s.intro)}>{t("settings.gameCost")}</p>
+      <div {...stylex.props(s.fill)}>
+        <p {...stylex.props(text.small, s.intro)}>{t("settings.gameIntro")}</p>
+        <p {...stylex.props(text.xs, text.muted, s.intro)}>{t("settings.gameCost")}</p>
+      </div>
+      <Switch
+        checked={settings.gamification}
+        disabled={busy}
+        onChange={(on) => void save(() => api.setSettings({ gamification: on }))}
+        label={t(settings.gamification ? "settings.gameOn" : "settings.gameOff")}
+      />
+      <SaveStatus error={error} saved={saved} />
+    </section>
+  );
+}
+
+function VideoSettings({ settings, onChange }: { settings: Settings; onChange: (next: Settings) => void }) {
+  useLang();
+  const { busy, error, saved, save } = useSave(onChange);
+  const enabled = settings.video.enabled;
+  return (
+    <section aria-labelledby="settings-video" {...stylex.props(card.base, s.card, s.video)}>
+      <div {...stylex.props(s.feature)}>
+        <span {...stylex.props(s.featureArt)}>
+          <Clapperboard size={34} aria-hidden="true" />
+        </span>
+        <CardHead id="settings-video" title={t("settings.video")} />
+      </div>
+      <div {...stylex.props(s.fill)}>
+        <p {...stylex.props(text.small, s.intro)}>{t("settings.videoIntro")}</p>
+        {enabled && !settings.narration.keySet && <p {...stylex.props(text.xs, text.muted, s.intro)}>{t("settings.videoNeedsKey")}</p>}
+      </div>
+      <Switch checked={enabled} disabled={busy} onChange={(on) => void save(() => api.setSettings({ videoEnabled: on }))} label={t("settings.videoToggle")} />
+      <SaveStatus error={error} saved={saved} />
+    </section>
+  );
+}
+
+function NarrationSettings({ settings, onChange }: { settings: Settings; onChange: (next: Settings) => void }) {
+  useLang();
+  const { keySet, voiceId, model } = settings.narration;
+  const [key, setKey] = useState("");
+  const { busy, error, saved, save } = useSave(onChange);
+  const voices = useResource(() => api.voices(), keySet ? "voices" : null);
+  const sample = useRef<HTMLAudioElement | null>(null);
+  const keyId = useId();
+
+  const update = (body: SettingsUpdate) => void save(() => api.setSettings(body));
+
+  const playSample = () => {
+    const url = voices.data?.find((v) => v.id === voiceId)?.previewUrl;
+    if (!url) return;
+    sample.current?.pause();
+    sample.current = new Audio(url);
+    void sample.current.play().catch(() => {});
+  };
+
+  return (
+    <section aria-labelledby="settings-narration" {...stylex.props(card.base, s.card, s.wide)}>
+      <div {...stylex.props(s.feature)}>
+        <span {...stylex.props(s.featureArt, s.narrationArt)}>
+          <AudioLines size={34} aria-hidden="true" />
+        </span>
+        <CardHead id="settings-narration" title={t("settings.narration")}>
+          {keySet && (
+            <span {...stylex.props(chip.base, chip.pistachio)}>
+              <KeyRound size={14} aria-hidden="true" /> {t("settings.keySet")}
+            </span>
+          )}
+        </CardHead>
+      </div>
+      <div {...stylex.props(s.split)}>
+        <div {...stylex.props(s.fill)}>
+          <p {...stylex.props(text.small, text.muted, s.intro)}>{t("settings.narrationIntro")}</p>
+          {keySet && <p {...stylex.props(text.xs, text.muted, s.intro)}>{t("settings.costNote")}</p>}
+          {keySet && (
+            <div>
+              <button type="button" disabled={busy} onClick={() => void save(() => api.removeElevenLabsKey())} {...stylex.props(btn.base, btn.ghost, btn.sm)}>
+                {t("settings.removeKey")}
+              </button>
+            </div>
+          )}
+        </div>
+        {keySet ? (
+          <div {...stylex.props(s.fill)}>
+            <div {...stylex.props(field.stack)}>
+              <span {...stylex.props(field.label)}>{t("settings.voice")}</span>
+              {voices.error ? (
+                <ErrorBox error={voices.error} onRetry={() => void voices.reload()} />
+              ) : (
+                <div {...stylex.props(s.voiceRow)}>
+                  <div {...stylex.props(s.grow)}>
+                    <Select
+                      label={t("settings.voice")}
+                      value={voiceId}
+                      placeholder={t("common.loading")}
+                      disabled={busy || !voices.data}
+                      options={(voices.data ?? []).map((v) => ({ value: v.id, label: v.name }))}
+                      onChange={(id) => update({ voiceId: id })}
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    aria-label={t("settings.playSample")}
+                    title={t("settings.playSample")}
+                    disabled={!voices.data?.find((v) => v.id === voiceId)?.previewUrl}
+                    onClick={playSample}
+                    {...stylex.props(btn.base, btn.icon)}
+                  >
+                    <Play size={18} aria-hidden="true" />
+                  </button>
+                </div>
+              )}
+            </div>
+            <div {...stylex.props(field.stack)}>
+              <span {...stylex.props(field.label)}>{t("settings.model")}</span>
+              <Segmented
+                label={t("settings.model")}
+                value={model}
+                disabled={busy}
+                options={TTS_MODELS.map((m) => ({ value: m, label: t(`settings.model.${m}`) }))}
+                onChange={(m) => update({ ttsModel: m })}
+              />
+            </div>
+          </div>
+        ) : (
+          <form
+            {...stylex.props(field.stack)}
+            onSubmit={(e) => {
+              e.preventDefault();
+              void save(() => api.setElevenLabsKey(key.trim())).then(() => setKey(""));
+            }}
+          >
+            <label htmlFor={keyId} {...stylex.props(field.label)}>
+              {t("settings.key")}
+            </label>
+            <div {...stylex.props(s.keyRow)}>
+              <input
+                id={keyId}
+                type="password"
+                autoComplete="off"
+                spellCheck={false}
+                value={key}
+                onChange={(e) => setKey(e.target.value)}
+                {...stylex.props(field.input, s.keyInput)}
+              />
+              <button type="submit" disabled={busy || key.trim().length < 10} {...stylex.props(btn.base, btn.primary)}>
+                {busy && <Spinner />} {t("settings.saveKey")}
+              </button>
+            </div>
+            <p {...stylex.props(text.muted, text.xs)}>{t("settings.keyHint")}</p>
+          </form>
+        )}
+      </div>
+
       <SaveStatus error={error} saved={saved} />
     </section>
   );
@@ -126,198 +274,50 @@ function ClaudeSettings({ settings, onChange }: { settings: Settings; onChange: 
   };
 
   return (
-    <section aria-labelledby="settings-claude" {...stylex.props(card.base, s.card)}>
+    <section aria-labelledby="settings-claude" {...stylex.props(card.base, s.card, s.wide)}>
       <CardHead id="settings-claude" title={t("settings.claude")} />
-      <p {...stylex.props(text.muted, s.intro)}>{t("settings.claudeIntro")}</p>
-      <div {...stylex.props(s.roles)}>
-        <span {...stylex.props(field.label)}>{t("settings.claude.role")}</span>
-        <span {...stylex.props(field.label)}>{t("settings.claude.model")}</span>
-        <span {...stylex.props(field.label)}>{t("settings.claude.effort")}</span>
+      <p {...stylex.props(text.small, text.muted, s.intro)}>{t("settings.claudeIntro")}</p>
+      <ul {...stylex.props(layout.plainList, s.roles)}>
         {CLAUDE_ROLES.map((role) => {
           const label = t(`claudeMode.kind.${role}`);
           const effortSupported = supportsEffort(modelOf(role));
-          return [
-            <span key={`${role}-label`}>{label}</span>,
-            <select
-              key={`${role}-model`}
-              aria-label={`${label}: ${t("settings.claude.model")}`}
-              value={roles[role].model ?? ""}
-              disabled={busy}
-              onChange={(e) => update(role, { model: (e.target.value || null) as ClaudeModel | null })}
-              {...stylex.props(field.input, field.select)}
-            >
-              <option value="">{t("settings.claude.defaultModel", { model: roles[role].defaultModel })}</option>
-              {CLAUDE_MODELS.map((m) => (
-                <option key={m} value={m}>
-                  {m}
-                </option>
-              ))}
-            </select>,
-            <select
-              key={`${role}-effort`}
-              aria-label={`${label}: ${t("settings.claude.effort")}`}
-              value={effortSupported ? (roles[role].effort ?? "") : ""}
-              disabled={busy || !effortSupported}
-              onChange={(e) => update(role, { effort: (e.target.value || null) as Effort | null })}
-              {...stylex.props(field.input, field.select)}
-            >
-              <option value="">
-                {effortSupported ? t("settings.claude.defaultEffort", { effort: t(`settings.effort.${roles[role].defaultEffort}`) }) : t("settings.claude.noEffort")}
-              </option>
-              {EFFORTS.map((level) => (
-                <option key={level} value={level}>
-                  {t(`settings.effort.${level}`)}
-                </option>
-              ))}
-            </select>,
-          ];
+          return (
+            <li key={role} {...stylex.props(s.role)}>
+              <span {...stylex.props(s.roleName)}>{label}</span>
+              <div {...stylex.props(s.roleRow)}>
+                <Select<ClaudeModel | "">
+                  label={`${label}: ${t("settings.claude.model")}`}
+                  value={roles[role].model ?? ""}
+                  disabled={busy}
+                  options={[
+                    { value: "", label: t("settings.claude.defaultModel", { model: roles[role].defaultModel }) },
+                    ...CLAUDE_MODELS.map((m) => ({ value: m, label: m })),
+                  ]}
+                  onChange={(m) => update(role, { model: m || null })}
+                />
+                <Select<Effort | "">
+                  label={`${label}: ${t("settings.claude.effort")}`}
+                  value={effortSupported ? (roles[role].effort ?? "") : ""}
+                  disabled={busy || !effortSupported}
+                  options={[
+                    {
+                      value: "",
+                      label: effortSupported ? t("settings.claude.defaultEffort", { effort: t(`settings.effort.${roles[role].defaultEffort}`) }) : t("settings.claude.noEffort"),
+                    },
+                    ...EFFORTS.map((level) => ({ value: level, label: t(`settings.effort.${level}`) })),
+                  ]}
+                  onChange={(e) => update(role, { effort: e || null })}
+                />
+              </div>
+            </li>
+          );
         })}
-      </div>
+      </ul>
       {sameCritic && (
         <p {...stylex.props(banner.base, banner.butter, s.intro)}>
           <TriangleAlert size={18} aria-hidden="true" /> {t("settings.claude.sameCritic", { model: modelOf("lesson") })}
         </p>
       )}
-      <SaveStatus error={error} saved={saved} />
-    </section>
-  );
-}
-
-function NarrationSettings({ settings, onChange }: { settings: Settings; onChange: (next: Settings) => void }) {
-  useLang();
-  const { keySet, voiceId, model } = settings.narration;
-  const [key, setKey] = useState("");
-  const { busy, error, saved, save } = useSave(onChange);
-  const voices = useResource(() => api.voices(), keySet ? "voices" : null);
-  const sample = useRef<HTMLAudioElement | null>(null);
-  const keyId = useId();
-  const voiceSelectId = useId();
-
-  const update = (body: SettingsUpdate) => void save(() => api.setSettings(body));
-
-  const playSample = () => {
-    const url = voices.data?.find((v) => v.id === voiceId)?.previewUrl;
-    if (!url) return;
-    sample.current?.pause();
-    sample.current = new Audio(url);
-    void sample.current.play().catch(() => {});
-  };
-
-  return (
-    <section aria-labelledby="settings-narration" {...stylex.props(card.base, s.card)}>
-      <CardHead id="settings-narration" title={t("settings.narration")}>
-        {keySet && (
-          <span {...stylex.props(chip.base, chip.pistachio)}>
-            <KeyRound size={14} aria-hidden="true" /> {t("settings.keySet")}
-          </span>
-        )}
-      </CardHead>
-      <p {...stylex.props(text.muted, s.intro)}>{t("settings.narrationIntro")}</p>
-
-      {keySet ? (
-        <div {...stylex.props(layout.row)}>
-          <button type="button" disabled={busy} onClick={() => void save(() => api.removeElevenLabsKey())} {...stylex.props(btn.base, btn.ghost, btn.sm)}>
-            {t("settings.removeKey")}
-          </button>
-        </div>
-      ) : (
-        <form
-          {...stylex.props(field.stack)}
-          onSubmit={(e) => {
-            e.preventDefault();
-            void save(() => api.setElevenLabsKey(key.trim())).then(() => setKey(""));
-          }}
-        >
-          <label htmlFor={keyId} {...stylex.props(field.label)}>
-            {t("settings.key")}
-          </label>
-          <div {...stylex.props(s.keyRow)}>
-            <input
-              id={keyId}
-              type="password"
-              autoComplete="off"
-              spellCheck={false}
-              value={key}
-              onChange={(e) => setKey(e.target.value)}
-              {...stylex.props(field.input, s.keyInput)}
-            />
-            <button type="submit" disabled={busy || key.trim().length < 10} {...stylex.props(btn.base, btn.primary)}>
-              {busy && <Spinner />} {t("settings.saveKey")}
-            </button>
-          </div>
-          <p {...stylex.props(text.muted, text.small)}>{t("settings.keyHint")}</p>
-        </form>
-      )}
-
-      {keySet && (
-        <>
-          <div {...stylex.props(field.stack)}>
-            <label htmlFor={voiceSelectId} {...stylex.props(field.label)}>
-              {t("settings.voice")}
-            </label>
-            {voices.error ? (
-              <ErrorBox error={voices.error} onRetry={() => void voices.reload()} />
-            ) : (
-              <div {...stylex.props(s.voiceRow)}>
-                <select
-                  id={voiceSelectId}
-                  value={voiceId ?? ""}
-                  disabled={busy || !voices.data}
-                  onChange={(e) => update({ voiceId: e.target.value })}
-                  {...stylex.props(field.input, field.select)}
-                >
-                  {!voices.data && <option value={voiceId ?? ""}>{t("common.loading")}</option>}
-                  {voices.data?.map((v) => (
-                    <option key={v.id} value={v.id}>
-                      {v.name}
-                    </option>
-                  ))}
-                </select>
-                <button
-                  type="button"
-                  aria-label={t("settings.playSample")}
-                  title={t("settings.playSample")}
-                  disabled={!voices.data?.find((v) => v.id === voiceId)?.previewUrl}
-                  onClick={playSample}
-                  {...stylex.props(btn.base, btn.icon)}
-                >
-                  <Play size={18} aria-hidden="true" />
-                </button>
-              </div>
-            )}
-          </div>
-
-          <fieldset {...stylex.props(s.radios)}>
-            <legend {...stylex.props(field.label)}>{t("settings.model")}</legend>
-            {TTS_MODELS.map((m) => (
-              <label key={m} {...stylex.props(field.inline)}>
-                <input type="radio" name="tts-model" value={m} checked={model === m} disabled={busy} onChange={() => update({ ttsModel: m })} />
-                {t(`settings.model.${m}`)}
-              </label>
-            ))}
-          </fieldset>
-          <p {...stylex.props(text.muted, text.small, s.intro)}>{t("settings.costNote")}</p>
-        </>
-      )}
-
-      <SaveStatus error={error} saved={saved} />
-    </section>
-  );
-}
-
-function VideoSettings({ settings, onChange }: { settings: Settings; onChange: (next: Settings) => void }) {
-  useLang();
-  const { busy, error, saved, save } = useSave(onChange);
-  const enabled = settings.video.enabled;
-  return (
-    <section aria-labelledby="settings-video" {...stylex.props(card.base, s.card)}>
-      <CardHead id="settings-video" title={t("settings.video")} />
-      <p {...stylex.props(text.muted, s.intro)}>{t("settings.videoIntro")}</p>
-      <label {...stylex.props(field.inline)}>
-        <input type="checkbox" checked={enabled} disabled={busy} onChange={(e) => void save(() => api.setSettings({ videoEnabled: e.target.checked }))} />
-        {t("settings.videoToggle")}
-      </label>
-      {enabled && !settings.narration.keySet && <p {...stylex.props(text.small, text.muted, s.intro)}>{t("settings.videoNeedsKey")}</p>}
       <SaveStatus error={error} saved={saved} />
     </section>
   );

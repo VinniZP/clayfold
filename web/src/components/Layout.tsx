@@ -16,6 +16,7 @@ import { AppRoot } from "./AppRoot";
 import { ClaudePanel } from "./ClaudePanel";
 import { Celebrations } from "./meerkat/Celebrations";
 import { HeaderProvider, type HeaderInfo } from "./header";
+import { Intro } from "./Intro";
 import { Clay } from "./ui";
 
 const pulse = stylex.keyframes({
@@ -966,6 +967,7 @@ export function Layout() {
         </main>
       </div>
       {claudeMode && <ClaudePanel />}
+      <Intro />
       <Celebrations />
     </AppRoot>
   );

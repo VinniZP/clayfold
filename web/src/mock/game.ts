@@ -1,4 +1,4 @@
-import type { BurrowRoom, CrownsView, GameBackfillView, GameView, HabitView, ResidentView, RewardView } from "@shared/api";
+import { INTRO_FEATURES, type BurrowRoom, type CrownsView, type GameBackfillView, type GameView, type HabitView, type IntroFeature, type ResidentView, type RewardView } from "@shared/api";
 import { HABITS, OUTFIT_ITEMS, rankOf, RANKS, REWARD_PREFIX, rewardTier, TIER_POINTS, type Outfit, type OutfitRef, type OutfitSlot, type RewardCondition } from "@shared/game";
 import type { Resident } from "@shared/schemas";
 import { iso, topicDetails } from "./fixtures";
@@ -180,6 +180,28 @@ export function startMockBackfill(): GameBackfillView {
   };
   setTimeout(tick, 1000);
   return backfill;
+}
+
+const INTRO_KEY = "clayfold-mock-intro";
+
+/** The welcome tour's marks, kept like the meerkat switch across reloads. */
+export function mockIntroSeen(): IntroFeature[] {
+  try {
+    const value: unknown = JSON.parse(localStorage.getItem(INTRO_KEY) ?? "[]");
+    return Array.isArray(value) ? INTRO_FEATURES.filter((f) => value.includes(f)) : [];
+  } catch {
+    return [];
+  }
+}
+
+export function setMockIntroSeen(seen: IntroFeature[]): IntroFeature[] {
+  const unique = INTRO_FEATURES.filter((f) => seen.includes(f));
+  try {
+    localStorage.setItem(INTRO_KEY, JSON.stringify(unique));
+  } catch {
+    // Storage may be unavailable; the marks then last until the next reload.
+  }
+  return unique;
 }
 
 const GAME_KEY = "clayfold-mock-game";

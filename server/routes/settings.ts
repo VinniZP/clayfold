@@ -1,7 +1,7 @@
 import type { Database } from "bun:sqlite";
 import { Hono } from "hono";
 import { z } from "zod";
-import { CLAUDE_MODELS, CLAUDE_ROLES, EFFORTS, TTS_MODELS, type Settings, type TtsModel } from "../../shared/api";
+import { CLAUDE_MODELS, CLAUDE_ROLES, EFFORTS, INTRO_FEATURES, TTS_MODELS, type IntroFeature, type Settings, type TtsModel } from "../../shared/api";
 import { LANGS } from "../../shared/i18n";
 import { roleSettingsView, setRoleSetting } from "../claude/roles";
 import { db } from "../db";
@@ -28,7 +28,12 @@ export function narrationSettings(database: Database = db()): { voiceId: string 
   };
 }
 
-export const videoEnabled = (database: Database = db()): boolean => readSetting("video_enabled", database) === true;
+const introSeen = (database: Database = db()): IntroFeature[] => {
+  const value = readSetting("intro_seen", database);
+  return Array.isArray(value) ? INTRO_FEATURES.filter((f) => value.includes(f)) : [];
+};
+
+export const videoEnabled =(database: Database = db()): boolean => readSetting("video_enabled", database) === true;
 
 const settingsView = async (): Promise<Settings> => ({
   language: language(),
@@ -36,6 +41,7 @@ const settingsView = async (): Promise<Settings> => ({
   video: { enabled: videoEnabled() },
   claude: roleSettingsView(),
   gamification: gameOn(),
+  introSeen: introSeen(),
 });
 
 /** An ElevenLabs failure as a client error: 401 is a bad key, anything else a failed upstream call. */
@@ -52,6 +58,7 @@ settings.put("/settings", async (c) => {
     c,
     z.object({
       gamification: z.boolean().optional(),
+      introSeen: z.array(z.enum(INTRO_FEATURES)).optional(),
       language: z.enum(LANGS).optional(),
       voiceId: z.string().min(1).optional(),
       ttsModel: z.enum(TTS_MODELS).optional(),
@@ -60,6 +67,7 @@ settings.put("/settings", async (c) => {
     }),
   );
   if (body.gamification !== undefined) setGameOn(body.gamification);
+  if (body.introSeen) writeSetting("intro_seen", [...new Set([...introSeen(), ...body.introSeen])], db());
   if (body.language) setLanguage(body.language);
   if (body.voiceId) writeSetting("narration_voice", body.voiceId, db());
   if (body.ttsModel) writeSetting("narration_model", body.ttsModel, db());
