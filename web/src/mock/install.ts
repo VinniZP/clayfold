@@ -229,7 +229,7 @@ let settings: Settings = {
   gamification: mockGameOn(),
   introSeen: mockIntroSeen(),
   language: lang(),
-  narration: { keySet: false, voiceId: null, model: "eleven_v4" },
+  narration: { keySet: false, voiceId: null, model: "eleven_v4", prefetch: false },
   // On in the mock so the Video tab can be looked at; the server default is off.
   video: { enabled: true },
   shortcuts: { hints: true },
@@ -277,7 +277,7 @@ const videos: Record<string, VideoView> = { "l-cond": readyVideo("l-cond") };
 const exports: Record<string, VideoExportView> = {};
 
 function narration(stepId: string): NarrationView | null {
-  const step = fx.condSteps.find((st) => st.id === stepId);
+  const step = [...fx.condSteps, ...fx.bayesSteps].find((st) => st?.id === stepId);
   if (step?.kind !== "explain") return null;
   const blocks = marked.lexer(step.body).filter((tok) => tok.type !== "space" && tok.type !== "def").length;
   return {
@@ -497,13 +497,18 @@ async function route(method: string, path: string, body: Record<string, unknown>
   if (p === "/api/today") return json(fx.today);
   if (p === "/api/settings") {
     if (method === "PUT") {
-      const { language, voiceId, ttsModel, videoEnabled, claudeRole, gamification, introSeen, shortcutHints } = body as SettingsUpdate;
+      const { language, voiceId, ttsModel, videoEnabled, claudeRole, gamification, introSeen, shortcutHints, narrationPrefetch } = body as SettingsUpdate;
       if (gamification !== undefined) setMockGameOn(gamification);
       settings = {
         gamification: gamification ?? settings.gamification,
         introSeen: introSeen ? setMockIntroSeen(introSeen) : settings.introSeen,
         language: language ?? settings.language,
-        narration: { ...settings.narration, voiceId: voiceId ?? settings.narration.voiceId, model: ttsModel ?? settings.narration.model },
+        narration: {
+          ...settings.narration,
+          voiceId: voiceId ?? settings.narration.voiceId,
+          model: ttsModel ?? settings.narration.model,
+          prefetch: narrationPrefetch ?? settings.narration.prefetch,
+        },
         video: { enabled: videoEnabled ?? settings.video.enabled },
         shortcuts: { hints: shortcutHints ?? settings.shortcuts.hints },
         claude: claudeRole

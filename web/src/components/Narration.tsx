@@ -1,120 +1,40 @@
 import * as stylex from "@stylexjs/stylex";
 import { Headphones } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
-import { Link } from "react-router";
-import type { NarrationSegment } from "@shared/api";
-import { api, ApiFailure, errorText } from "../lib/api";
+import { createContext, useContext } from "react";
 import { t, useLang } from "../lib/i18n";
 import { useShortcuts } from "../lib/shortcuts";
-import { btn, layout, text } from "../theme/ui";
-import { Markdown, Spinner } from "./ui";
+import { btn, layout } from "../theme/ui";
+import { Markdown } from "./ui";
 
-const s = stylex.create({
-  player: { width: "100%", maxWidth: 520, height: 40 },
-});
+/** The lesson player of the page: whether it is open, and how to start it on the step on screen. */
+export const LessonAudio = createContext<{ open: boolean; start: () => void } | null>(null);
 
-type State =
-  | { status: "idle" }
-  | { status: "loading" }
-  | { status: "ready"; audio: Blob; segments: NarrationSegment[] }
-  | { status: "error"; message: string; needsSettings: boolean };
+/** Element whose rendered blocks the lesson player highlights while it reads the step. */
+export const narrationBodyId = (stepId: string) => `narration-${stepId}`;
 
-/** Explanation body with a Listen button; while the audio plays, the block being read is highlighted. */
+/** Explanation body with a Listen button that opens the lesson player on this step. */
 export function NarratedBody({ stepId, body, active, xstyle }: { stepId: string; body: string; active: boolean; xstyle?: stylex.StyleXStyles }) {
   useLang();
-  const [state, setState] = useState<State>({ status: "idle" });
-  const bodyRef = useRef<HTMLDivElement>(null);
-  const audioRef = useRef<HTMLAudioElement>(null);
-  const audio = state.status === "ready" ? state.audio : null;
-
-  // The audio is loaded as a blob so seeking works without HTTP range requests.
-  const listen = async () => {
-    setState({ status: "loading" });
-    try {
-      const view = await api.narrate(stepId);
-      const res = await fetch(view.audioUrl);
-      if (!res.ok) throw new ApiFailure(t("error.server", { status: res.status }), res.status);
-      setState({ status: "ready", audio: await res.blob(), segments: view.segments });
-    } catch (err) {
-      setState({ status: "error", message: errorText(err), needsSettings: err instanceof ApiFailure && err.status === 409 });
-    }
-  };
-
-  const mark = (block: number | null) => {
-    const blocks = bodyRef.current?.firstElementChild?.children ?? [];
-    for (let i = 0; i < blocks.length; i++) blocks[i]!.toggleAttribute("data-narrating", i === block);
-  };
-
-  useEffect(() => {
-    const player = audioRef.current;
-    if (!audio || !player) return;
-    const url = URL.createObjectURL(audio);
-    player.src = url;
-    void player.play().catch(() => {});
-    return () => {
-      player.pause();
-      player.removeAttribute("src");
-      URL.revokeObjectURL(url);
-      mark(null);
-    };
-  }, [audio]);
-
+  const audio = useContext(LessonAudio);
   useShortcuts(
     "step",
     (a) => {
-      if (a.name !== "narration") return false;
-      const player = audioRef.current;
-      if (state.status === "ready" && player) {
-        if (player.paused) void player.play().catch(() => {});
-        else player.pause();
-      } else if (state.status !== "loading") void listen();
+      if (a.name !== "narration" || !audio || audio.open) return false;
+      audio.start();
       return true;
     },
     active,
   );
-
-  const onTime = (time: number) => {
-    if (state.status !== "ready") return;
-    mark(state.segments.find((seg) => time >= seg.start && time < seg.end)?.block ?? null);
-  };
-
   return (
     <>
-      <div {...stylex.props(layout.stack)}>
-        {state.status === "ready" ? (
-          <audio
-            ref={audioRef}
-            controls
-            aria-label={t("narration.player")}
-            onTimeUpdate={(e) => onTime(e.currentTarget.currentTime)}
-            onSeeked={(e) => onTime(e.currentTarget.currentTime)}
-            onEnded={() => mark(null)}
-            {...stylex.props(s.player)}
-          />
-        ) : (
-          <div {...stylex.props(layout.row)}>
-            <button type="button" disabled={state.status === "loading"} onClick={() => void listen()} {...stylex.props(btn.base, btn.soft, btn.sm)}>
-              {state.status === "loading" ? <Spinner /> : <Headphones size={16} aria-hidden="true" />} {t("narration.listen")}
-            </button>
-            {state.status === "loading" && (
-              <p role="status" {...stylex.props(text.muted, text.small)}>
-                {t("narration.preparing")}
-              </p>
-            )}
-          </div>
-        )}
-        {state.status === "error" && (
-          <p role="alert" {...stylex.props(text.error)}>
-            {state.message}
-            {state.needsSettings && (
-              <Link to="/settings" {...stylex.props(text.link)}>
-                {t("narration.openSettings")}
-              </Link>
-            )}
-          </p>
-        )}
-      </div>
-      <div ref={bodyRef}>
+      {audio && !audio.open && (
+        <div {...stylex.props(layout.row)}>
+          <button type="button" onClick={audio.start} {...stylex.props(btn.base, btn.soft, btn.sm)}>
+            <Headphones size={16} aria-hidden="true" /> {t("narration.listen")}
+          </button>
+        </div>
+      )}
+      <div id={narrationBodyId(stepId)}>
         <Markdown src={body} xstyle={xstyle} />
       </div>
     </>

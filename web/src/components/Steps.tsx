@@ -75,6 +75,9 @@ const s = stylex.create({
   quote: { display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 8, paddingBlock: 8, paddingInline: 12, borderRadius: 12, backgroundColor: color.surface, fontSize: 14, fontStyle: "italic", color: color.textMuted },
 });
 
+/** Retrieval checks of an explain step, where the lesson player sends the learner after the explanation. */
+export const checksId = (stepId: string) => `checks-${stepId}`;
+
 export type TutorHooks = {
   onOfferTutor: (itemId: string, stepId: string, reason: "wrong_twice" | "idle") => void;
   onAskTutor: (itemId: string, stepId: string) => void;
@@ -93,25 +96,36 @@ type StepProps = {
   /** Without it the step offers no tutor, as on a page that has no tutor panel. */
   tutor?: TutorHooks;
   onCheckResults?: (stepId: string, results: { item: PublicItem; result: ItemResult | undefined }[]) => void;
+  /** An answer to one of an explain step's retrieval checks. */
+  onExplainCheck?: (itemId: string, result: ItemResult) => void;
   itemStates: Record<string, ItemState>;
   revealedLines: { idx: number; text: string }[];
   lineResults?: LineResults;
 };
 
-export function StepView({ step, topicId, lessonId, active, tutor, onCheckResults, itemStates, revealedLines, lineResults }: StepProps) {
+export function StepView({ step, topicId, lessonId, active, tutor, onCheckResults, onExplainCheck, itemStates, revealedLines, lineResults }: StepProps) {
   const ref = useRef<HTMLElement>(null);
   return (
     <article ref={ref} data-shortcut-scope="step" aria-labelledby={`step-title-${step.id}`} {...stylex.props(s.step)}>
       <h2 id={`step-title-${step.id}`} tabIndex={-1} {...stylex.props(s.title)}>
         {step.title}
       </h2>
-      <StepBody step={step} active={active} tutor={tutor} onCheckResults={onCheckResults} itemStates={itemStates} revealedLines={revealedLines} lineResults={lineResults} />
+      <StepBody
+        step={step}
+        active={active}
+        tutor={tutor}
+        onCheckResults={onCheckResults}
+        onExplainCheck={onExplainCheck}
+        itemStates={itemStates}
+        revealedLines={revealedLines}
+        lineResults={lineResults}
+      />
       <StepTools step={step} topicId={topicId} lessonId={lessonId} active={active} container={ref} />
     </article>
   );
 }
 
-function StepBody({ step, active, tutor, onCheckResults, itemStates, revealedLines, lineResults }: Omit<StepProps, "topicId" | "lessonId">) {
+function StepBody({ step, active, tutor, onCheckResults, onExplainCheck, itemStates, revealedLines, lineResults }: Omit<StepProps, "topicId" | "lessonId">) {
   useLang();
   const offer = tutor && ((itemId: string, reason: "wrong_twice" | "idle") => tutor.onOfferTutor(itemId, step.id, reason));
   const ask = tutor && ((itemId: string) => tutor.onAskTutor(itemId, step.id));
@@ -134,7 +148,7 @@ function StepBody({ step, active, tutor, onCheckResults, itemStates, revealedLin
           {step.figure && <FigureView figure={step.figure} />}
           <Citations cites={step.cites} />
           {step.checks.length > 0 && (
-            <section aria-label={t("steps.selfCheck")} {...stylex.props(s.checks)}>
+            <section id={checksId(step.id)} aria-label={t("steps.selfCheck")} {...stylex.props(s.checks)}>
               <h3 {...stylex.props(s.checksTitle)}>{t("steps.selfCheck")}</h3>
               <div {...stylex.props(s.items)}>
                 {step.checks.map((item, i) => (
@@ -146,6 +160,7 @@ function StepBody({ step, active, tutor, onCheckResults, itemStates, revealedLin
                     active={active}
                     number={step.checks.length > 1 ? i + 1 : undefined}
                     initial={itemStates[item.id]}
+                    onResult={onExplainCheck}
                     onOfferTutor={offer}
                     onAskTutor={ask}
                   />

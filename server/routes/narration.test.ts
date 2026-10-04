@@ -5,6 +5,7 @@ import { openDb } from "../db";
 import type { Alignment, TtsClient } from "../elevenlabs";
 import type { SecretStore } from "../secrets";
 import { bodyBlocks, narrate, scriptProblem, scriptText, segmentTimes, type NarrationRunner, type ScriptPart } from "./narration";
+import { narrationSettings } from "./settings";
 import { insertStep, items, seed } from "./test-fixtures";
 
 const BODY = "## Commits\n\nA commit records a snapshot.\n\n- one\n- two\n\n```sh\ngit commit -m x\n```\n\n[ref]: https://example.org";
@@ -85,4 +86,11 @@ describe("narrate", () => {
     await expect(narrate(stepId, { database, key: none, tts, run })).rejects.toThrow();
     expect([runs, speaks]).toEqual([0, 0]);
   });
+});
+
+test("voicing ahead is off until the learner turns it on", () => {
+  const database = openDb(":memory:");
+  expect(narrationSettings(database)).toEqual({ voiceId: null, model: "eleven_v4", prefetch: false });
+  database.query("INSERT INTO settings (key, value) VALUES ('narration_prefetch', 'true')").run();
+  expect(narrationSettings(database).prefetch).toBe(true);
 });

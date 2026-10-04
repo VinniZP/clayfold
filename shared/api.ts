@@ -293,7 +293,8 @@ export type ClaudeRoleSetting = { model: ClaudeModel | null; effort: Effort | nu
 
 export type Settings = {
   language: Lang;
-  narration: { keySet: boolean; voiceId: string | null; model: TtsModel };
+  /** `prefetch`: the lesson player voices the next explanation while one plays. */
+  narration: { keySet: boolean; voiceId: string | null; model: TtsModel; prefetch: boolean };
   /** Video lessons; they use the narration key, voice and model. */
   video: { enabled: boolean };
   /** Key badges on answer options and primary buttons, shown on devices with a fine pointer. */
@@ -320,6 +321,7 @@ export type SettingsUpdate = {
   language?: Lang;
   voiceId?: string;
   ttsModel?: TtsModel;
+  narrationPrefetch?: boolean;
   videoEnabled?: boolean;
   shortcutHints?: boolean;
   claudeRole?: ClaudeRoleSetting & { role: ClaudeInstanceKind };

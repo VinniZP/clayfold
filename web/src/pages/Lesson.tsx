@@ -1,5 +1,5 @@
 import * as stylex from "@stylexjs/stylex";
-import { ArrowLeft, ArrowRight, BookOpen, Check, CircleSlash, Clapperboard, Copy, MessageCircle, NotebookText, PanelRightClose, RotateCcw, ShieldCheck, TriangleAlert } from "lucide-react";
+import { ArrowLeft, ArrowRight, BookOpen, Check, CircleSlash, Clapperboard, Copy, Headphones, MessageCircle, NotebookText, PanelRightClose, RotateCcw, ShieldCheck, TriangleAlert } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { Link, useParams, useSearchParams } from "react-router";
 import type { LessonView } from "@shared/api";
@@ -13,6 +13,8 @@ import { ChallengeBanner, LessonCompanion, LessonReward, useLessonFocus } from "
 import { StaleSources } from "../components/LessonStatus";
 import { useHeader } from "../components/header";
 import type { ItemResult } from "../components/ItemView";
+import { LessonPlayer } from "../components/LessonPlayer";
+import { LessonAudio } from "../components/Narration";
 import { ProposedCards } from "../components/ProposedCards";
 import { KeyHint } from "../components/Shortcuts";
 import { StepView, type LineResults, type TutorHooks } from "../components/Steps";
@@ -26,6 +28,7 @@ import { useOverlayScroll } from "../lib/overlayScroll";
 import { useStreamStatus, useTopicStream } from "../lib/stream";
 import { useGlossaryScope } from "../lib/glossary";
 import { useShortcutPage, useShortcuts } from "../lib/shortcuts";
+import { itemSettled, upcoming, type Track } from "../lib/listen";
 import { useResource } from "../lib/useResource";
 import { bp, color, font, radius } from "../theme/tokens.stylex";
 import { banner, btn, card, chip, layout, shadow, text } from "../theme/ui";
@@ -252,7 +255,10 @@ export function LessonPage() {
   const [checkResults, setCheckResults] = useState<{ item: PublicItem; result: ItemResult | undefined }[] | null>(null);
   const [tutorOpen, setTutorOpen] = useState(false);
   const [tab, setTab] = useState<"lesson" | "cards" | "notes" | "video">("lesson");
-  const videoOn = useResource(() => api.settings(), "settings").data?.video.enabled ?? false;
+  const settings = useResource(() => api.settings(), "settings").data;
+  const videoOn = settings?.video.enabled ?? false;
+  const [listening, setListening] = useState(false);
+  const [answered, setAnswered] = useState<Record<string, boolean>>({});
   const docked = useMediaQuery("(min-width: 1281px)");
   const outlineRef = useRef<HTMLElement>(null);
   const tutorRef = useRef<HTMLElement>(null);
@@ -354,6 +360,21 @@ export function LessonPage() {
     () => void view.reload(),
   );
 
+  const tracks: Track[] = useMemo(
+    () =>
+      outline.map((o, i) => {
+        const st = steps[i];
+        return { kind: o.kind, state: status[i] ?? "pending", checks: st?.kind === "explain" ? st.checks.map((c) => c.id) : [] };
+      }),
+    [outline, status, steps],
+  );
+  const settled = useMemo(() => {
+    const out: Record<string, boolean> = {};
+    for (const [id, state] of Object.entries(v?.itemStates ?? {})) out[id] = itemSettled(state);
+    return { ...out, ...answered };
+  }, [v, answered]);
+  const audio = useMemo(() => ({ open: listening, start: () => setListening(true) }), [listening]);
+
   const total = outline.length;
   const requested = Number(params.get("step"));
   const firstPublished = status.findIndex((s) => s === "published");
@@ -382,7 +403,7 @@ export function LessonPage() {
   useEffect(() => {
     if (!navigated.current) return;
     const el = current ? document.getElementById(`step-title-${current.id}`) : document.getElementById("step-placeholder");
-    el?.focus();
+    if (!document.activeElement?.closest("[data-lesson-player]")) el?.focus();
     const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     window.scrollTo({ top: 0, behavior: reduce ? "auto" : "smooth" });
   }, [pos, current]);
@@ -445,6 +466,10 @@ export function LessonPage() {
         case "tutor":
           if (!tutorAllowed) return false;
           focusTutor();
+          return true;
+        case "narration":
+          if (listening || inCheck || isEnd || upcoming(tracks, pos) < 0) return false;
+          setListening(true);
           return true;
         case "escape":
           if (docked || !tutorOpen || inCheck) return false;
@@ -540,7 +565,10 @@ export function LessonPage() {
           id={`tab-${key}`}
           aria-selected={tab === key}
           aria-controls={`panel-${key}`}
-          onClick={() => setTab(key)}
+          onClick={() => {
+            setTab(key);
+            if (key !== "lesson") setListening(false);
+          }}
           {...stylex.props(s.tab, tab === key && s.tabOn)}
         >
           {icon} {t(label)}
@@ -591,7 +619,7 @@ export function LessonPage() {
     );
 
   return (
-    <>
+    <LessonAudio.Provider value={audio}>
       {tabs}
       {stale}
       <div role="tabpanel" id="panel-lesson" aria-labelledby="tab-lesson" {...stylex.props(s.grid, showTutor && docked && s.gridDocked)}>
@@ -638,6 +666,11 @@ export function LessonPage() {
                 <div {...stylex.props(s.progressBar)}>
                   <Progress value={done} max={total} label={t("lesson.stepsDone")} />
                 </div>
+                {!listening && !inCheck && !isEnd && current?.kind !== "explain" && upcoming(tracks, pos) >= 0 && (
+                  <button type="button" onClick={() => setListening(true)} {...stylex.props(btn.base, btn.ghost, btn.sm)}>
+                    <Headphones size={16} aria-hidden="true" /> {t("narration.listenLesson")}
+                  </button>
+                )}
                 {!inCheck && !isEnd && !docked && (
                   <button ref={tutorToggle} type="button" aria-expanded={tutorOpen} onClick={() => setTutorOpen((o) => !o)} {...stylex.props(btn.base, btn.ghost, btn.sm)}>
                     <MessageCircle size={16} aria-hidden="true" /> {t("lesson.tutor")}
@@ -661,6 +694,7 @@ export function LessonPage() {
                     active={st.idx === pos && !isEnd}
                     tutor={tutorHooks}
                     onCheckResults={(_, r) => setCheckResults(r)}
+                    onExplainCheck={(itemId, r) => setAnswered((m) => ({ ...m, [itemId]: r.gaveUp !== null || r.response.correct !== false }))}
                     itemStates={v.itemStates}
                     revealedLines={v.revealedLines[st.id] ?? []}
                     lineResults={lineResults[st.id]}
@@ -701,6 +735,21 @@ export function LessonPage() {
                   </button>
                 )}
               </nav>
+
+              {listening && (
+                <LessonPlayer
+                  tracks={tracks}
+                  titles={outline.map((o) => o.title)}
+                  steps={steps}
+                  pos={pos}
+                  settled={settled}
+                  go={go}
+                  lessonTitle={v.lesson.title}
+                  topicTitle={topicTitle}
+                  prefetch={settings?.narration.prefetch ?? false}
+                  onClose={() => setListening(false)}
+                />
+              )}
             </>
           )}
         </section>
@@ -777,7 +826,7 @@ export function LessonPage() {
         )}
       </div>
       <LessonCompanion topicId={topicId} step={pos} total={total} />
-    </>
+    </LessonAudio.Provider>
   );
 }
 

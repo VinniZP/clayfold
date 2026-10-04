@@ -173,7 +173,7 @@
     background: var(--lilac-soft);
   }
 
-  /* The block the narration is reading (components/Narration.tsx) */
+  /* The block the narration is reading (components/LessonPlayer.tsx) */
   .prose > * {
     border-radius: 12px;
     transition: background-color 0.25s, box-shadow 0.25s;

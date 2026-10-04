@@ -102,8 +102,11 @@ Optional gamification, off by default (`settings.gamification`). Catalogs and co
 
 ## Narration
 
-- `POST /api/steps/:stepId/narration` voices an `explain` step when the learner presses Listen. A `runJsonPrompt` call (purpose `narration`) rewrites the body for speech as parts, each tied to a top-level markdown block. ElevenLabs `/v1/text-to-speech/{voice}/with-timestamps` speaks the joined parts, and its per-character timing gives each block a start and an end. The web app highlights the block being read.
-- `narrations` stores the audio and segments per step, for one voice and model; a change of either voices the step again on the next Listen.
+- `POST /api/steps/:stepId/narration` voices an `explain` step when the lesson player first plays it. A `runJsonPrompt` call (purpose `narration`) rewrites the body for speech as parts, each tied to a top-level markdown block. ElevenLabs `/v1/text-to-speech/{voice}/with-timestamps` speaks the joined parts, and its per-character timing gives each block a start and an end. The web app highlights the block being read.
+- `narrations` stores the audio and segments per step, for one voice and model; a change of either voices the step again the next time it plays.
+- The lesson page plays narrations in one lesson player (`web/src/components/LessonPlayer.tsx`), opened by Listen on an explain step or Listen to the lesson on another step. It plays the explain step on screen and goes on through the lesson's explanations (`afterNarration` in `web/src/lib/listen.ts`): at the end of a body whose retrieval checks are unanswered it stops and scrolls to them (L4, L7); once they are answered it opens the next explanation after a pause to read the feedback, if no other step comes first; otherwise it plays the next explanation when the learner reaches it. Nothing is voiced before the learner opens the player.
+- `narration_prefetch` in `settings` (off by default, Settings → Narration) voices the next explanation while one plays, so the player goes on without waiting; ElevenLabs bills that explanation even if the learner stops before it.
+- The player keeps its speed (0.75× to 2×, pitch preserved) in the browser's `localStorage`, follows the block being read until the learner scrolls, and takes hardware media keys and the OS lock screen through the Media Session API.
 - The ElevenLabs key is kept with `Bun.secrets` (`server/secrets.ts`), not in `data/`. The browser only learns whether a key is set, and the key never enters a prompt or the environment of a `claude` process.
 
 ## Video lessons

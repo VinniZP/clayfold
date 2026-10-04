@@ -259,6 +259,10 @@ function NarrationSettings({ settings, onChange }: { settings: Settings; onChang
                 onChange={(m) => update({ ttsModel: m })}
               />
             </div>
+            <div {...stylex.props(field.stack)}>
+              <Switch checked={settings.narration.prefetch} disabled={busy} onChange={(on) => update({ narrationPrefetch: on })} label={t("settings.prefetch")} />
+              <p {...stylex.props(text.muted, text.xs, s.intro)}>{t("settings.prefetchHint")}</p>
+            </div>
           </div>
         ) : (
           <form
