@@ -931,6 +931,12 @@ export const en = {
   "intro.close": "Close",
   "intro.how": "How it works",
   "intro.later": "Not now",
+  "intro.alreadyOn": "Already on",
+  "intro.next": "Next",
+  "intro.gotIt": "Got it",
+  "settings.whatsNew": "What's new",
+  "settings.whatsNewHint": "Each new feature gets an entry that shows once, on entering the app. Show them all again here.",
+  "settings.whatsNewShow": "Show again",
   "intro.settingsHint": "You can change this any time in Settings.",
   "intro.game.title": "A meerkat that learns with you",
   "intro.game.why":

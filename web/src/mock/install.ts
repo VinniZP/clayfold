@@ -500,7 +500,7 @@ async function route(method: string, path: string, body: Record<string, unknown>
       if (gamification !== undefined) setMockGameOn(gamification);
       settings = {
         gamification: gamification ?? settings.gamification,
-        introSeen: introSeen ? setMockIntroSeen([...settings.introSeen, ...introSeen]) : settings.introSeen,
+        introSeen: introSeen ? setMockIntroSeen(introSeen) : settings.introSeen,
         language: language ?? settings.language,
         narration: { ...settings.narration, voiceId: voiceId ?? settings.narration.voiceId, model: ttsModel ?? settings.narration.model },
         video: { enabled: videoEnabled ?? settings.video.enabled },

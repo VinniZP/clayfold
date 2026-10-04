@@ -959,6 +959,12 @@ export const ru: Catalog = {
   "intro.close": "Закрыть",
   "intro.how": "Как это работает",
   "intro.later": "Не сейчас",
+  "intro.alreadyOn": "Уже включено",
+  "intro.next": "Дальше",
+  "intro.gotIt": "Понятно",
+  "settings.whatsNew": "Что нового",
+  "settings.whatsNewHint": "О каждой новой функции рассказывает запись, которая показывается один раз при входе. Здесь их можно посмотреть снова.",
+  "settings.whatsNewShow": "Показать снова",
   "intro.settingsHint": "Это можно поменять в любой момент в настройках.",
   "intro.game.title": "Сурикат, который учится вместе с вами",
   "intro.game.why":

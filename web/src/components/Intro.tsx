@@ -1,13 +1,14 @@
 import * as stylex from "@stylexjs/stylex";
-import { AudioLines, BookOpen, Clapperboard, Crown, FileText, PawPrint, PenLine, PlayCircle, Sparkles, X, type LucideIcon } from "lucide-react";
+import { AudioLines, BookOpen, Check, Clapperboard, Crown, FileText, PawPrint, PenLine, PlayCircle, Sparkles, X, type LucideIcon } from "lucide-react";
 import { Fragment, useEffect, useId, useRef, useState } from "react";
-import { INTRO_FEATURES, type IntroFeature, type Settings } from "@shared/api";
+import { INTRO_FEATURES, INTRO_RELEASED, type IntroFeature, type Settings } from "@shared/api";
 import type { MessageKey } from "@shared/i18n";
 import { api, errorText } from "../lib/api";
+import { dateFormat } from "../lib/format";
 import { setGameOn, useCelebrationHold } from "../lib/game";
 import { t, useLang } from "../lib/i18n";
 import { bp, color, font, radius } from "../theme/tokens.stylex";
-import { btn, field, text } from "../theme/ui";
+import { btn, chip, field, text } from "../theme/ui";
 import { Meerkat } from "./meerkat/Meerkat";
 import { Spinner } from "./ui";
 
@@ -80,13 +81,17 @@ const s = stylex.create({
   hint: { marginLeft: "auto", fontSize: 12.5, color: color.textMuted },
 });
 
-/** A feature is offered once, and only while it is off. */
-const offered = (settings: Settings): IntroFeature[] =>
-  INTRO_FEATURES.filter((f) => !settings.introSeen.includes(f) && !(f === "game" ? settings.gamification : settings.video.enabled));
+/** Entries the learner has not seen, oldest first, like the unread part of a changelog. */
+const unseen = (settings: Settings): IntroFeature[] => INTRO_FEATURES.filter((f) => !settings.introSeen.includes(f));
+
+const isOn = (settings: Settings, f: IntroFeature) => (f === "game" ? settings.gamification : settings.video.enabled);
+
+/** Shows the tour again from the start, e.g. from Settings. */
+export const INTRO_EVENT = "clayfold:intro";
 
 /**
- * On entering the app, offers the optional features the learner has not decided on yet: what each does, how it
- * works and what it costs, with a switch to turn it on. Unlock celebrations wait while it is open.
+ * On entering the app, shows each "What's new" entry the learner has not seen: what the feature does, how it
+ * works and what it runs on, with a button to turn it on when it is off. Unlock celebrations wait while it is open.
  */
 export function Intro() {
   useLang();
@@ -102,13 +107,18 @@ export function Intro() {
   useCelebrationHold(open);
 
   useEffect(() => {
-    api.settings().then(
-      (next) => {
-        setSettings(next);
-        setSteps(offered(next));
-      },
-      () => {},
-    );
+    const load = () =>
+      api.settings().then(
+        (next) => {
+          setSettings(next);
+          setSteps(unseen(next));
+          setAt(0);
+        },
+        () => {},
+      );
+    void load();
+    window.addEventListener(INTRO_EVENT, load);
+    return () => window.removeEventListener(INTRO_EVENT, load);
   }, []);
 
   useEffect(() => {
@@ -125,7 +135,8 @@ export function Intro() {
     setBusy(true);
     setError(null);
     try {
-      const next = await api.setSettings({ introSeen: [feature], ...(on ? (feature === "game" ? { gamification: true } : { videoEnabled: true }) : {}) });
+      const seen = [...(settings?.introSeen ?? []), feature];
+      const next = await api.setSettings({ introSeen: seen, ...(on ? (feature === "game" ? { gamification: true } : { videoEnabled: true }) : {}) });
       setSettings(next);
       if (feature === "game") setGameOn(next.gamification);
       setAt((n) => n + 1);
@@ -137,7 +148,7 @@ export function Intro() {
   };
 
   const closeAll = () => {
-    void api.setSettings({ introSeen: steps.slice(at) }).catch(() => {});
+    void api.setSettings({ introSeen: [...(settings?.introSeen ?? []), ...steps.slice(at)] }).catch(() => {});
     setAt(steps.length);
   };
 
@@ -159,7 +170,9 @@ export function Intro() {
       {feature && settings && (
         <div key={feature} {...stylex.props(s.inner)}>
           <div {...stylex.props(s.top)}>
-            <span {...stylex.props(s.kicker)}>{t("intro.kicker")}</span>
+            <span {...stylex.props(s.kicker)}>
+              {t("intro.kicker")} · {dateFormat({ day: "numeric", month: "long" }).format(new Date(`${INTRO_RELEASED[feature]}T12:00:00`))}
+            </span>
             {steps.length > 1 && (
               <span aria-label={t("intro.step", { n: at + 1, total: steps.length })} {...stylex.props(s.dots)}>
                 {steps.map((f, i) => (
@@ -245,12 +258,25 @@ export function Intro() {
           )}
 
           <div {...stylex.props(s.actions)}>
-            <button type="button" disabled={busy} onClick={() => void decide(true)} {...stylex.props(btn.base, btn.primary, btn.lg)}>
-              {busy && <Spinner />} {t(`intro.${feature}.on`)}
-            </button>
-            <button type="button" disabled={busy} onClick={() => void decide(false)} {...stylex.props(btn.base, btn.ghost, btn.lg)}>
-              {t("intro.later")}
-            </button>
+            {isOn(settings, feature) ? (
+              <>
+                <span {...stylex.props(chip.base, chip.pistachio)}>
+                  <Check size={14} aria-hidden="true" /> {t("intro.alreadyOn")}
+                </span>
+                <button type="button" disabled={busy} onClick={() => void decide(false)} {...stylex.props(btn.base, btn.primary, btn.lg)}>
+                  {busy && <Spinner />} {t(at + 1 < steps.length ? "intro.next" : "intro.gotIt")}
+                </button>
+              </>
+            ) : (
+              <>
+                <button type="button" disabled={busy} onClick={() => void decide(true)} {...stylex.props(btn.base, btn.primary, btn.lg)}>
+                  {busy && <Spinner />} {t(`intro.${feature}.on`)}
+                </button>
+                <button type="button" disabled={busy} onClick={() => void decide(false)} {...stylex.props(btn.base, btn.ghost, btn.lg)}>
+                  {t("intro.later")}
+                </button>
+              </>
+            )}
             <span {...stylex.props(s.hint)}>{t("intro.settingsHint")}</span>
           </div>
         </div>

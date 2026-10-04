@@ -67,7 +67,7 @@ settings.put("/settings", async (c) => {
     }),
   );
   if (body.gamification !== undefined) setGameOn(body.gamification);
-  if (body.introSeen) writeSetting("intro_seen", [...new Set([...introSeen(), ...body.introSeen])], db());
+  if (body.introSeen) writeSetting("intro_seen", [...new Set(body.introSeen)], db());
   if (body.language) setLanguage(body.language);
   if (body.voiceId) writeSetting("narration_voice", body.voiceId, db());
   if (body.ttsModel) writeSetting("narration_model", body.ttsModel, db());

@@ -1,9 +1,10 @@
 import * as stylex from "@stylexjs/stylex";
-import { AudioLines, Check, Clapperboard, KeyRound, Play, TriangleAlert } from "lucide-react";
+import { AudioLines, Check, Clapperboard, KeyRound, Play, Sparkles, TriangleAlert } from "lucide-react";
 import { useId, useRef, useState } from "react";
 import { CLAUDE_MODELS, CLAUDE_ROLES, EFFORTS, TTS_MODELS, supportsEffort, type ClaudeModel, type Effort, type Settings, type SettingsUpdate } from "@shared/api";
 import { Segmented, Select, Switch } from "../components/controls";
 import { useHeader } from "../components/header";
+import { INTRO_EVENT } from "../components/Intro";
 import { Meerkat } from "../components/meerkat/Meerkat";
 import { CardHead, ErrorBox, PageLoading, Spinner } from "../components/ui";
 import { api, errorText } from "../lib/api";
@@ -25,6 +26,7 @@ const s = stylex.create({
   game: { backgroundImage: `linear-gradient(135deg, ${color.butter}, ${color.peachSoft})` },
   video: { backgroundImage: `linear-gradient(135deg, ${color.lilacSoft}, ${color.surface})` },
   narrationArt: { backgroundColor: color.peachSoft },
+  whatsNew: { display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: 16 },
   keyRow: { display: "flex", gap: 8, flexWrap: "wrap" },
   keyInput: { flex: "1 1 200px" },
   voiceRow: { display: "flex", gap: 8, alignItems: "center" },
@@ -48,7 +50,34 @@ export function SettingsPage() {
       <VideoSettings settings={settings.data} onChange={onChange} />
       <NarrationSettings settings={settings.data} onChange={onChange} />
       <ClaudeSettings settings={settings.data} onChange={onChange} />
+      <WhatsNew onChange={onChange} />
     </div>
+  );
+}
+
+/** Clears the tour's marks and opens it again. */
+function WhatsNew({ onChange }: { onChange: (next: Settings) => void }) {
+  useLang();
+  const { busy, error, save } = useSave(onChange);
+  const replay = () =>
+    void save(async () => {
+      const next = await api.setSettings({ introSeen: [] });
+      window.dispatchEvent(new Event(INTRO_EVENT));
+      return next;
+    });
+  return (
+    <section aria-labelledby="settings-whatsnew" {...stylex.props(card.base, s.wide, s.whatsNew)}>
+      <div>
+        <h2 id="settings-whatsnew" {...stylex.props(text.h3)}>
+          {t("settings.whatsNew")}
+        </h2>
+        <p {...stylex.props(text.small, text.muted)}>{t("settings.whatsNewHint")}</p>
+      </div>
+      <button type="button" disabled={busy} onClick={replay} {...stylex.props(btn.base, btn.ghost)}>
+        <Sparkles size={16} aria-hidden="true" /> {t("settings.whatsNewShow")}
+      </button>
+      <SaveStatus error={error} saved={false} />
+    </section>
   );
 }
 

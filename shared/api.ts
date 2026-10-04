@@ -299,17 +299,21 @@ export type Settings = {
   claude: Record<ClaudeInstanceKind, ClaudeRoleSetting & { defaultModel: string; defaultEffort: Effort }>;
   /** The meerkat; off by default. While on, goal plans carry trophies and lessons a challenge step. */
   gamification: boolean;
-  /** Optional features the welcome tour has already offered. */
+  /** Entries of the "What's new" tour already seen. */
   introSeen: IntroFeature[];
 };
 
-/** Optional features the welcome tour offers on entering the app, in its order, until each is decided. */
-export const INTRO_FEATURES = ["game", "video"] as const;
+/**
+ * Entries of the "What's new" tour, shown on entering the app like a changelog: each entry the learner has not
+ * seen yet, oldest first. A new optional feature adds an entry here with its release date.
+ */
+export const INTRO_FEATURES = ["video", "game"] as const;
 export type IntroFeature = (typeof INTRO_FEATURES)[number];
+export const INTRO_RELEASED: Record<IntroFeature, string> = { video: "2026-10-04", game: "2026-10-04" };
 
 export type SettingsUpdate = {
   gamification?: boolean;
-  /** Marks these features as offered; earlier marks stay. */
+  /** Replaces the list of tour entries seen; an empty list shows the whole tour again. */
   introSeen?: IntroFeature[];
   language?: Lang;
   voiceId?: string;
