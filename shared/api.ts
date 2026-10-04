@@ -682,9 +682,16 @@ export type Settings = {
  * Entries of the "What's new" tour, shown on entering the app like a changelog: each entry the learner has not
  * seen yet, oldest first. A new optional feature adds an entry here with its release date.
  */
-export const INTRO_FEATURES = ["video", "game"] as const;
+export const INTRO_FEATURES = ["video", "game", "practice", "lessons", "comfort", "teachback"] as const;
 export type IntroFeature = (typeof INTRO_FEATURES)[number];
-export const INTRO_RELEASED: Record<IntroFeature, string> = { video: "2026-10-04", game: "2026-10-04" };
+export const INTRO_RELEASED: Record<IntroFeature, string> = {
+  video: "2026-10-04",
+  game: "2026-10-04",
+  practice: "2026-10-05",
+  lessons: "2026-10-05",
+  comfort: "2026-10-05",
+  teachback: "2026-10-05",
+};
 
 export type SettingsUpdate = {
   gamification?: boolean;
